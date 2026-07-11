@@ -35,6 +35,10 @@ Generate decision log from markers in changed files and add to PR description:
 
 If an `ARCH` or `IRREV` marker meets the `writing-adrs` bar (hard to reverse, surprising without context, result of a real trade-off), also write the ADR per that skill.
 
+### Reconcile driving ticket
+
+Work driven by ticket → update it before close: fold in deviations, mid-session scope, decisions above (or their ADR/glossary refs). Per `to-tickets` reproducibility invariant: replayed issue stream builds final state, not first draft.
+
 ## Diff classification mode
 
 When user requests review of diff, classify each hunk as one of the six tags or `ROUTINE`. Present as `File: path — TAG` with line ranges.

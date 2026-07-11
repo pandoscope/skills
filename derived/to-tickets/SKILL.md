@@ -2,7 +2,7 @@
 name: to-tickets
 description: Break a plan, spec, or the current conversation into tracer-bullet tickets with blocking edges, published to the project tracker. Use when splitting approved work into issues.
 metadata.derived-from: https://github.com/mattpocock/skills/blob/391a2701dd948f94f56a39f7533f8eea9a859c87/skills/engineering/to-tickets/SKILL.md
-metadata.derivation-note: Adds reproducible-build-spec invariant (self-containedness litmus test, bugfix-as-spec-correction) + grilling gate. Tracker deferred to consumer AGENTS.md; vocabulary pinned to docs/glossary (`uvx disambiguate`), decisions to writing-adrs/documenting-decisions. Upstream `/setup-matt-pocock-skills` + local-files tracker mode dropped. Caveman-condensed; vertical slices, blocking edges, expand–contract, user quiz kept.
+metadata.derivation-note: Adds reproducible-build-spec invariant (self-containedness litmus test, bugfix-as-spec-correction) + grilling gate + reconciliation on completion. Tracker deferred to consumer AGENTS.md; vocabulary pinned to docs/glossary (`uvx disambiguate`), decisions to writing-adrs/documenting-decisions. Upstream `/setup-matt-pocock-skills` + local-files tracker mode dropped. Caveman-condensed; vertical slices, blocking edges, expand–contract, user quiz kept.
 disable-model-invocation: true
 ---
 
@@ -30,6 +30,10 @@ Never patch instruction ("change Y to X in file Z"). State correction to spec st
 - *Issue N specified Y; Y wrong; X′ now correct.*
 
 Replay then builds X directly, not bug + patch. Bugfix reveals spec-level decision → ADR + reference from issue.
+
+### Reconciliation on completion
+
+Ticket not finished until it reflects what was built. Before close: fold deviations, mid-session scope, decisions back into issue (or its ADR/glossary refs). Else replay builds first draft, not final state. `documenting-decisions` after-task step performs this.
 
 ## Grilling gate
 
