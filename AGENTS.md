@@ -36,6 +36,7 @@ Read [docs/architecture.md](docs/architecture.md) before touching any code.
 ## Rules
 
 - Small, single-purpose files
+- Prose (skills, ADRs, tickets, docs): as short as possible, prefer caveman mode — unless precision or understandability suffers
 - Readability over brevity — straightforward, easy-to-follow code. No compact "one-liners" stretching across multiple lines (e.g. nested ternaries). Stretching across multiple lines is only allowed if it aids readability.
 - All routes and non-trivial functions: docstring contracts (params, returns, errors)
 - Test cases cover edge cases and every `@returns` line
@@ -53,6 +54,8 @@ Live in `.agents/skills/`. Synced using `npx skills update -p -y` — don't edit
 1% rule: if skill might apply, load it.
 
 **Loading:** Use platform skill tool if available, else read `.agents/skills/<name>/SKILL.md` directly.
+
+**Authoring (this repo only):** new skills go in `original/`, vendor derivations in `derived/` — follow the two-commit process in README.md "Adding a derived skill" (verbatim upstream copy first, derivation second).
 
 | Skill                    | Trigger                                                                                            |
 | ------------------------ | -------------------------------------------------------------------------------------------------- |
