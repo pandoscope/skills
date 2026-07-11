@@ -24,7 +24,7 @@ uvx disambiguate --from <ticket-file>
 or for GitHub issues:
 
 ```bash
-ghx issue view <number> --json body -q .body | uvx disambiguate --from -
+<tracker issue body> | uvx disambiguate --from -
 ```
 
 to resolve all referenced terms at once.
@@ -36,6 +36,7 @@ Read [docs/architecture.md](docs/architecture.md) before touching any code.
 ## Rules
 
 - Small, single-purpose files
+- Prose (skills, ADRs, tickets, docs): as short as possible, prefer caveman mode — unless precision or understandability suffers
 - Readability over brevity — straightforward, easy-to-follow code. No compact "one-liners" stretching across multiple lines (e.g. nested ternaries). Stretching across multiple lines is only allowed if it aids readability.
 - All routes and non-trivial functions: docstring contracts (params, returns, errors)
 - Test cases cover edge cases and every `@returns` line
@@ -54,6 +55,8 @@ Live in `.agents/skills/`. Synced using `npx skills update -p -y` — don't edit
 
 **Loading:** Use platform skill tool if available, else read `.agents/skills/<name>/SKILL.md` directly.
 
+**Authoring (this repo only):** new skills go in `original/`, vendor derivations in `derived/` — follow the two-commit process in README.md "Adding a derived skill" (verbatim upstream copy first, derivation second).
+
 | Skill                    | Trigger                                                                                            |
 | ------------------------ | -------------------------------------------------------------------------------------------------- |
 | `tdd`                    | Test-driven-development for any implementation                                                     |
@@ -71,29 +74,18 @@ Live in `.agents/skills/`. Synced using `npx skills update -p -y` — don't edit
 
 ### Agentic Engineering Workflow
 
-Use `ghx` for all repository interaction. `gh` and `tea` are disabled — calling them tells you to use `ghx` instead.
-
-`ghx` exposes a curated subset of `gh`'s verbs (plus a few additions, e.g. `--code-comment`) and presents the **same `gh`-style interface against both GitHub and Forgejo**, so you never need to know which host the repo is on. It is **not** a full `gh` replacement: it has only the verbs listed below. If a command isn't in this list, `ghx` doesn't have it — don't fall back to `gh`/`tea`.
-
-#### Available `ghx` verbs
-
-- **issues:** `issue create`, `issue view` (`--comments`), `issue list`, `issue comment`, `issue edit`
-- **pull requests:** `pr create`, `pr view` (`--comments`), `pr list`, `pr comment`, `pr edit`, `pr review` (`--body`, repeatable `--code-comment path:line:text`), `pr checks`, `pr status`
-- **CI:** `run list`, `run view`
-
-Use `run list` / `run view` for workflow-run detail; use `pr checks` / `pr status` for a PR's check rollup.
+Interact with issues/PRs/CI via the tracker tooling available in your environment (per its own AGENTS.md/config). Workflow below names actions, not commands — no specific tracker CLI here (keeps repo tool-agnostic, prevents tooling leaking into synced skills).
 
 The modes below are the kinds of work the user will ask for. **Each runs in its own session — possibly a different model or agent** (Review especially). Follow the named skills at each step.
 
 #### Plan
 
 - Explore the codebase. Flag `DECISION:SCOPE` when resolving ambiguities. Use the `documenting-decisions` skill (refs: `pre-approval-gate.md`, `scope-interpretation.md`).
-- Write an issue → `ghx issue create`
-- Set issue metadata → `ghx issue edit` (labels/assignees/milestone)
+- Write an issue; set metadata (labels/assignees/milestone).
 
 #### Implement
 
-- Read the given issue and comments → `ghx issue view --comments`
+- Read the given issue and comments.
 - Do Test-Driven Development per the `tdd` skill.
 - Implement the minimal code to pass tests, then the remaining code per the ticket spec. Place `DECISION:` markers per the `documenting-decisions` skill (refs: `decision-markers.md`, `marker-examples.md`).
 - Commit discipline:
@@ -101,30 +93,27 @@ The modes below are the kinds of work the user will ask for. **Each runs in its 
   - `prek` must pass on every commit (lint/format hooks only — prek never runs unit tests).
   - TDD red-step commits are expected and required (a commit whose new tests fail but whose lint/format passes). **CI evaluates at PR HEAD, not per-commit**, so a red-step commit does not constitute a CI failure — do not treat it as one.
   - Don't fix lint manually — run the formatter. Only touch code directly if the tools can't resolve it.
-- Push → `git push` *(plain git; git is not routed through `ghx`)*
-- Create the PR if not already present, and link it to the issue both ways → `ghx pr create` (start with `Closes #<number>` in description), then `ghx issue edit` if a back-reference is needed. **If a PR already exists for this branch, do not create or re-link it** — skip to CI.
+- Push → `git push`
+- Create the PR if not already present, and link it to the issue both ways (start with `Closes #<number>` in description; back-reference on the issue if needed). **If a PR already exists for this branch, do not create or re-link it** — skip to CI.
   PR body must include:
   - `Closes #<number>`.
   - Any obstacles that diverged from the initial plan, and — in the rare event spec deviation was unavoidable — what deviated and why.
   - All `DECISION:` markers present in the diff, rendered per the `documenting-decisions` skill format.
-- Check CI → `ghx run list` / `ghx run view` (or `ghx pr checks` once the PR exists).
+- Check CI (workflow runs; PR check rollup once the PR exists).
 - If CI fails, fix it by re-entering this **Implement** workflow.
 
 #### Review
 
-- Read the given issue and comments → `ghx issue view --comments`
+- Read the given issue and comments.
 - Review the PR and give Critical / Important feedback per the `requesting-code-review` skill.
-- Submit it as a single review → `ghx pr review`:
-  - PR-level summary feedback → `--body "..."`
-  - Feedback tied to specific lines → repeatable `--code-comment path:line:text`
-  - Put both in the same `ghx pr review` call; don't split a review across `pr review` and `pr comment`.
+- Submit as a single review: PR-level summary body + line-tied code comments together — don't split across a review and separate comments.
 
 #### Apply Review Comments
 
-- Read the given issue and comments → `ghx issue view --comments`
-- Read PR comments and code comments → `ghx pr view --comments`
-- If the review uncovers inconsistencies in the issue, **comment** on it freely → `ghx issue comment`
-- Only **edit** issue content when the user explicitly requests it → `ghx issue edit`. Editing is gated on explicit request because it can overwrite human-authored intent; commenting is always safe, editing is not.
+- Read the given issue and comments.
+- Read PR comments and code comments.
+- If the review uncovers inconsistencies in the issue, **comment** on it freely.
+- Only **edit** issue content when the user explicitly requests it. Editing is gated on explicit request because it can overwrite human-authored intent; commenting is always safe, editing is not.
 - Then re-enter the **Implement** workflow.
 
 ## Dependencies

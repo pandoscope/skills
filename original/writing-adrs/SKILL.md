@@ -24,6 +24,8 @@ Create the `docs/adr/` directory lazily — only when the first ADR is needed.
 
 That's it. An ADR can be a single paragraph. The value is in recording *that* a decision was made and *why* — not in filling out sections.
 
+As short as possible — caveman mode preferred (`caveman` skill). Hard limit: precision and understandability must not suffer.
+
 ## Optional sections
 
 Only include these when they add genuine value. Most ADRs won't need them.
@@ -35,6 +37,10 @@ Only include these when they add genuine value. Most ADRs won't need them.
 ## Numbering
 
 Scan `docs/adr/` for the highest existing number and increment by one.
+
+## Grilling gate
+
+ADRs record load-bearing decisions. Decision made in-conversation, never grilled (`docs/glossary/grilling-session.md`) → ask user: "Decision wasn't grilled — record as-is?" Proceed only on explicit confirmation. Transcribing decision user already stated explicitly → gate doesn't apply.
 
 ## When to write an ADR
 
