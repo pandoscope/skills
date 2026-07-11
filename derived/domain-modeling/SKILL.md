@@ -1,49 +1,26 @@
 ---
 name: domain-modeling
 description: Build and sharpen a project's domain model. Use when the user wants to pin down domain terminology or a ubiquitous language, record an architectural decision, or when another skill needs to maintain the domain model.
+metadata.derived-from: https://github.com/mattpocock/skills/blob/391a2701dd948f94f56a39f7533f8eea9a859c87/skills/engineering/domain-modeling/SKILL.md
+metadata.derivation-note: Glossary output retargeted from a root CONTEXT.md to docs/glossary/ (one file per term, `uvx disambiguate` format); CONTEXT.md/CONTEXT-MAP.md file-structure section dropped; ADR mechanics delegated to the writing-adrs skill.
 ---
 
 # Domain Modeling
 
-Actively build and sharpen the project's domain model as you design. This is the *active* discipline — challenging terms, inventing edge-case scenarios, and writing the glossary and decisions down the moment they crystallise. (Merely *reading* `CONTEXT.md` for vocabulary is not this skill — that's a one-line habit any skill can do. This skill is for when you're changing the model, not just consuming it.)
+Actively build and sharpen the project's domain model as you design. This is the *active* discipline — challenging terms, inventing edge-case scenarios, and writing the glossary and decisions down the moment they crystallise. (Merely *reading* the glossary for vocabulary is not this skill — that's a one-line habit any skill can do. This skill is for when you're changing the model, not just consuming it.)
 
-## File structure
+The domain model lives in two places:
 
-Most repos have a single context:
+- **Glossary** — `docs/glossary/`, one markdown file per term, in the format `uvx disambiguate` expects (see below). Never a root `CONTEXT.md`.
+- **Decisions** — ADRs in `docs/adr/`, per the `writing-adrs` skill.
 
-```
-/
-├── CONTEXT.md
-├── docs/
-│   └── adr/
-│       ├── 0001-event-sourced-orders.md
-│       └── 0002-postgres-for-write-model.md
-└── src/
-```
-
-If a `CONTEXT-MAP.md` exists at the root, the repo has multiple contexts. The map points to where each one lives:
-
-```
-/
-├── CONTEXT-MAP.md
-├── docs/
-│   └── adr/                          ← system-wide decisions
-├── src/
-│   ├── ordering/
-│   │   ├── CONTEXT.md
-│   │   └── docs/adr/                 ← context-specific decisions
-│   └── billing/
-│       ├── CONTEXT.md
-│       └── docs/adr/
-```
-
-Create files lazily — only when you have something to write. If no `CONTEXT.md` exists, create one when the first term is resolved. If no `docs/adr/` exists, create it when the first ADR is needed.
+Create files lazily — only when you have something to write. If `docs/glossary/` doesn't exist, create it when the first term is resolved.
 
 ## During the session
 
 ### Challenge against the glossary
 
-When the user uses a term that conflicts with the existing language in `CONTEXT.md`, call it out immediately. "Your glossary defines 'cancellation' as X, but you seem to mean Y — which is it?"
+When the user uses a term that conflicts with the existing language in `docs/glossary/`, call it out immediately. "Your glossary defines 'cancellation' as X, but you seem to mean Y — which is it?"
 
 ### Sharpen fuzzy language
 
@@ -57,18 +34,37 @@ When domain relationships are being discussed, stress-test them with specific sc
 
 When the user states how something works, check whether the code agrees. If you find a contradiction, surface it: "Your code cancels entire Orders, but you just said partial cancellation is possible — which is right?"
 
-### Update CONTEXT.md inline
+### Update the glossary inline
 
-When a term is resolved, update `CONTEXT.md` right there. Don't batch these up — capture them as they happen. Use the format in [CONTEXT-FORMAT.md](./CONTEXT-FORMAT.md).
+When a term is resolved, write its glossary file right there. Don't batch these up — capture them as they happen.
 
-`CONTEXT.md` should be totally devoid of implementation details. Do not treat `CONTEXT.md` as a spec, a scratch pad, or a repository for implementation decisions. It is a glossary and nothing else.
+Glossary entries must be totally devoid of implementation details. The glossary is not a spec, a scratch pad, or a repository for implementation decisions. It is a glossary and nothing else.
 
 ### Offer ADRs sparingly
 
-Only offer to create an ADR when all three are true:
+Only offer to create an ADR when the three-part bar in the `writing-adrs` skill is met (hard to reverse, surprising without context, the result of a real trade-off). Format, numbering, and location also come from `writing-adrs`.
 
-1. **Hard to reverse** — the cost of changing your mind later is meaningful
-2. **Surprising without context** — a future reader will wonder "why did they do it this way?"
-3. **The result of a real trade-off** — there were genuine alternatives and you picked one for specific reasons
+## Glossary entry format
 
-If any of the three is missing, skip the ADR. Use the format in [ADR-FORMAT.md](./ADR-FORMAT.md).
+One file per term in `docs/glossary/`, consumable by `uvx disambiguate`:
+
+- **Filename is the slug**: lowercase letters, digits, single hyphens (`order-line.md` → slug `order-line`). Slugs must be unique.
+- **First H2 is the canonical name** (mandatory): `## Order Line`.
+- **Body is free-form markdown**: one or two tight sentences defining what the term IS, not what it does. When multiple words exist for the same concept, pick the best one and list the others under `_Avoid_:`.
+- **Cross-reference related terms** with standard markdown links by basename (`[Customer](customer.md)`) or wiki-style (`[[customer]]`). These links form the dependency graph `disambiguate` renders in topological order — a term that builds on another must link it.
+
+Example `docs/glossary/invoice.md`:
+
+```md
+## Invoice
+
+A request for payment sent to a [Customer](customer.md) after delivery.
+
+_Avoid_: Bill, payment request
+```
+
+Rules:
+
+- **Be opinionated.** One canonical term per concept; competing words go under `_Avoid_`.
+- **Only include terms specific to this project's context.** General programming concepts (timeouts, error types, utility patterns) don't belong even if the project uses them extensively.
+- Validate with `uvx disambiguate --lint` after editing.
