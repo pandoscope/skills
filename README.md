@@ -30,6 +30,13 @@ npx skills experimental_install
 npx skills update -p -y
 ```
 
+## Glossary
+
+Ubiquitous language: `docs/glossary/`, one file per term, resolve via `uvx disambiguate <term>`:
+
+- [Skills](docs/glossary/skills.md)
+- [Grilling Session](docs/glossary/grilling-session.md)
+
 ## Rules
 
 - Edit skills here only. Local copies in consumers get overwritten on update.

@@ -36,6 +36,10 @@ Only include these when they add genuine value. Most ADRs won't need them.
 
 Scan `docs/adr/` for the highest existing number and increment by one.
 
+## Grilling gate
+
+ADRs record load-bearing decisions. Decision made in-conversation, never grilled (`docs/glossary/grilling-session.md`) → ask user: "Decision wasn't grilled — record as-is?" Proceed only on explicit confirmation. Transcribing decision user already stated explicitly → gate doesn't apply.
+
 ## When to write an ADR
 
 All three of these must be true:

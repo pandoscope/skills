@@ -2,7 +2,7 @@
 name: to-spec
 description: Turn the current conversation into a spec published to the project tracker — no interview, just synthesis of what was already discussed.
 metadata.derived-from: https://github.com/mattpocock/skills/blob/391a2701dd948f94f56a39f7533f8eea9a859c87/skills/engineering/to-spec/SKILL.md
-metadata.derivation-note: Adds reproducibility invariant + self-containedness litmus test (see derived to-tickets). Tracker deferred to consumer AGENTS.md; vocabulary pinned to docs/glossary (`uvx disambiguate`), decisions to writing-adrs. Upstream `/setup-matt-pocock-skills` dropped. Caveman-condensed.
+metadata.derivation-note: Adds reproducibility invariant + self-containedness litmus test (see derived to-tickets) + grilling gate. Tracker deferred to consumer AGENTS.md; vocabulary pinned to docs/glossary (`uvx disambiguate`), decisions to writing-adrs. Upstream `/setup-matt-pocock-skills` dropped. Caveman-condensed.
 disable-model-invocation: true
 ---
 
@@ -15,6 +15,10 @@ Produce spec (aka PRD) from current conversation + codebase understanding. Do NO
 Spec — and tickets later derived from it — must be **self-contained**: replayed by any implementer, human or agent, builds roughly same application. Every outcome-shaping decision lives in spec itself, or durable docs it references — ADRs (`writing-adrs`), glossary terms (`docs/glossary/`). Never conversation context, tribal knowledge, implementer discretion.
 
 **Litmus test:** two independent implementers could build meaningfully different things → spec underspecified. Add decision to spec, or record as ADR/glossary term + reference.
+
+## Grilling gate
+
+Spec is load-bearing. No grilling session (`docs/glossary/grilling-session.md`) in context → stop, ask user: "No grilling session found — really skip?" Proceed only on explicit confirmation; note skip in Further Notes.
 
 ## Process
 
