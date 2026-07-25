@@ -56,3 +56,25 @@ jobs:
             --package @commitlint/cli \
             --package @commitlint/config-conventional \
             commitlint --from "$BASE_SHA" --to "$HEAD_SHA" --verbose
+
+  # The bats suite for derived/tdd/lint-red.sh plus the shell linter. Runner
+  # images ship shellcheck; bats comes from npm. Mirrors what
+  # scripts/ensure-test-tools.sh provides for local agent sessions.
+  tests:
+    name: "bats + shellcheck"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
+        with:
+          node-version: "22"
+
+      - name: Install bats
+        run: npm install -g bats
+
+      - name: Run test suite
+        run: make test
+
+      - name: Run shell linter
+        run: make lint
