@@ -191,3 +191,20 @@ fn red_thing() { assert!(false) }'
   [ "$status" -eq 1 ]
   [[ "$output" == *"unknown mode"* ]]
 }
+
+@test "BUG7: tree mode ignores markers inside documentation" {
+  # Generated repos vendor this skill at .agents/skills/tdd/SKILL.md, whose
+  # marker table contains every marker string. Tree mode grepped the whole
+  # tree, so the merge gate failed on every repo that vendored the skill.
+  mkcommit "docs: vendored skill" \
+    ".agents/skills/tdd/SKILL.md=| Python (pytest) | \`@pytest.mark.xfail(strict=True)\` | yes |"
+  run lint-red.sh tree
+  [ "$status" -eq 0 ]
+}
+
+@test "BUG7b: tree mode still catches a real marker in a test file" {
+  mkcommit "test: lingering" \
+    "src/thing.test.ts=test.fails('nope', () => {})"
+  run lint-red.sh tree
+  [ "$status" -eq 1 ]
+}

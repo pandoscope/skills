@@ -52,7 +52,18 @@ check_changes() {  # $1 = commit subject, $2 = changed files, $3 = diff
 mode="${1:?usage: lint-red.sh staged | commit <ref> | tree}"
 case "$mode" in
   tree)
-    if grep -rEn "$MARKERS" --exclude-dir={.git,node_modules,vendor,target} .; then
+    # Only test-shaped files can carry a live marker; a marker string in prose
+    # is documentation. Consumer repos vendor this skill (marker table and all)
+    # under .agents/skills/, which made an unscoped grep fail every repo that
+    # wired the gate.
+    offenders=()
+    while IFS= read -r f; do
+      [ -z "$f" ] && continue
+      f="${f#./}"
+      [[ "$f" =~ $TEST_PATH ]] && offenders+=("$f")
+    done < <(grep -rEl "$MARKERS" --exclude-dir={.git,node_modules,vendor,target} . 2>/dev/null || true)
+    if [ ${#offenders[@]} -gt 0 ]; then
+      grep -EnH "$MARKERS" "${offenders[@]}" >&2 || true
       fail "red markers in tree — behaviors never verified green"
     fi
     check_conventions
