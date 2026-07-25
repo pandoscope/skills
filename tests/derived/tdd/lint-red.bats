@@ -187,7 +187,7 @@ fn red_thing() { assert!(false) }'
 @test "BUG6: unknown mode exits nonzero instead of silently passing" {
   # old script: case falls through with no default → 'lint-red: OK', exit 0.
   # A typo'd mode name in prek/CI config would disable enforcement silently.
-  run lint-red.sh tre
+  run lint-red.sh bogus-mode
   [ "$status" -eq 1 ]
   [[ "$output" == *"unknown mode"* ]]
 }
