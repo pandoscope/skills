@@ -15,3 +15,7 @@ ignores:
   - CHANGELOG.md
   - .copier-answers.agentic.yml
   - .all-contributorsrc
+  - .agents/skills/**
+  # Bridged agent skill dirs (symlinks into .agents/skills) — keep excludes in
+  # sync so skill files aren't linted through the symlink.
+  - .claude/skills/**
