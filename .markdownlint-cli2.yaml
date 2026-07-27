@@ -19,9 +19,3 @@ ignores:
   # Bridged agent skill dirs (symlinks into .agents/skills) — keep excludes in
   # sync so skill files aren't linted through the symlink.
   - .claude/skills/**
-  # Verbatim upstream copy awaiting derivation. Upstream prose does not have to
-  # satisfy our lint config, and the copy must stay byte-identical for the
-  # derivation to read as a diff against what upstream published. Removed by
-  # the derivation commit, which rewrites both files.
-  - derived/writing-skills/SKILL.md
-  - derived/writing-skills/GLOSSARY.md
