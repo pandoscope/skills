@@ -106,3 +106,16 @@ Keep scenarios outside the skill folder so they never ship with it.
 ## Deriving from upstream
 
 Vendoring someone else's skill is a branch most runs never take — see [deriving.md](deriving.md).
+
+## Failure modes
+
+Diagnose against these by symptom; each entry carries its own cure.
+
+| Symptom | Failure mode |
+| --- | --- |
+| A step ends before the work is done | [Premature completion](glossary/premature-completion.md) |
+| The same meaning stated in two places | [Duplication](glossary/duplication.md) |
+| Live content buried under what nobody removed | [Sediment](glossary/sediment.md) |
+| Long, though every line is live and unique | [Sprawl](glossary/sprawl.md) |
+| A line the model already obeys by default | [No-op](glossary/no-op.md) |
+| The banned behavior shows up more, not less | [Negation](glossary/negation.md) |
