@@ -6,4 +6,4 @@ Its *wording*, not its target, decides when the agent reaches and how reliably.
 Must-have material behind a weak pointer is a variance bug — sharpen the wording first,
 inline the material only if that fails.
 
-_Avoid_: link, reference, import
+_Avoid_: link, import, see-also
