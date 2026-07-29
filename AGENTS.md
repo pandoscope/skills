@@ -39,6 +39,7 @@ Read [docs/architecture.md](docs/architecture.md) before touching any code.
 - Prose (skills, ADRs, tickets, docs): as short as possible, prefer caveman mode — unless precision or understandability suffers
 - Readability over brevity — straightforward, easy-to-follow code. No compact "one-liners" stretching across multiple lines (e.g. nested ternaries). Stretching across multiple lines is only allowed if it aids readability.
 - When removing a feature, erase every mention of it — docs, help text, comments, tests. Don't leave "no longer supported" notes: readers who never knew it existed pay to learn it did. State what is, not what stopped being. (Migration notes belong in the commit's `BREAKING CHANGE:` footer, which is where someone upgrading looks.)
+- In prose, don't state facts maintained elsewhere — counts ("the seven examples above"), far positional references, restated section names. Link the target instead. Immediate-adjacency words ("the examples above", "the following table") are fine — they only break if adjacency breaks.
 - All routes and non-trivial functions: docstring contracts (params, returns, errors)
 - Test cases cover edge cases and every `@returns` line
 
