@@ -340,6 +340,15 @@ carries everything else forward, so nothing is restated per append.
 Then publish `ledger.html` as an artifact, reusing the same URL so the
 principal's bookmark stays valid.
 
+Pull the store immediately before rendering, and render immediately
+before publishing — the store, not the page, is the source of truth,
+so a render from the newer tip always supersedes. Do not read the
+published page first: the conflict error a stale publish earns is
+cheaper than reading the page pre-emptively. Pay it only when it
+happens, then republish. When another session is visibly publishing
+the same store, concede instead of retrying — its next render already
+carries your events.
+
 ### Identity
 
 **The conversation's URL is the log's identity.** Pass
