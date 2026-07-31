@@ -93,16 +93,45 @@ Live in `.agents/skills/`. Synced using `npx skills update -p -y` — don't edit
 
 Each table is sorted alphabetically by skill — keep it sorted when adding entries.
 
-| Skill                    | Trigger                                                                                            |
-| ------------------------ | -------------------------------------------------------------------------------------------------- |
-| `caveman`                | Compact wording when writing prose (issues description, PR description, comments on repo or code)  |
-| `documenting-decisions`  | Any implementation task — place `DECISION:` markers                                                |
-| `domain-modeling`        | Pinning down domain terminology (glossary in `docs/glossary/`) or recording decisions in design    |
-| `grill-me`               | User asks to be grilled/interviewed about a plan or design before implementation                   |
-| `grill-with-docs`        | Grilling session that also records ADRs and glossary entries as decisions are made                 |
-| `grilling`               | Core interview loop used by `grill-me`/`grill-with-docs`; also on any 'grill' trigger phrase       |
-| `to-spec`                | Turning the current conversation into a spec/PRD and publishing it to the tracker                  |
-| `writing-adrs`           | Recording an architectural decision as an ADR in `docs/adr/`, or when another skill flags one      |
+**Read the table for the role this session is playing, plus the general one.** A worker session loading the orchestrator's skills, or an orchestrator loading the ticket-taking flow, is a session choosing between instructions that were never meant to both apply. Which role a session is in is set by whatever launched it — a trigger, an injected contract, or the principal saying so; absent any of those, the session is general purpose and loads the general table only.
+
+This listing is interim. The role-specific harness is meant to arrive per session rather than be selected out of a file that carries every role's — see #48.
+
+| Role | Tables to load |
+| --- | --- |
+| general purpose (default) | General |
+| implementing a ticket | General + Code-specific + Worker |
+| reviewing a PR | General + Code-specific + Worker |
+| orchestrating (principal present) | General + Orchestrator |
+
+| Skill                         | Trigger                                                                                           |
+| ----------------------------- | ------------------------------------------------------------------------------------------------- |
+| `caveman`                     | Compact wording when writing prose (issues description, PR description, comments on repo or code) |
+| `documenting-decisions`       | Any implementation task — place `DECISION:` markers                                               |
+| `domain-modeling`             | Pinning down domain terminology (glossary in `docs/glossary/`) or recording decisions in design   |
+| `grill-me`                    | User asks to be grilled/interviewed about a plan or design before implementation                  |
+| `grill-with-docs`             | Grilling session that also records ADRs and glossary entries as decisions are made                |
+| `grilling`                    | Core interview loop used by `grill-me`/`grill-with-docs`; also on any 'grill' trigger phrase      |
+| `to-spec`                     | Turning the current conversation into a spec/PRD and publishing it to the tracker                 |
+| `writing-adrs`                | Recording an architectural decision as an ADR in `docs/adr/`, or when another skill flags one     |
+
+Worker skills — a session running a ticket to a PR with no principal present:
+
+| Skill                         | Trigger                                                                        |
+| ----------------------------- | ------------------------------------------------------------------------------ |
+| `asking-for-help`             | The run is blocked — routes the blocker by cause                               |
+| `filing-bugs`                 | Found behaviour contradicting a stated contract                                |
+| `making-decisions`            | Made a non-obvious choice with no principal present                            |
+| `reporting-misunderstandings` | Discovered it misread its instructions or a preference rule                    |
+| `requesting-features`         | Needs a capability that does not exist                                         |
+| `take-ticket`                 | Fired on a dispatch-labelled ticket, or asked to take one end to end           |
+| `thread-ledger`               | Recording the run's own progress where the org can see it                      |
+
+Orchestrator skills — a session where the principal directs and the agent structures:
+
+| Skill           | Trigger                                                                 |
+| --------------- | ----------------------------------------------------------------------- |
+| `thread-ledger` | Tracking open threads — replaces the native task list in these sessions |
 
 Code-specific skills:
 
@@ -118,16 +147,29 @@ Code-specific skills:
 
 ### Skill Environment Variables
 
-- `DECISION_MEMORY_URL` — FULL git URL of the decision-memory repo the `grilling` skill records decisions to. A full URL rather than an owner/repo slug, so the hosting stays swappable. Recording requires this env var in the agent's execution environment; the recorder and the skill read exactly this name (shared contract — renaming either side breaks recording silently). Never hardcode, commit, or echo the value into artifacts. Unset → grilling still works, skips recording, and says so. Where to set it: local sessions → shell profile / user-level agent settings; remote or cloud sessions → the environment's configuration; CI → a repository secret. `scripts/doctor.sh` warns when it's unset and checks reachability when set.
+**Store URLs.** Each memory store is named by an env var holding its FULL git URL — a URL rather than an owner/repo slug so the hosting stays swappable. One contract covers all of them:
 
-  To record, use the recorder in the decision-memory repo — clone it fresh per session and run the copy that arrives with it, which operates on its own checkout:
+- The store's tooling and the skill that calls it read exactly this name. Renaming either side breaks writing silently.
+- Never hardcode, commit, or echo the value — into artifacts, prose, or a published page.
+- **Unset fails loudly.** No fallback path, no degraded mode, no warning-and-continue: a store variable that is not set stops the command that needed it. A tool that quietly writes somewhere else, or quietly writes nowhere, produces a session that believes it recorded something — and that belief is discovered much later, if at all.
+- Where to set it: local sessions → shell profile / user-level agent settings; remote or cloud sessions → the environment's configuration; CI → a repository secret. `scripts/doctor.sh` warns when one is unset and checks reachability when set.
+
+| Variable | Store | Written by |
+| --- | --- | --- |
+| `DECISION_MEMORY_URL` | decision-memory | `grilling`, `making-decisions`, `reporting-misunderstandings` |
+| `EVIDENCE_MEMORY_URL` | evidence-memory | `filing-bugs`, `requesting-features` |
+| `SESSION_MEMORY_URL` | session-memory | `thread-ledger` |
+
+Where they differ:
+
+- **decision-memory** is written from a fresh clone per session, so a session's PR carries that session's own records and the clone stays disposable:
 
   ```bash
   git clone "$DECISION_MEMORY_URL" <dir>
   python <dir>/tools/record.py open      # behavior doc: record.py --help
   ```
 
-  A fresh clone is clean and on the store's default branch, which keeps a session's PR to that session's own records. Each record is pushed as it lands, so the clone is disposable.
+- **session-memory** takes appends straight to its default branch — no PR, no review gate. The schema and the recorder are the contract there.
 
 ## Git
 
