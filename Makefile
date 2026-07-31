@@ -23,6 +23,13 @@ help:
 .PHONY: test ## Run all tests
 test:
 	bats --recursive tests/
+# Every directory under tests/ holding a test file runs, so a suite added
+# anywhere needs no edit here — a suite that cannot run is
+# indistinguishable from one that passes.
+	@for f in $$(find tests -name 'test_*.mjs' | sort); do \
+		echo "node --test $$f"; \
+		node --test "$$f" || exit 1; \
+	done
 
 .PHONY: lint ## Run all linters
 lint:
