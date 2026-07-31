@@ -431,19 +431,33 @@ const FLAGS = [
 ];
 const BOOLS = ["conversation-only", "no-push"];
 
-function parseArgs(argv) {
-  const [cmd, ...rest] = argv;
+/**
+ * Split argv into a command and its options.
+ *
+ * Options may appear on either side of the command. Callers put the
+ * store-wide ones first — `--root . render …` — and pinning the command
+ * to argv[0] silently broke every one of them, since a flag's value
+ * then parses as a stray argument.
+ */
+export function parseArgs(argv) {
+  let cmd = null;
   const opts = {};
-  for (let i = 0; i < rest.length; i += 1) {
-    const arg = rest[i];
-    if (!arg.startsWith("--")) throw new LedgerError(`unexpected argument ${arg}`);
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (!arg.startsWith("--")) {
+      if (cmd !== null) throw new LedgerError(`unexpected argument ${arg}`);
+      cmd = arg;
+      continue;
+    }
     const name = arg.slice(2);
     if (BOOLS.includes(name)) {
       opts[name] = true;
     } else if (FLAGS.includes(name)) {
       i += 1;
-      if (i >= rest.length) throw new LedgerError(`--${name} needs a value`);
-      opts[name] = rest[i];
+      if (i >= argv.length) throw new LedgerError(`--${name} needs a value`);
+      opts[name] = argv[i];
+    } else if (name === "help") {
+      cmd = cmd ?? "help";
     } else {
       throw new LedgerError(`unknown option --${name}`);
     }
@@ -485,7 +499,7 @@ Store: SESSION_MEMORY_URL (required; unset fails)`;
 
 export function main(argv) {
   const [cmd, opts] = parseArgs(argv);
-  if (!cmd || cmd === "--help" || cmd === "-h" || cmd === "help") {
+  if (!cmd || cmd === "help") {
     process.stdout.write(`${USAGE}\n`);
     return 0;
   }
