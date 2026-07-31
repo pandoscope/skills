@@ -17,6 +17,13 @@ so every expected finding is one an unaided agent review missed.
   (`fixtures/asking-for-help/SKILL.fixture.md`).
 - Harness of the round-1 agent: Claude Code on the Web, 2026-07-30;
   model as recorded by the session links in the PR's review footers.
+- The kata was assembled in the round-1 session itself
+  (`session_01PbB9YxNcS2xgw9SwZjsVMn`) — the same context that
+  produced the misses. Its transcript is in the session-memory store
+  under `transcripts/session_01PbB9YxNcS2xgw9SwZjsVMn/`, so the
+  reviewing context is itself inspectable, and the detection record is
+  in the evidence store as
+  `20260731T095604Z-agent-review-missed-principal-findings`.
 
 The fixtures are verbatim snapshots of those commits.
 Never update them: they preserve the reviewed state, and a fixture
