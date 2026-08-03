@@ -18,8 +18,18 @@ export const EVENTS = [
   "promoted",
   "stale",
   "synced",
+  "sealed",
   ...TERMINAL,
 ];
+
+// `sealed` is written by the turn's own check script once every check
+// is green: it records that the turn finished its bookkeeping. That is
+// a fact about the LOG, not about any thread, so a seal carries no
+// thread at all — which makes an unsealed tail one unambiguous
+// predicate ("the last turn did not finish") rather than a recency
+// heuristic. It carries an anchor like every other event, so the seal
+// sequence doubles as a per-turn table of contents over the transcript.
+export const LOG_EVENTS = ["sealed"];
 
 // `promoted` records that a thread acquired a forge ticket. That is
 // metadata about the thread's identity, not a step in its work, so it is
@@ -73,6 +83,7 @@ export function currentStates(events) {
   const states = {};
   for (const event of events) {
     if (METADATA_EVENTS.includes(event.ev)) continue;
+    if (LOG_EVENTS.includes(event.ev)) continue;
     states[event.thread] = event.ev;
   }
   return states;
@@ -113,6 +124,17 @@ export function validate(event, history) {
       `unknown event kind ${JSON.stringify(kind)}; expected one of ${EVENTS.join(", ")}`,
     );
   }
+  if (LOG_EVENTS.includes(kind)) {
+    if (event.thread) {
+      throw new LedgerError(
+        `${kind} is not about a thread — it records that a turn's log is ` +
+          `complete, and naming ${JSON.stringify(event.thread)} would make the ` +
+          "mark look like that thread's state",
+      );
+    }
+    return;
+  }
+
   const thread = event.thread;
   if (!thread) throw new LedgerError("event is missing 'thread'");
 
@@ -267,6 +289,7 @@ export function fold(events) {
   events.forEach((event, index) => {
     const name = event.thread;
     const kind = event.ev;
+    if (LOG_EVENTS.includes(kind)) return;
     if (!threads.has(name)) {
       threads.set(name, {
         thread: name,
