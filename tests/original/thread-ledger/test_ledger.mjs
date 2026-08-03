@@ -15,6 +15,7 @@ import {
   LedgerError,
   currentStates,
   fold,
+  mergeLogLines,
   orderClosed,
   orderOpen,
   sessionFromUrl,
@@ -34,6 +35,7 @@ import {
   checkSessionFile,
   countUserMessages,
   isUserTurn,
+  parseArgs,
   readAll,
   renderPage,
   resolveSession,
@@ -938,5 +940,105 @@ describe("OneImplementation", () => {
     const imports = views.match(/^import[\s\S]*?;$/gm) ?? [];
     assert.equal(imports.length, 1);
     assert.match(imports[0], /core\.mjs/);
+  });
+});
+
+// ------------------------------------------------------------ the CLI
+
+describe("ArgumentGrammar", () => {
+  it("takes store-wide options before the command", () => {
+    // How every caller writes it, including the store's render
+    // workflow. Pinning the command to argv[0] made a flag's value
+    // parse as a stray argument, and the whole suite stayed green
+    // because nothing tested the command line.
+    const [cmd, opts] = parseArgs([
+      "--root", ".", "render", "--format", "md", "--out", "LEDGER.md",
+    ]);
+    assert.equal(cmd, "render");
+    assert.equal(opts.root, ".");
+    assert.equal(opts.format, "md");
+    assert.equal(opts.out, "LEDGER.md");
+  });
+
+  it("takes them after the command too", () => {
+    const [cmd, opts] = parseArgs(["render", "--root", ".", "--out", "x.html"]);
+    assert.equal(cmd, "render");
+    assert.equal(opts.root, ".");
+  });
+
+  it("accepts a value that looks like a path", () => {
+    assert.equal(parseArgs(["state", "--root", "."])[1].root, ".");
+  });
+
+  it("refuses a second bare argument", () => {
+    throws(() => parseArgs(["render", "state"]), "unexpected argument");
+  });
+
+  it("refuses an unknown option", () => {
+    throws(() => parseArgs(["render", "--nope", "x"]), "unknown option");
+  });
+
+  it("refuses a flag with no value", () => {
+    throws(() => parseArgs(["render", "--out"]), "needs a value");
+  });
+
+  it("collects the append flags a real call uses", () => {
+    const [cmd, opts] = parseArgs([
+      "append", "--ev", "progress", "--thread", "a", "--pct", "40",
+      "--note", "moved", "--no-push",
+    ]);
+    assert.equal(cmd, "append");
+    assert.equal(opts.ev, "progress");
+    assert.equal(opts.pct, "40");
+    assert.equal(opts["no-push"], true);
+  });
+});
+
+describe("ReconcilingConcurrentAppends", () => {
+  const line = (at, ev) => JSON.stringify({ at, ev, thread: "t" });
+
+  it("keeps both sides", () => {
+    // An append-only log has no losing side; an event dropped here is
+    // an event nobody knows was written.
+    const ours = [line("2026-01-02T00:00:00+00:00", "a")];
+    const theirs = [line("2026-01-03T00:00:00+00:00", "b")];
+    assert.deepEqual(mergeLogLines(ours, theirs).map((l) => JSON.parse(l).ev), ["a", "b"]);
+  });
+
+  it("orders by stamp, not by side", () => {
+    const ours = [line("2026-01-04T00:00:00+00:00", "late")];
+    const theirs = [line("2026-01-01T00:00:00+00:00", "early")];
+    assert.deepEqual(
+      mergeLogLines(ours, theirs).map((l) => JSON.parse(l).ev),
+      ["early", "late"],
+    );
+  });
+
+  it("collapses lines both sides already have", () => {
+    // A retried push writes the same bytes twice.
+    const shared = line("2026-01-01T00:00:00+00:00", "a");
+    assert.deepEqual(mergeLogLines([shared], [shared]), [shared]);
+  });
+
+  it("preserves order for equal stamps", () => {
+    // Second-precision stamps tie often, and line order within a file
+    // is load-bearing.
+    const at = "2026-01-01T00:00:00+00:00";
+    const ours = [line(at, "first"), line(at, "second")];
+    assert.deepEqual(
+      mergeLogLines(ours, []).map((l) => JSON.parse(l).ev),
+      ["first", "second"],
+    );
+  });
+
+  it("drops blank lines rather than writing them back", () => {
+    assert.deepEqual(mergeLogLines(["", line("2026-01-01T00:00:00+00:00", "a"), ""], []).length, 1);
+  });
+
+  it("keeps a line it cannot parse", () => {
+    // Not ours to repair, and losing it would hide the corruption.
+    const merged = mergeLogLines(["{broken", line("2026-01-01T00:00:00+00:00", "a")], []);
+    assert.equal(merged.length, 2);
+    assert.equal(merged[0], "{broken");
   });
 });
