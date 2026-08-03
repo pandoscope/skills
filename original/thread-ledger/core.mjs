@@ -92,6 +92,16 @@ export function isUserTurn(record) {
 }
 
 /**
+ * The stamp of the newest user turn in `text` — where this turn began.
+ *
+ * Null when the transcript holds no user turn, so a caller distinguishes
+ * "the turn started at T" from "there is no turn to bound".
+ */
+export function lastUserTurnAt(text) {
+  throw new LedgerError(`lastUserTurnAt is not implemented (${String(text).length} bytes)`);
+}
+
+/**
  * User turns in `text`, the JSONL a transcript path holds.
  *
  * Takes the text rather than a path so this stays pure: the anchor
