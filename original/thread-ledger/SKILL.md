@@ -29,9 +29,11 @@ running, and the only record of *why* it stopped once it is gone.
 
 ## When to append
 
-The harness's task-tool reminder is the heartbeat. When it fires, or
-whenever thread state actually changes, append the event — then
-republish at the end of the turn.
+Whenever thread state actually changes — then republish at the end of
+the turn. Where `heartbeat.mjs` is installed a turn that changed a
+declared thread and did not append cannot end; where it is not, the
+harness's task-tool reminder is the cue, and priming is the fallback
+that has already been measured insufficient here.
 
 | Moment | Event |
 | --- | --- |
@@ -46,6 +48,10 @@ republish at the end of the turn.
 | Finished | `completed` |
 | Abandoned | `dropped` with why |
 | Finished thing needs more work | `reopened` |
+
+`sealed` is the one kind you never write: `heartbeat.mjs` appends it
+when a turn's checks are green. It describes the log rather than any
+thread, so it carries no thread at all.
 
 Splitting a thread: `opened` the children with `parent` set to the
 original's slug. The parent keeps its own lifecycle.
@@ -78,6 +84,32 @@ instead of surfacing as a wrong page later.
 - **`at` and `anchor` are recorder-owned.** Supply them and they are
   overwritten — code determines them more accurately than an agent
   estimating.
+
+## The heartbeat
+
+`heartbeat.mjs` sits beside `ledger.mjs` and runs as a `Stop` hook.
+It checks a finished turn against **observed state only** — files on
+disk, git, the ledger log — and either seals the turn or blocks it
+once. There is no self-report tier: a checklist filled in by the agent
+that did the work is another claim from the context that already
+believed the work happened.
+
+Your part is one file per turn, `~/.claude/turn-summary.txt`:
+
+```text
+threads: reminder-heartbeat, seal-event
+tickets: my-org/skills#56
+```
+
+Every check is a mechanical diff of that declaration against what was
+actually written and pushed. When one fails, the block reason states
+the completion criterion and the exact command — run it and end the
+turn; it is never a prompt to start new work.
+
+The check list, the seal, the verdict log and the environment contract
+are code, documented where they live: the header of `heartbeat.mjs`.
+The installer configures them; a misconfiguration is logged, never
+passed.
 
 ## Ordering
 
