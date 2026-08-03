@@ -111,6 +111,11 @@ are code, documented where they live: the header of `heartbeat.mjs`.
 The installer configures them; a misconfiguration is logged, never
 passed.
 
+**A clone behind its branch is reconciled, never forced.** The command
+the hook offers is `merge --ff-only`: it succeeds for a plain rollback
+and fails loudly for a real divergence. Forcing the push instead is the
+step that turns a recoverable state into lost work.
+
 ## Ordering
 
 Rendering order is computed from the events, so nothing here needs
