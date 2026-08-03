@@ -163,6 +163,28 @@ function checkTurnSummary(ctx) {
     };
   }
 
+  // Identity before anything that depends on it. A store with several
+  // conversations and nothing naming this one leaves the recorder
+  // falling back to a platform-local id that matches no log, so check 3
+  // compares against events nothing ever writes and can never pass —
+  // block, release, repeat. Saying which configuration is missing costs
+  // one turn; failing as though the ledger were behind costs every one
+  // after it.
+  if (!ctx.namedItself && ctx.conversations > 1) {
+    return {
+      verdict: "fail",
+      detail: `${ctx.conversations} conversations in the store and none named as this one`,
+      reason: [
+        "The turn is not complete until this session names which " +
+          `conversation it is. The store holds ${ctx.conversations} ` +
+          "conversations and nothing says which one this turn belongs to, so " +
+          "no check can tell this session's events from another's.",
+        "",
+        "  echo 'SESSION_URL=<this conversation's URL>' >> $HOME/.claude/session.env",
+      ].join("\n"),
+    };
+  }
+
   const stale = ctx.summary.exists && ctx.turnStart && ctx.summary.writtenAt < ctx.turnStart;
   if (!ctx.summary.exists || stale) {
     return {
@@ -416,6 +438,10 @@ function context(input) {
     msg: countUserTurns(text),
     turnStart: turnStart ? new Date(turnStart) : null,
     guarded: input.stop_hook_active === true,
+    namedItself: Boolean(process.env.LEDGER_SESSION_URL),
+    // How many conversations this store logs. One is unambiguous
+    // whatever the environment says; beyond that the hook needs telling.
+    conversations: new Set(readAll(root).map((event) => event.anchor?.session).filter(Boolean)).size,
     repoRoot: process.env.HEARTBEAT_REPO_ROOT || null,
     clones: clonesUnder(process.env.HEARTBEAT_REPO_ROOT || null),
     summary: readTurnSummary(),
