@@ -154,13 +154,25 @@ function logFilesIn(dir, spec) {
   return fs.readdirSync(logs).filter((name) => name.endsWith(".jsonl")).sort();
 }
 
-/** Events in one of the store's logs. */
+/**
+ * Events in one of the store's logs.
+ *
+ * Unparsable lines are skipped rather than thrown on: a kata may put a
+ * torn line in the store deliberately, and the runner observing that
+ * store must not fall over on the very state it is staging.
+ */
 function ledgerEventsIn(dir, spec, name) {
   return fs
     .readFileSync(path.join(storeOf(dir, spec), "ledger", `${name}.jsonl`), "utf8")
     .split("\n")
     .filter((line) => line.trim())
-    .map((line) => JSON.parse(line));
+    .flatMap((line) => {
+      try {
+        return [JSON.parse(line)];
+      } catch {
+        return [];
+      }
+    });
 }
 
 /**
@@ -254,9 +266,12 @@ function assertKata(name, dir, spec, result) {
   const [record, ...extra] = complianceLog(dir);
   assert.ok(record, `${name}: nothing reached the compliance log`);
   assert.deepEqual(extra, [], `${name}: one turn, one compliance record`);
+  // A kata may expect no verdicts at all — a heartbeat that crashed
+  // before it could evaluate anything still has to leave a record, and
+  // an empty verdict list is the honest shape of "nothing was checked".
   assert.deepEqual(
     record.verdicts.map((verdict) => verdict.check),
-    ["turn-summary", "pushed", "ledger-event"],
+    spec.verdicts ?? ["turn-summary", "pushed", "ledger-event"],
     `${name}: every check reports, pass or fail`,
   );
   assert.equal(record.fired, spec.check, `${name}: the check the log says fired`);
