@@ -115,12 +115,23 @@ function gitOrNull(repo, ...args) {
 
 // --------------------------------------------------------------- checks
 
-/** Check 1 — the turn declared what it touched. */
+/**
+ * Check 1 — the turn declared what it touched, this turn.
+ *
+ * A summary left in place from an earlier turn is present, well-formed
+ * and about different work, so existence cannot be the test: every
+ * check downstream would diff against the wrong declaration and report
+ * on a turn nobody asked about. Freshness is the mtime against the
+ * stamp of the message the principal last typed.
+ */
 function checkTurnSummary(ctx) {
-  if (!ctx.summary.exists) {
+  const stale = ctx.summary.exists && ctx.turnStart && ctx.summary.writtenAt < ctx.turnStart;
+  if (!ctx.summary.exists || stale) {
     return {
       verdict: "fail",
-      detail: "no turn summary",
+      detail: stale
+        ? `turn summary predates the turn (written ${ctx.summary.writtenAt.toISOString()})`
+        : "no turn summary",
       reason: [
         `The turn is not complete until ${ctx.summary.path} describes it. ` +
           "Write the ledger threads and the tickets this turn touched.",
