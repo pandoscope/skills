@@ -25,7 +25,14 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-import { LedgerError, fold, sessionFromUrl, stamp, validate } from "./core.mjs";
+import {
+  LedgerError,
+  fold,
+  mergeLogLines,
+  sessionFromUrl,
+  stamp,
+  validate,
+} from "./core.mjs";
 import { CSS, esc, renderBody, renderMarkdown } from "./views.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -34,10 +41,19 @@ const TRANSCRIPT_ROOT = path.join(os.homedir(), ".claude", "projects");
 
 // ----------------------------------------------------------------- IO
 
-/** Run git in `root`; throw with full stderr on failure. */
+/**
+ * Run git in `root`; throw with full stderr on failure.
+ *
+ * stderr is captured rather than inherited, so a step this tool expects
+ * to fail and recovers from — a push that lost a race — does not print
+ * git's alarm to a reader who is about to be told it worked.
+ */
 function git(root, ...args) {
   try {
-    return execFileSync("git", ["-C", root, ...args], { encoding: "utf8" });
+    return execFileSync("git", ["-C", root, ...args], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
   } catch (err) {
     throw new LedgerError(`git ${args.join(" ")} failed in ${root}:\n${err.stderr ?? err.message}`);
   }
@@ -328,7 +344,70 @@ export function push(root, session, summary) {
     "-m",
     `ledger(${session}): ${summary}`,
   );
-  git(root, "push", "-q", "origin", "HEAD:main");
+  pushWithRebase(root, session);
+}
+
+/**
+ * Push, reconciling with whoever got there first.
+ *
+ * Several sessions write one store, so losing the race is ordinary
+ * rather than exceptional. The log is append-only and both sides are
+ * real events, so the merge is always the same: keep everything, in
+ * stamp order. Failing here would leave an event written locally and
+ * invisible to everyone else.
+ */
+function pushWithRebase(root, session, attempts = 3) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      git(root, "push", "-q", "origin", "HEAD:main");
+      return;
+    } catch (err) {
+      if (attempt >= attempts) {
+        throw new LedgerError(
+          `${err.message}\n\nThe event IS written and committed locally; only ` +
+            `the push failed. Reconcile by hand and push, or the rest of the ` +
+            `org will not see it.`,
+        );
+      }
+      git(root, "fetch", "-q", "origin", "main");
+      rebaseOntoRemote(root, session);
+    }
+  }
+}
+
+function rebaseOntoRemote(root, session) {
+  const log = `ledger/${session}.jsonl`;
+  try {
+    git(root, "rebase", "FETCH_HEAD");
+    return;
+  } catch {
+    // The only expected conflict: both sides appended to the log.
+  }
+  const conflicted = git(root, "diff", "--name-only", "--diff-filter=U").trim();
+  if (conflicted && conflicted.split("\n").some((name) => name !== log)) {
+    git(root, "rebase", "--abort");
+    throw new LedgerError(
+      `cannot reconcile automatically — conflict outside the log: ${conflicted}`,
+    );
+  }
+  const file = path.join(root, log);
+  const [ours, theirs] = [
+    git(root, "show", `:2:${log}`).split("\n"),
+    git(root, "show", `:3:${log}`).split("\n"),
+  ];
+  fs.writeFileSync(file, mergeLogLines(ours, theirs).join("\n") + "\n", "utf8");
+  git(root, "add", log);
+  git(
+    root,
+    "-c",
+    "core.editor=true",
+    "-c",
+    "user.email=noreply@anthropic.com",
+    "-c",
+    "user.name=thread-ledger",
+    "rebase",
+    "--continue",
+  );
 }
 
 // -------------------------------------------------------------- pages
@@ -515,8 +594,10 @@ export function main(argv) {
 
   if (cmd === "append") {
     const stamped = append(root, session, eventFrom(opts), transcript, sessionUrl);
-    if (!opts["no-push"]) push(root, session, `${stamped.ev} ${stamped.thread}`);
+    // Printed before the push, because the write already happened: a
+    // push that fails must not make a recorded event look unrecorded.
     process.stdout.write(`${JSON.stringify(stamped)}\n`);
+    if (!opts["no-push"]) push(root, session, `${stamped.ev} ${stamped.thread}`);
     return 0;
   }
 

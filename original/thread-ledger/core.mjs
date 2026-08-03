@@ -394,3 +394,42 @@ export function orderClosed(threads) {
     .filter((item) => TERMINAL.includes(item.state))
     .sort((a, b) => (a.closed_order ?? a.order) - (b.closed_order ?? b.order));
 }
+
+/**
+ * Reconcile two versions of one append-only log.
+ *
+ * A store with several live sessions gets concurrent appends,
+ * so a push loses the race routinely. The merge is mechanical,
+ * so the tool should do it.
+ *
+ * Both sides are kept: an append-only log has no losing side, and an
+ * event dropped here is an event nobody knows was written. Identical
+ * lines collapse, because a retried push writes the same bytes twice.
+ * Order is by stamp, with the original order preserved for equal stamps
+ * — line order within a file is load-bearing, and second-precision
+ * stamps tie often.
+ */
+export function mergeLogLines(ours, theirs) {
+  const seen = new Set();
+  const keep = [];
+  for (const line of [...ours, ...theirs]) {
+    const text = line.trim();
+    if (!text || seen.has(text)) continue;
+    seen.add(text);
+    keep.push(text);
+  }
+  return keep
+    .map((text, index) => ({ text, index, at: parseAt(text) }))
+    .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : a.index - b.index))
+    .map((item) => item.text);
+}
+
+/** An event's stamp, or "" for a line that predates stamping. */
+function parseAt(text) {
+  try {
+    return JSON.parse(text).at ?? "";
+  } catch {
+    // Not our JSON to repair; sorts first and stays visible.
+    return "";
+  }
+}
