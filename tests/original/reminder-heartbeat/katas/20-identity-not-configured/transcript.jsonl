@@ -1,0 +1,2 @@
+{"type":"user","timestamp":"2026-08-04T10:00:00.000Z","message":{"role":"user","content":"First turn of a fresh session."}}
+{"type":"assistant","timestamp":"2026-08-04T10:06:00.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Recorded."}]}}
