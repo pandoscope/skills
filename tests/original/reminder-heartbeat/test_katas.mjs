@@ -138,7 +138,10 @@ function fire(dir, spec, script = HEARTBEAT) {
       PATH: process.env.PATH,
       HOME: path.join(dir, "home"),
       SESSION_MEMORY_ROOT: storeOf(dir, spec),
-      HEARTBEAT_REPO_ROOT: path.join(dir, "repos"),
+      // `repo_root` lets a kata point the hook at a path of its own —
+      // a wrong one, say, which is what a config edit produces and what
+      // an unset variable cannot express.
+      HEARTBEAT_REPO_ROOT: path.join(dir, spec.repo_root ?? "repos"),
       // Only set when the kata names it, so every other kata keeps
       // exercising the path a session without it takes.
       ...(spec.session_url ? { LEDGER_SESSION_URL: spec.session_url } : {}),
@@ -275,6 +278,13 @@ function assertKata(name, dir, spec, result) {
     `${name}: every check reports, pass or fail`,
   );
   assert.equal(record.fired, spec.check, `${name}: the check the log says fired`);
+  if (spec.check2_verdict) {
+    assert.equal(
+      record.verdicts.find((verdict) => verdict.check === "pushed")?.verdict,
+      spec.check2_verdict,
+      `${name}: what the log says check 2 established`,
+    );
+  }
   assert.equal(record.guarded, spec.stop_hook_active ?? false);
 }
 

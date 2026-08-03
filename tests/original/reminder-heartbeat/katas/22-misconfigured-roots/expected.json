@@ -1,0 +1,11 @@
+{
+  "status": "active",
+  "stop_hook_active": false,
+  "summary_written_at": "2026-08-04T12:05:20.000Z",
+  "repo_root": "typo-does-not-exist",
+  "exit": 0,
+  "check": null,
+  "sealed": true,
+  "reason": [],
+  "check2_verdict": "unconfigured"
+}
