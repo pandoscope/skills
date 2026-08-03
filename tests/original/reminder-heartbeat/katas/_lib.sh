@@ -10,12 +10,22 @@
 # Every repo gets a real upstream (a bare clone under .origins/), because
 # "pushed" is HEAD against origin and a repo without one cannot express
 # the difference.
+#
+# Commit dates are fixed, never "now". A fixture built at test time would
+# otherwise date every commit after the kata's turn began, and a check
+# that asks "did this clone gain a commit during the turn?" would answer
+# yes for a clone the kata never touched — the fixture's own age leaking
+# into the thing under test.
+SEEDED=2020-01-01T00:00:00Z
 
 set -eu
 
 kata_repo() {
     name=$1
     state=$2
+    # Third argument: when the "this turn" commit happened. Only the
+    # states that model activity during the turn under test need it.
+    when=${3:-$SEEDED}
     origin="$PWD/.origins/$name.git"
     work="$PWD/repos/$name"
 
@@ -28,7 +38,7 @@ kata_repo() {
 
     echo "seed" > "$work/README.md"
     git -C "$work" add -A
-    git -C "$work" commit -q -m "chore: seed"
+    GIT_COMMITTER_DATE="$SEEDED" git -C "$work" commit -q --date "$SEEDED" -m "chore: seed"
     git -C "$work" push -q -u origin claude/kata
 
     case "$state" in
@@ -39,7 +49,7 @@ kata_repo() {
         unpushed)
             echo "committed but never pushed" >> "$work/README.md"
             git -C "$work" add -A
-            git -C "$work" commit -q -m "feat: the work this turn did"
+            GIT_COMMITTER_DATE="${when:-$SEEDED}" git -C "$work" commit -q --date "${when:-$SEEDED}" -m "feat: the work this turn did"
             ;;
         committed-this-turn)
             # Work that landed and was pushed during the turn under
@@ -47,7 +57,7 @@ kata_repo() {
             # of anything the turn says about itself.
             echo "the work this turn did" >> "$work/README.md"
             git -C "$work" add -A
-            git -C "$work" commit -q -m "fix: the parser"
+            GIT_COMMITTER_DATE="${when:-$SEEDED}" git -C "$work" commit -q --date "${when:-$SEEDED}" -m "fix: the parser"
             git -C "$work" push -q origin claude/kata
             ;;
         untouched)
@@ -64,7 +74,7 @@ kata_repo() {
             # comparison against origin can tell.
             echo "landed upstream" >> "$work/README.md"
             git -C "$work" add -A
-            git -C "$work" commit -q -m "feat: work that reached origin"
+            GIT_COMMITTER_DATE="${when:-$SEEDED}" git -C "$work" commit -q --date "${when:-$SEEDED}" -m "feat: work that reached origin"
             git -C "$work" push -q origin claude/kata
             git -C "$work" reset -q --hard HEAD~1
             ;;
