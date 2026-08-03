@@ -162,6 +162,21 @@ function checkPushed(ctx) {
   const clones = clonesUnder(ctx.repoRoot);
   for (const repo of clones) {
     const branch = gitOrNull(repo.path, "rev-parse", "--abbrev-ref", "HEAD") ?? "HEAD";
+    // Uncommitted before unpushed: a change that is not committed cannot
+    // be pushed, and HEAD against origin cannot see it at all.
+    if (gitOrNull(repo.path, "status", "--porcelain")) {
+      return {
+        verdict: "fail",
+        detail: `${repo.name} has uncommitted changes`,
+        reason: [
+          "The turn is not complete until every repo it changed is committed " +
+            `and pushed. Uncommitted: ${repo.name}.`,
+          "",
+          `  git -C ${repo.path} add -A && git -C ${repo.path} commit -m ` +
+            `"<type>: <what changed>" && git -C ${repo.path} push -u origin ${branch}`,
+        ].join("\n"),
+      };
+    }
     const upstream = gitOrNull(repo.path, "rev-parse", "--abbrev-ref", "@{upstream}");
     const ahead = upstream
       ? gitOrNull(repo.path, "rev-list", "--count", "@{upstream}..HEAD")
