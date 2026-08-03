@@ -1,0 +1,2 @@
+threads: session-memory-store
+tickets: o/r#43
