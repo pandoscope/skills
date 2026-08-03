@@ -116,6 +116,14 @@ the hook offers is `merge --ff-only`: it succeeds for a plain rollback
 and fails loudly for a real divergence. Forcing the push instead is the
 step that turns a recoverable state into lost work.
 
+**A decision marked this turn is recorded this turn.** When a commit
+adds a `DECISION` marker, the decision store gets its record before the
+turn ends: the reasoning is free to write while you still hold it and
+cannot be reconstructed later, and a reconstructed prediction scores
+nothing. A marker already in the tree is an earlier turn's debt, not
+this one's. Only the *marked* half is mechanized — judging what deserves
+a marker stays with you.
+
 ## Ordering
 
 Rendering order is computed from the events, so nothing here needs
