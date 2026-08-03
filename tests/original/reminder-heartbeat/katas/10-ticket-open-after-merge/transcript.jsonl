@@ -1,0 +1,4 @@
+{"type":"user","timestamp":"2026-08-03T12:00:00.000Z","message":{"role":"user","content":"Merge the store PR."}}
+{"type":"assistant","timestamp":"2026-08-03T12:06:20.400Z","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_kata10a","name":"mcp__github__merge_pull_request","input":{"owner":"o","repo":"r","pullNumber":44}}]}}
+{"type":"user","timestamp":"2026-08-03T12:06:24.918Z","message":{"role":"user","content":[{"type":"tool_result","content":"{\"merged\":true,\"sha\":\"080d2fe\"}"}]}}
+{"type":"assistant","timestamp":"2026-08-03T12:07:02.330Z","message":{"role":"assistant","content":[{"type":"text","text":"Merged. The ledger thread is closed."}]}}
