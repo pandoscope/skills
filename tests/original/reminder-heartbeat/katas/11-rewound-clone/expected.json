@@ -6,7 +6,7 @@
   "check": "pushed",
   "sealed": false,
   "reason": [
-    "The turn is not complete until every repo it changed matches its pushed branch. Behind origin: skills.",
+    "The turn is not complete until every clone matches its pushed branch. Behind origin: skills.",
     "",
     "  git -C {{repos}}/skills fetch origin claude/kata && git -C {{repos}}/skills merge --ff-only origin/claude/kata"
   ]

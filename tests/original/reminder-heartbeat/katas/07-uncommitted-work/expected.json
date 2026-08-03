@@ -6,7 +6,7 @@
   "check": "pushed",
   "sealed": false,
   "reason": [
-    "The turn is not complete until every repo it changed is committed and pushed. Uncommitted: skills.",
+    "The turn is not complete until every clone is committed and pushed. Uncommitted: skills.",
     "",
     "  git -C {{repos}}/skills add -A && git -C {{repos}}/skills commit -m \"<type>: <what changed>\" && git -C {{repos}}/skills push -u origin claude/kata"
   ]
