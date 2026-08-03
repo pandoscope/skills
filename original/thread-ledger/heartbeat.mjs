@@ -140,6 +140,29 @@ function committedThisTurn(repo, turnStart) {
  */
 function checkTurnSummary(ctx) {
   const write = `  printf 'threads: %s\\ntickets: %s\\n' '<thread-slug>, <thread-slug>' '<owner/repo#n>' > ${ctx.summary.path}`;
+
+  // Without a boundary nothing downstream means what it says: freshness
+  // has nothing to compare against and check 3's window widens to all
+  // of history, so both would report a pass they never established.
+  // This blocks rather than reporting `unconfigured` — an unset repo
+  // root is a deployment declining check 2, whereas the platform always
+  // supplies a transcript, so its absence is something broken and the
+  // hook cannot do what it was registered for.
+  if (!ctx.turnStart) {
+    return {
+      verdict: "fail",
+      detail: `no user turn in ${ctx.transcript ?? "(no transcript path given)"}`,
+      reason: [
+        "The turn is not complete until this hook can tell where it began. " +
+          "The transcript it was given holds no message from the principal, " +
+          "so nothing establishes the turn's boundary and no check " +
+          "downstream can be trusted.",
+        "",
+        `  ls -l ${ctx.transcript ?? "<no transcript path was given>"}`,
+      ].join("\n"),
+    };
+  }
+
   const stale = ctx.summary.exists && ctx.turnStart && ctx.summary.writtenAt < ctx.turnStart;
   if (!ctx.summary.exists || stale) {
     return {
