@@ -1,0 +1,13 @@
+{
+  "status": "active",
+  "stop_hook_active": false,
+  "summary_written_at": "2026-08-03T17:29:20.000Z",
+  "exit": 2,
+  "check": "pushed",
+  "sealed": false,
+  "reason": [
+    "The turn is not complete until every repo it changed is committed and pushed. Uncommitted: skills.",
+    "",
+    "  git -C {{repos}}/skills add -A && git -C {{repos}}/skills commit -m \"<type>: <what changed>\" && git -C {{repos}}/skills push -u origin claude/kata"
+  ]
+}
