@@ -98,7 +98,17 @@ export function isUserTurn(record) {
  * "the turn started at T" from "there is no turn to bound".
  */
 export function lastUserTurnAt(text) {
-  throw new LedgerError(`lastUserTurnAt is not implemented (${String(text).length} bytes)`);
+  let at = null;
+  for (const line of String(text).split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      const record = JSON.parse(line);
+      if (isUserTurn(record) && record.timestamp) at = record.timestamp;
+    } catch {
+      // A partial trailing line is not a turn.
+    }
+  }
+  return at;
 }
 
 /**
