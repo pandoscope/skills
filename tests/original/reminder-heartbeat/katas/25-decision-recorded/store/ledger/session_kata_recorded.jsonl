@@ -1,0 +1,3 @@
+{"ev":"opened","thread":"decision-markers","title":"Decision markers and their records","ticket":"pandoscope/skills#56","at":"2026-08-03T20:30:00+00:00","anchor":{"session":"session_kata_recorded","msg":1,"url":"https://claude.test/code/session_kata_recorded"}}
+{"ev":"sealed","at":"2026-08-03T20:30:04+00:00","anchor":{"session":"session_kata_recorded","msg":1,"url":"https://claude.test/code/session_kata_recorded"}}
+{"ev":"progress","thread":"decision-markers","pct":40,"note":"the marker landed in core.mjs","at":"2026-08-03T21:05:00+00:00","anchor":{"session":"session_kata_recorded","msg":2,"url":"https://claude.test/code/session_kata_recorded"}}

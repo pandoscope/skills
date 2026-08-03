@@ -1,0 +1,14 @@
+{
+  "status": "active",
+  "stop_hook_active": false,
+  "summary_written_at": "2026-08-03T21:08:50.000Z",
+  "decision_root": "repos/decision-memory",
+  "exit": 2,
+  "check": "decision-record",
+  "sealed": false,
+  "reason": [
+    "The turn is not complete until every decision it marked has a record. Marked and unrecorded: 1 marker, first at skills/core.mjs (ARCH).",
+    "",
+    "  python {{decisions}}/tools/record.py open && python {{decisions}}/tools/record.py record --from <drafts.json>"
+  ]
+}
