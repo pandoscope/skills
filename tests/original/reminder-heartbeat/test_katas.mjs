@@ -132,33 +132,52 @@ function fire(dir, spec, script = HEARTBEAT) {
       HOME: path.join(dir, "home"),
       SESSION_MEMORY_ROOT: storeOf(dir),
       HEARTBEAT_REPO_ROOT: path.join(dir, "repos"),
+      // Only set when the kata names it, so every other kata keeps
+      // exercising the path a session without it takes.
+      ...(spec.session_url ? { LEDGER_SESSION_URL: spec.session_url } : {}),
     },
   });
   assert.equal(result.error, undefined, `the hook did not run: ${result.error}`);
   return result;
 }
 
-/** Events in the kata's ledger log after the hook ran. */
-function ledgerEvents(dir) {
+/** The log files in the kata's store, by name. */
+function logFilesIn(dir) {
   const logs = path.join(storeOf(dir), "ledger");
-  return fs
-    .readdirSync(logs)
-    .filter((name) => name.endsWith(".jsonl"))
-    .flatMap((name) =>
-      fs
-        .readFileSync(path.join(logs, name), "utf8")
-        .split("\n")
-        .filter((line) => line.trim())
-        .map((line) => JSON.parse(line)),
-    );
+  return fs.readdirSync(logs).filter((name) => name.endsWith(".jsonl")).sort();
 }
 
-/** The kata's log file name, which is also the session it records. */
-function logNameFor(dir) {
+/** Events in one of the store's logs. */
+function ledgerEventsIn(dir, name) {
+  return fs
+    .readFileSync(path.join(storeOf(dir), "ledger", `${name}.jsonl`), "utf8")
+    .split("\n")
+    .filter((line) => line.trim())
+    .map((line) => JSON.parse(line));
+}
+
+/**
+ * The session a kata's seal must land in.
+ *
+ * Named outright by a kata whose store holds several conversations —
+ * which is where getting it wrong stops being theoretical. Otherwise
+ * the single log in the store is the answer, and the runner asserts
+ * that it really is single rather than assuming so.
+ */
+function logNameFor(dir, spec) {
+  if (spec?.session) return spec.session;
   const logs = path.join(storeOf(dir), "ledger");
   const found = fs.readdirSync(logs).filter((name) => name.endsWith(".jsonl"));
   assert.equal(found.length, 1, "a kata records exactly one session");
   return path.basename(found[0], ".jsonl");
+}
+
+/** Freeze what the store looked like before the hook ran. */
+function baseline(dir, spec) {
+  spec.logs_before = logFilesIn(dir);
+  spec.sealed_before = ledgerEventsIn(dir, logNameFor(dir, spec)).filter(
+    (event) => event.ev === "sealed",
+  ).length;
 }
 
 /** Compliance records the hook wrote, oldest first. */
@@ -191,11 +210,20 @@ function assertKata(name, dir, spec, result) {
     `${name}: the reason text is part of the contract`,
   );
 
-  const sealed = ledgerEvents(dir).filter((event) => event.ev === "sealed");
-  // A kata's own fixture may already carry an earlier turn's seal, so
-  // the question is whether THIS run added one, not whether any exists.
+  // A seal has to land in the log of the conversation it belongs to.
+  // Counting seals across the whole store cannot see a seal written to
+  // the WRONG log — it would find one either way — so the store's set
+  // of logs is pinned first, and the count is taken inside the one log
+  // this turn should have touched.
+  const log = logNameFor(dir, spec);
+  assert.deepEqual(
+    logFilesIn(dir),
+    spec.logs_before,
+    `${name}: the run wrote a log for a conversation that is not this one`,
+  );
+  const sealed = ledgerEventsIn(dir, log).filter((event) => event.ev === "sealed");
   const added = sealed.length - spec.sealed_before;
-  assert.equal(added, spec.sealed ? 1 : 0, `${name}: seals added by this run`);
+  assert.equal(added, spec.sealed ? 1 : 0, `${name}: seals added to ${log}`);
 
   // A seal names no thread, so its anchor is the ONLY thing that says
   // which conversation and which point in it the mark belongs to. The
@@ -205,7 +233,6 @@ function assertKata(name, dir, spec, result) {
   // predicate, and resolve to nothing.
   if (spec.sealed) {
     const mark = sealed[sealed.length - 1];
-    const log = logNameFor(dir);
     assert.equal(mark.anchor?.session, log, `${name}: the seal names its session`);
     assert.ok(
       Number.isInteger(mark.anchor?.msg),
@@ -235,7 +262,7 @@ describe("Katas", () => {
   for (const name of kataNames()) {
     const dir = stage(name);
     const spec = readSpec(dir);
-    spec.sealed_before = ledgerEvents(dir).filter((event) => event.ev === "sealed").length;
+    baseline(dir, spec);
 
     if (spec.status === "backlog") {
       // A backlog kata pins a check that is NOT built yet: the incident
@@ -324,7 +351,7 @@ describe("KataRunnerRedGates", () => {
   function gate(body, kata = drift) {
     const dir = stage(kata);
     const spec = readSpec(dir);
-    spec.sealed_before = ledgerEvents(dir).filter((event) => event.ev === "sealed").length;
+    baseline(dir, spec);
     const script = brokenHeartbeat(dir, body);
     try {
       assertKata(kata, dir, spec, fire(dir, spec, script));

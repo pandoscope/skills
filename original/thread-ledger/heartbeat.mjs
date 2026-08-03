@@ -177,7 +177,12 @@ function checkPushed(ctx) {
         ].join("\n"),
       };
     }
-    const upstream = gitOrNull(repo.path, "rev-parse", "--abbrev-ref", "@{upstream}");
+    // The remote counterpart, whether or not tracking was configured.
+    // A branch created and never pushed has no upstream, and that says
+    // nothing about whether work is waiting.
+    const tracked = gitOrNull(repo.path, "rev-parse", "--abbrev-ref", "@{upstream}");
+    const named = gitOrNull(repo.path, "rev-parse", "--verify", "--quiet", `origin/${branch}`);
+    const upstream = tracked ?? (named ? `origin/${branch}` : null);
     const behind = upstream
       ? gitOrNull(repo.path, "rev-list", "--count", `HEAD..${upstream}`)
       : null;
@@ -208,15 +213,15 @@ function checkPushed(ctx) {
         ].join("\n"),
       };
     }
-    const ahead = upstream
-      ? gitOrNull(repo.path, "rev-list", "--count", "@{upstream}..HEAD")
-      : null;
-    if (upstream && ahead === "0") continue;
+    // Commits this clone holds that exist on no remote ref at all. That
+    // is the question worth asking — it answers "ahead of upstream" and
+    // "branched but never pushed" together, and it does not mistake a
+    // clone nobody wrote to for work about to be lost.
+    const unpushed = gitOrNull(repo.path, "rev-list", "--count", "HEAD", "--not", "--remotes");
+    if (unpushed === "0") continue;
     return {
       verdict: "fail",
-      detail: upstream
-        ? `${repo.name} is ${ahead} commits ahead of ${upstream}`
-        : `${repo.name} has no upstream`,
+      detail: `${repo.name} holds ${unpushed} commits that are on no remote`,
       reason: [
         "The turn is not complete until every repo it changed is committed " +
           `and pushed. Unpushed: ${repo.name}.`,

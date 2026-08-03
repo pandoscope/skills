@@ -1,0 +1,11 @@
+{
+  "status": "active",
+  "stop_hook_active": false,
+  "summary_written_at": "2026-08-03T18:25:10.000Z",
+  "session_url": "https://claude.test/code/session_kata_worker",
+  "session": "session_kata_worker",
+  "exit": 0,
+  "check": null,
+  "sealed": true,
+  "reason": []
+}
