@@ -40,7 +40,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 import { LedgerError, countUserTurns, lastUserTurnAt } from "./core.mjs";
-import { readAll, resolveRoot, resolveSession } from "./ledger.mjs";
+import { append, readAll, resolveRoot, resolveSession } from "./ledger.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const LEDGER = path.join(HERE, "ledger.mjs");
@@ -242,7 +242,12 @@ export function run(input) {
   const failed = verdicts.find((verdict) => verdict.verdict === "fail");
   const reported = verdicts.map(({ check, verdict, detail }) => ({ check, verdict, detail }));
 
+  // Green seals, and nothing else does. An unsealed tail then carries
+  // exactly one meaning — the last turn did not finish its bookkeeping
+  // — which is the predicate the renderer and the store's CI both read,
+  // with no recency heuristic anywhere in it.
   if (!failed) {
+    append(ctx.root, ctx.session, { ev: "sealed" }, ctx.transcript, ctx.sessionUrl);
     logCompliance(ctx, reported, "sealed", null);
     return 0;
   }
