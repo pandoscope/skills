@@ -41,6 +41,15 @@ kata_repo() {
             git -C "$work" add -A
             git -C "$work" commit -q -m "feat: the work this turn did"
             ;;
+        committed-this-turn)
+            # Work that landed and was pushed during the turn under
+            # test — evidence the turn touched this clone, independent
+            # of anything the turn says about itself.
+            echo "the work this turn did" >> "$work/README.md"
+            git -C "$work" add -A
+            git -C "$work" commit -q -m "fix: the parser"
+            git -C "$work" push -q origin claude/kata
+            ;;
         untouched)
             # A clone the session never worked in: put on a branch that
             # was never pushed, carrying no commit of its own. Every
