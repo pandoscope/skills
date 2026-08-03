@@ -1,0 +1,2 @@
+{"type":"user","timestamp":"2026-08-04T13:00:00.000Z","message":{"role":"user","content":"Continue after the resume."}}
+{"type":"assistant","timestamp":"2026-08-04T13:06:00.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Continued."}]}}
