@@ -214,6 +214,25 @@ function urlFor(root, session) {
 }
 
 /**
+ * The conversation a rendered view links back to, or null.
+ *
+ * Null is a correct answer here, unlike for a write. A store holding
+ * several conversations has no single one to link to, and every thread
+ * already carries its own URL on its anchors — which is the link the
+ * rows actually use. A store-wide link is a convenience for the
+ * one-conversation case, so its absence degrades the header and nothing
+ * else.
+ */
+export function storeUrl(root, explicit) {
+  if (explicit) return explicit.trim();
+  const dir = ledgerDir(root);
+  if (!fs.existsSync(dir)) return null;
+  const known = fs.readdirSync(dir).filter((name) => name.endsWith(".url"));
+  if (known.length !== 1) return null;
+  return fs.readFileSync(path.join(dir, known[0]), "utf8").trim() || null;
+}
+
+/**
  * Decide which conversation this invocation is writing.
  *
  * The URL is the identity when one is known, and the log's filename is
@@ -563,14 +582,20 @@ export function main(argv) {
 
   const root = resolveRoot(opts.root);
   const transcript = findTranscript(opts.transcript);
-  const [session, sessionUrl] = resolveSession(
-    root,
-    opts["session-url"],
-    opts.session,
-    transcript,
-  );
 
+  // Identity is resolved for WRITES only. A write has to know which
+  // conversation it belongs to; a read folds every log in the store and
+  // never asks. Resolving it up front for all three commands is what
+  // stopped the store rendering the moment it held a second
+  // conversation — the requirement was real, it was just in the wrong
+  // place.
   if (cmd === "append") {
+    const [session, sessionUrl] = resolveSession(
+      root,
+      opts["session-url"],
+      opts.session,
+      transcript,
+    );
     const stamped = append(root, session, eventFrom(opts), transcript, sessionUrl);
     // Printed before the push, because the write already happened: a
     // push that fails must not make a recorded event look unrecorded.
@@ -589,6 +614,7 @@ export function main(argv) {
   if (!opts.out) throw new LedgerError("render needs --out");
 
   const folded = fold(events);
+  const sessionUrl = storeUrl(root, opts["session-url"]);
   const nowMsg = countUserMessages(transcript);
   const codes = readCodes(root);
   const title = opts.title ?? "Thread ledger";
