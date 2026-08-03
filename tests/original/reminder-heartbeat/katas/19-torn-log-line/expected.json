@@ -1,0 +1,10 @@
+{
+  "status": "active",
+  "stop_hook_active": true,
+  "summary_written_at": "2026-08-04T09:04:20.000Z",
+  "verdicts": [],
+  "exit": 0,
+  "check": "heartbeat-crashed",
+  "sealed": false,
+  "reason": []
+}
