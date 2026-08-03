@@ -301,12 +301,24 @@ function checkPushed(ctx) {
  * carried over from an earlier turn does not answer for this one.
  */
 function checkLedgerEvent(ctx) {
+  // Every check runs even once one has failed, so this has to survive a
+  // turn with no boundary rather than throw into the crash handler and
+  // replace check 1's reason with a stack trace.
+  if (!ctx.turnStart) {
+    return { verdict: "unconfigured", detail: "no turn boundary to measure against" };
+  }
   if (!ctx.summary.threads.length) {
     return { verdict: "pass", detail: "no threads declared — nothing to record" };
   }
-  const start = ctx.turnStart ? ctx.turnStart.getTime() : 0;
+  const start = ctx.turnStart.getTime();
+  // Narrowed by session as well as by time. The fold reads every log in
+  // the store, which is right for rendering and wrong for this
+  // question: an event another conversation wrote records what that
+  // conversation did, and two sessions on one thread would otherwise
+  // excuse each other's bookkeeping.
   const touched = new Set(
     ctx.events
+      .filter((event) => event.anchor?.session === ctx.session)
       .filter((event) => event.at && new Date(event.at).getTime() >= start)
       .map((event) => event.thread),
   );
@@ -314,15 +326,26 @@ function checkLedgerEvent(ctx) {
   if (!missing.length) {
     return { verdict: "pass", detail: `${ctx.summary.threads.length} threads recorded` };
   }
+
+  // A thread with no history at all cannot take `progress` — the state
+  // machine allows only an opening from nothing — so offering it would
+  // hand over a command that fails, and the model would be left
+  // improvising inside the one turn the hook allows it.
+  const [first] = missing;
+  const known = ctx.events.some((event) => event.thread === first);
+  const command = known
+    ? `  node ${LEDGER} append --ev progress --thread ${first} --pct <n> --note "<what changed>"`
+    : `  node ${LEDGER} append --ev opened --thread ${first} --title "<one line>" --ticket <owner/repo#n>`;
   return {
     verdict: "fail",
-    detail: `no event this turn for ${missing.join(", ")}`,
+    detail: known
+      ? `no event this turn for ${missing.join(", ")}`
+      : `${first} was never opened`,
     reason: [
       "The turn is not complete until the ledger has an event for every " +
-        `thread it changed. Missing: ${missing[0]}.`,
+        `thread it changed. ${known ? "Missing" : "Never opened"}: ${first}.`,
       "",
-      `  node ${LEDGER} append --ev progress --thread ${missing[0]} ` +
-        '--pct <n> --note "<what changed>"',
+      command,
     ].join("\n"),
   };
 }
