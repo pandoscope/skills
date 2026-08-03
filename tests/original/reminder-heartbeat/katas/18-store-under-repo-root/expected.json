@@ -1,0 +1,10 @@
+{
+  "status": "active",
+  "stop_hook_active": false,
+  "summary_written_at": "2026-08-03T23:04:30.000Z",
+  "exit": 0,
+  "check": null,
+  "sealed": true,
+  "reason": [],
+  "store_in": "repos/session-memory"
+}
