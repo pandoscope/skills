@@ -27,6 +27,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   LedgerError,
+  countUserTurns,
   fold,
   mergeLogLines,
   sessionFromUrl,
@@ -254,40 +255,17 @@ export function resolveSession(root, givenUrl, givenId, transcript) {
 // --------------------------------------------------------- transcript
 
 /**
- * True for a message the principal actually typed.
- *
- * Tool results are recorded with `type: "user"` too and outnumber real
- * turns roughly six to one, so counting the type alone yields an index
- * that points nowhere in the conversation.
- */
-export function isUserTurn(record) {
-  if (record?.type !== "user") return false;
-  const content = record.message?.content;
-  if (typeof content === "string") return Boolean(content.trim());
-  if (Array.isArray(content)) {
-    return content.some((block) => block && typeof block === "object" && block.type === "text");
-  }
-  return false;
-}
-
-/**
  * User turns so far in `transcript` — the anchor's message index.
  *
  * Null when no transcript is available, so the anchor records an honest
- * gap rather than a fabricated number.
+ * gap rather than a fabricated number. The counting itself is
+ * `countUserTurns` in core.mjs: the heartbeat and the transcript
+ * renderer address the same positions, and two counters that disagree
+ * would make an anchor point at a different message per reader.
  */
 export function countUserMessages(transcript) {
   if (!transcript || !fs.existsSync(transcript)) return null;
-  let count = 0;
-  for (const line of fs.readFileSync(transcript, "utf8").split("\n")) {
-    if (!line.trim()) continue;
-    try {
-      if (isUserTurn(JSON.parse(line))) count += 1;
-    } catch {
-      // A partial trailing line is not a turn.
-    }
-  }
-  return count;
+  return countUserTurns(fs.readFileSync(transcript, "utf8"));
 }
 
 function findTranscript(explicit) {

@@ -72,6 +72,46 @@ export const TICKET_RE = /\b([\w.-]+\/[\w.-]+#\d+)\b/g;
 /** Rejected append. Carries the reason a human needs to fix it. */
 export class LedgerError extends Error {}
 
+// ------------------------------------------------- transcript positions
+
+/**
+ * True for a message the principal actually typed.
+ *
+ * Tool results are recorded with `type: "user"` too and outnumber real
+ * turns roughly six to one, so counting the type alone yields an index
+ * that points nowhere in the conversation.
+ */
+export function isUserTurn(record) {
+  if (record?.type !== "user") return false;
+  const content = record.message?.content;
+  if (typeof content === "string") return Boolean(content.trim());
+  if (Array.isArray(content)) {
+    return content.some((block) => block && typeof block === "object" && block.type === "text");
+  }
+  return false;
+}
+
+/**
+ * User turns in `text`, the JSONL a transcript path holds.
+ *
+ * Takes the text rather than a path so this stays pure: the anchor
+ * index, the heartbeat's turn boundary and the transcript renderer all
+ * count the same way, and a second implementation would make one
+ * reader's message 12 another reader's message 30.
+ */
+export function countUserTurns(text) {
+  let count = 0;
+  for (const line of String(text).split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      if (isUserTurn(JSON.parse(line))) count += 1;
+    } catch {
+      // A partial trailing line is not a turn.
+    }
+  }
+  return count;
+}
+
 /**
  * Latest work-state event kind per thread.
  *

@@ -15,6 +15,7 @@ import {
   LedgerError,
   currentStates,
   fold,
+  isUserTurn,
   mergeLogLines,
   orderClosed,
   orderOpen,
@@ -34,7 +35,6 @@ import {
 import {
   checkSessionFile,
   countUserMessages,
-  isUserTurn,
   parseArgs,
   readAll,
   renderPage,
