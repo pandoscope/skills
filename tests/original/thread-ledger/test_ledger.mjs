@@ -16,6 +16,7 @@ import {
   currentStates,
   fold,
   isUserTurn,
+  lastUserTurnAt,
   mergeLogLines,
   orderClosed,
   orderOpen,
@@ -463,6 +464,33 @@ describe("Anchors", () => {
   it("a missing transcript yields no index", () => {
     assert.equal(countUserMessages(null), null);
     assert.equal(countUserMessages("/nope/missing.jsonl"), null);
+  });
+
+  // The newest user turn is where the current turn began, which is what
+  // separates "this turn's bookkeeping" from the previous turn's.
+  it("the turn boundary is the newest user turn's stamp", () => {
+    const text = [
+      { type: "user", message: { content: "one" }, timestamp: "2026-08-01T10:00:00.000Z" },
+      { type: "assistant", message: { content: "reply" }, timestamp: "2026-08-01T10:01:00.000Z" },
+      { type: "user", message: { content: "two" }, timestamp: "2026-08-01T10:02:00.000Z" },
+      // A tool result is not a turn, so it cannot move the boundary.
+      {
+        type: "user",
+        message: { content: [{ type: "tool_result" }] },
+        timestamp: "2026-08-01T10:03:00.000Z",
+      },
+    ]
+      .map((record) => JSON.stringify(record))
+      .join("\n");
+    assert.equal(lastUserTurnAt(text), "2026-08-01T10:02:00.000Z");
+  });
+
+  it("a transcript with no user turn has no boundary", () => {
+    assert.equal(lastUserTurnAt(""), null);
+    assert.equal(
+      lastUserTurnAt(JSON.stringify({ type: "assistant", message: { content: "hi" } })),
+      null,
+    );
   });
 
   it("the anchor shows index, distance and clock", () => {
