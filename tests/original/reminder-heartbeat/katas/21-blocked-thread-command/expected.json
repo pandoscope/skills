@@ -1,0 +1,13 @@
+{
+  "status": "active",
+  "stop_hook_active": false,
+  "summary_written_at": "2026-08-04T11:07:20.000Z",
+  "exit": 2,
+  "check": "ledger-event",
+  "sealed": false,
+  "reason": [
+    "The turn is not complete until the ledger has an event for every thread it changed. Missing: alpha, which is blocked.",
+    "",
+    "  node {{ledger}} append --ev unblocked --thread alpha --note \"<what changed>\""
+  ]
+}
