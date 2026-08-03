@@ -676,6 +676,34 @@ describe("MetadataEvents", () => {
   });
 });
 
+// ------------------------------------------------------------- seals
+
+// The seal marks a TURN's bookkeeping complete, so it belongs to the
+// log rather than to any thread. Everything below pins that separation:
+// a seal needs no thread, and it must be invisible to every function
+// that answers a question about one.
+describe("Seals", () => {
+  it("a seal is legal on an empty log", () => {
+    validate({ ev: "sealed" }, []);
+  });
+
+  it("a seal names no thread", () => {
+    throws(() => validate({ ev: "sealed", thread: "a" }, []), "not about a thread");
+  });
+
+  it("a seal leaves the work state alone", () => {
+    const events = [opened("a"), { ev: "progress", thread: "a", pct: 10 }, { ev: "sealed" }];
+    assert.deepEqual(currentStates(events), { a: "progress" });
+  });
+
+  it("a sealed thread is not a thread", () => {
+    assert.deepEqual(
+      fold([opened("a"), { ev: "sealed" }]).map((item) => item.thread),
+      ["a"],
+    );
+  });
+});
+
 // -------------------------------------------------------- markdown view
 
 describe("MarkdownView", () => {
