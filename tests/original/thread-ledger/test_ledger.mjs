@@ -15,6 +15,7 @@ import {
   LedgerError,
   currentStates,
   fold,
+  mergeLogLines,
   orderClosed,
   orderOpen,
   sessionFromUrl,
@@ -990,5 +991,54 @@ describe("ArgumentGrammar", () => {
     assert.equal(opts.ev, "progress");
     assert.equal(opts.pct, "40");
     assert.equal(opts["no-push"], true);
+  });
+});
+
+describe("ReconcilingConcurrentAppends", () => {
+  const line = (at, ev) => JSON.stringify({ at, ev, thread: "t" });
+
+  it("keeps both sides", () => {
+    // An append-only log has no losing side; an event dropped here is
+    // an event nobody knows was written.
+    const ours = [line("2026-01-02T00:00:00+00:00", "a")];
+    const theirs = [line("2026-01-03T00:00:00+00:00", "b")];
+    assert.deepEqual(mergeLogLines(ours, theirs).map((l) => JSON.parse(l).ev), ["a", "b"]);
+  });
+
+  it("orders by stamp, not by side", () => {
+    const ours = [line("2026-01-04T00:00:00+00:00", "late")];
+    const theirs = [line("2026-01-01T00:00:00+00:00", "early")];
+    assert.deepEqual(
+      mergeLogLines(ours, theirs).map((l) => JSON.parse(l).ev),
+      ["early", "late"],
+    );
+  });
+
+  it("collapses lines both sides already have", () => {
+    // A retried push writes the same bytes twice.
+    const shared = line("2026-01-01T00:00:00+00:00", "a");
+    assert.deepEqual(mergeLogLines([shared], [shared]), [shared]);
+  });
+
+  it("preserves order for equal stamps", () => {
+    // Second-precision stamps tie often, and line order within a file
+    // is load-bearing.
+    const at = "2026-01-01T00:00:00+00:00";
+    const ours = [line(at, "first"), line(at, "second")];
+    assert.deepEqual(
+      mergeLogLines(ours, []).map((l) => JSON.parse(l).ev),
+      ["first", "second"],
+    );
+  });
+
+  it("drops blank lines rather than writing them back", () => {
+    assert.deepEqual(mergeLogLines(["", line("2026-01-01T00:00:00+00:00", "a"), ""], []).length, 1);
+  });
+
+  it("keeps a line it cannot parse", () => {
+    // Not ours to repair, and losing it would hide the corruption.
+    const merged = mergeLogLines(["{broken", line("2026-01-01T00:00:00+00:00", "a")], []);
+    assert.equal(merged.length, 2);
+    assert.equal(merged[0], "{broken");
   });
 });
