@@ -114,6 +114,19 @@ function gitOrNull(repo, ...args) {
   }
 }
 
+/**
+ * Did this clone gain a commit during the turn?
+ *
+ * Committer date, not author date: a rebase or an amend rewrites the
+ * former and preserves the latter, and what matters here is when the
+ * commit came into existence in this clone.
+ */
+function committedThisTurn(repo, turnStart) {
+  if (!turnStart) return false;
+  const since = gitOrNull(repo.path, "log", `--since=${turnStart.toISOString()}`, "--format=%H");
+  return Boolean(since);
+}
+
 // --------------------------------------------------------------- checks
 
 /**
@@ -126,6 +139,7 @@ function gitOrNull(repo, ...args) {
  * stamp of the message the principal last typed.
  */
 function checkTurnSummary(ctx) {
+  const write = `  printf 'threads: %s\\ntickets: %s\\n' '<thread-slug>, <thread-slug>' '<owner/repo#n>' > ${ctx.summary.path}`;
   const stale = ctx.summary.exists && ctx.turnStart && ctx.summary.writtenAt < ctx.turnStart;
   if (!ctx.summary.exists || stale) {
     return {
@@ -137,10 +151,32 @@ function checkTurnSummary(ctx) {
         `The turn is not complete until ${ctx.summary.path} describes it. ` +
           "Write the ledger threads and the tickets this turn touched.",
         "",
-        `  printf 'threads: %s\\ntickets: %s\\n' '<thread-slug>, <thread-slug>' ` +
-          `'<owner/repo#n>' > ${ctx.summary.path}`,
+        write,
       ].join("\n"),
     };
+  }
+
+  // A declaration of nothing is a declaration nothing can contradict:
+  // every later check diffs against it, so an empty one passes them all
+  // and the bare seal — there so idle turns are not nagged — becomes
+  // the way out of every check. The turn's own commits are evidence it
+  // cannot write about itself, so they are what the emptiness is
+  // measured against.
+  if (!ctx.summary.threads.length) {
+    const touched = ctx.clones.find((repo) => committedThisTurn(repo, ctx.turnStart));
+    if (touched) {
+      return {
+        verdict: "fail",
+        detail: `committed to ${touched.name} while declaring no thread`,
+        reason: [
+          `The turn is not complete until ${ctx.summary.path} names the ` +
+            `threads behind it. It committed to ${touched.name} and declared ` +
+            "no thread.",
+          "",
+          write,
+        ].join("\n"),
+      };
+    }
   }
   return { verdict: "pass", detail: `${ctx.summary.threads.length} threads declared` };
 }
@@ -160,8 +196,7 @@ function checkPushed(ctx) {
       detail: "HEARTBEAT_REPO_ROOT is unset — no clones were examined",
     };
   }
-  const clones = clonesUnder(ctx.repoRoot);
-  for (const repo of clones) {
+  for (const repo of ctx.clones) {
     const branch = gitOrNull(repo.path, "rev-parse", "--abbrev-ref", "HEAD") ?? "HEAD";
     // Uncommitted before unpushed: a change that is not committed cannot
     // be pushed, and HEAD against origin cannot see it at all.
@@ -231,7 +266,7 @@ function checkPushed(ctx) {
       ].join("\n"),
     };
   }
-  return { verdict: "pass", detail: `${clones.length} clones committed and pushed` };
+  return { verdict: "pass", detail: `${ctx.clones.length} clones committed and pushed` };
 }
 
 /**
@@ -331,6 +366,7 @@ function context(input) {
     turnStart: turnStart ? new Date(turnStart) : null,
     guarded: input.stop_hook_active === true,
     repoRoot: process.env.HEARTBEAT_REPO_ROOT || null,
+    clones: clonesUnder(process.env.HEARTBEAT_REPO_ROOT || null),
     summary: readTurnSummary(),
     events: readAll(root),
   };
