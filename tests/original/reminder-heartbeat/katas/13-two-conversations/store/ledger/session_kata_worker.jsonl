@@ -1,0 +1,3 @@
+{"ev":"opened","thread":"reminder-dojo","title":"Reminder heartbeat, kata-first","ticket":"o/r#56","at":"2026-08-03T16:11:08+00:00","anchor":{"session":"session_kata_worker","msg":1,"url":"https://claude.test/code/session_kata_worker"}}
+{"ev":"sealed","at":"2026-08-03T16:11:12+00:00","anchor":{"session":"session_kata_worker","msg":1,"url":"https://claude.test/code/session_kata_worker"}}
+{"ev":"progress","thread":"reminder-dojo","note":"pointed at the real store.","pct":95,"at":"2026-08-03T18:24:30+00:00","anchor":{"session":"session_kata_worker","msg":2,"url":"https://claude.test/code/session_kata_worker"}}
