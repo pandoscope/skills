@@ -159,8 +159,28 @@ function checkPushed(ctx) {
       detail: "HEARTBEAT_REPO_ROOT is unset — no clones were examined",
     };
   }
-  const names = clonesUnder(ctx.repoRoot).map((repo) => repo.name);
-  return { verdict: "pass", detail: `examined ${names.length} clones` };
+  const clones = clonesUnder(ctx.repoRoot);
+  for (const repo of clones) {
+    const branch = gitOrNull(repo.path, "rev-parse", "--abbrev-ref", "HEAD") ?? "HEAD";
+    const upstream = gitOrNull(repo.path, "rev-parse", "--abbrev-ref", "@{upstream}");
+    const ahead = upstream
+      ? gitOrNull(repo.path, "rev-list", "--count", "@{upstream}..HEAD")
+      : null;
+    if (upstream && ahead === "0") continue;
+    return {
+      verdict: "fail",
+      detail: upstream
+        ? `${repo.name} is ${ahead} commits ahead of ${upstream}`
+        : `${repo.name} has no upstream`,
+      reason: [
+        "The turn is not complete until every repo it changed is committed " +
+          `and pushed. Unpushed: ${repo.name}.`,
+        "",
+        `  git -C ${repo.path} push -u origin ${branch}`,
+      ].join("\n"),
+    };
+  }
+  return { verdict: "pass", detail: `${clones.length} clones committed and pushed` };
 }
 
 /**
