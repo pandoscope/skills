@@ -311,6 +311,18 @@ export function run(input) {
     return 0;
   }
 
+  // The loop guard, read before blocking rather than before checking.
+  // `stop_hook_active` is true when this hook already blocked the turn
+  // once; blocking again feeds the model the same reason it just acted
+  // on. The turn is released, unsealed — the honest record of a turn
+  // that did not finish — and every verdict is still logged, because
+  // this pass is the only place where whether the model complied with
+  // the reason it was given can be observed at all.
+  if (ctx.guarded) {
+    logCompliance(ctx, reported, "unsealed", failed.check);
+    return 0;
+  }
+
   logCompliance(ctx, reported, "blocked", failed.check);
   process.stderr.write(`${failed.reason}\n`);
   return 2;
