@@ -1,0 +1,14 @@
+{
+  "status": "active",
+  "stop_hook_active": false,
+  "summary_written_at": "2026-08-04T10:06:20.000Z",
+  "session": "session_kata_mine2",
+  "exit": 2,
+  "check": "turn-summary",
+  "sealed": false,
+  "reason": [
+    "The turn is not complete until this session names which conversation it is. The store holds 2 conversations and nothing says which one this turn belongs to, so no check can tell this session's events from another's.",
+    "",
+    "  echo 'SESSION_URL=<this conversation's URL>' >> $HOME/.claude/session.env"
+  ]
+}
