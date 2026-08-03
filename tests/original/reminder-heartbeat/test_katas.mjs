@@ -93,6 +93,17 @@ function storeOf(dir, spec) {
 }
 
 /**
+ * The decision store a kata names, or null when it names none.
+ *
+ * Named rather than defaulted: a deployment with no decision store is
+ * the ordinary case, and every kata that stays silent about one keeps
+ * exercising the path such a session takes.
+ */
+function decisionRoot(dir, spec) {
+  return spec?.decision_root ? path.join(dir, spec.decision_root) : null;
+}
+
+/**
  * Expand the placeholders a checked-in expectation cannot hold.
  *
  * Reason text names absolute paths, which differ per machine, so the
@@ -106,6 +117,7 @@ function expand(text, dir, spec) {
     .replaceAll("{{home}}", path.join(dir, "home"))
     .replaceAll("{{store}}", storeOf(dir, spec))
     .replaceAll("{{repos}}", path.join(dir, "repos"))
+    .replaceAll("{{decisions}}", decisionRoot(dir, spec) ?? "")
     .replaceAll("{{transcript}}", path.join(dir, "transcript.jsonl"));
 }
 
@@ -145,6 +157,7 @@ function fire(dir, spec, script = HEARTBEAT) {
       // Only set when the kata names it, so every other kata keeps
       // exercising the path a session without it takes.
       ...(spec.session_url ? { LEDGER_SESSION_URL: spec.session_url } : {}),
+      ...(decisionRoot(dir, spec) ? { DECISION_MEMORY_ROOT: decisionRoot(dir, spec) } : {}),
     },
   });
   assert.equal(result.error, undefined, `the hook did not run: ${result.error}`);
@@ -283,6 +296,17 @@ function assertKata(name, dir, spec, result) {
       record.verdicts.find((verdict) => verdict.check === "pushed")?.verdict,
       spec.check2_verdict,
       `${name}: what the log says check 2 established`,
+    );
+  }
+  // Asserted separately from the fired check, because the case worth
+  // pinning is one where nothing fires at all: a check that looked at
+  // nothing and a check that looked and found nothing both end the turn
+  // green, and only this field tells them apart afterwards.
+  if (spec.check4_verdict) {
+    assert.equal(
+      record.verdicts.find((verdict) => verdict.check === "decision-record")?.verdict,
+      spec.check4_verdict,
+      `${name}: what the log says check 4 established`,
     );
   }
   assert.equal(record.guarded, spec.stop_hook_active ?? false);

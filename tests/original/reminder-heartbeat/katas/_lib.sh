@@ -67,6 +67,31 @@ kata_repo() {
             # name, so there is nothing to push and nothing to report.
             git -C "$work" checkout -q -b claude/never-pushed
             ;;
+        marked-this-turn)
+            # A decision marker landed in code during the turn under
+            # test. The marker is the observable half of
+            # documenting-decisions; the record in the decision store is
+            # the other, and check 4 exists to notice when a turn wrote
+            # one and not the other.
+            printf '%s\n' "// DECISION:ARCH — the seal sits outside the state machine" \
+                >> "$work/core.mjs"
+            git -C "$work" add -A
+            GIT_COMMITTER_DATE="${when:-$SEEDED}" git -C "$work" commit -q \
+                --date "${when:-$SEEDED}" -m "feat: the decision this turn made"
+            git -C "$work" push -q origin claude/kata
+            ;;
+        marked-earlier)
+            # The same marker, committed before the turn began. The turn
+            # that wrote it is the turn that owed the record, and a
+            # check keyed to the working tree rather than to the turn
+            # would collect every marker the repo ever accumulated.
+            printf '%s\n' "// DECISION:ARCH — the seal sits outside the state machine" \
+                >> "$work/core.mjs"
+            git -C "$work" add -A
+            GIT_COMMITTER_DATE="$SEEDED" git -C "$work" commit -q \
+                --date "$SEEDED" -m "feat: a decision from an earlier turn"
+            git -C "$work" push -q origin claude/kata
+            ;;
         behind)
             # Work reaches origin, then the local branch is moved back —
             # the shape a rolled-back container comes up in. The tree is
@@ -83,4 +108,34 @@ kata_repo() {
             exit 1
             ;;
     esac
+}
+
+# The decision store: a decision-memory clone seeded with one record
+# from before the turn, so "a record exists" can never be what makes
+# check 4 pass — only a record that arrived during the turn can.
+#
+#   kata_decisions empty              no record landed this turn
+#   kata_decisions recorded <when>    a record landed at <when>
+kata_decisions() {
+    dstate=$1
+    dwhen=${2:-$SEEDED}
+    kata_repo decision-memory clean
+    store="$PWD/repos/decision-memory"
+
+    mkdir -p "$store/decisions"
+    printf '%s\n' '{"id":"20200101T000000Z-seed","type":"decision"}' \
+        > "$store/decisions/20200101T000000Z-seed.json"
+    git -C "$store" add -A
+    GIT_COMMITTER_DATE="$SEEDED" git -C "$store" commit -q \
+        --date "$SEEDED" -m "chore: seed the corpus"
+    git -C "$store" push -q origin claude/kata
+
+    if [ "$dstate" = recorded ]; then
+        printf '%s\n' '{"id":"20260803T210600Z-seal-outside-machine","type":"decision"}' \
+            > "$store/decisions/20260803T210600Z-seal-outside-machine.json"
+        git -C "$store" add -A
+        GIT_COMMITTER_DATE="$dwhen" git -C "$store" commit -q \
+            --date "$dwhen" -m "record: the seal sits outside the state machine"
+        git -C "$store" push -q origin claude/kata
+    fi
 }

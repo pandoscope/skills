@@ -1,0 +1,10 @@
+{
+  "status": "active",
+  "stop_hook_active": false,
+  "summary_written_at": "2026-08-03T21:08:50.000Z",
+  "exit": 0,
+  "check": null,
+  "check4_verdict": "unconfigured",
+  "sealed": true,
+  "reason": []
+}
