@@ -40,7 +40,13 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-import { LedgerError, countUserTurns, lastUserTurnAt } from "./core.mjs";
+import {
+  LedgerError,
+  TRANSITIONS,
+  countUserTurns,
+  currentStates,
+  lastUserTurnAt,
+} from "./core.mjs";
 import { append, readAll, resolveRoot, resolveSession } from "./ledger.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -354,27 +360,51 @@ function checkLedgerEvent(ctx) {
     return { verdict: "pass", detail: `${ctx.summary.threads.length} threads recorded` };
   }
 
-  // A thread with no history at all cannot take `progress` — the state
-  // machine allows only an opening from nothing — so offering it would
-  // hand over a command that fails, and the model would be left
-  // improvising inside the one turn the hook allows it.
+  // The verb has to be one the state machine will accept from where the
+  // thread actually stands. Offering `progress` unconditionally fails
+  // for every thread that is blocked, parked or finished as surely as
+  // for one never opened, and a command that errors leaves the model
+  // improvising inside the single turn the hook allows it.
   const [first] = missing;
-  const known = ctx.events.some((event) => event.thread === first);
-  const command = known
-    ? `  node ${LEDGER} append --ev progress --thread ${first} --pct <n> --note "<what changed>"`
-    : `  node ${LEDGER} append --ev opened --thread ${first} --title "<one line>" --ticket <owner/repo#n>`;
+  const state = currentStates(ctx.events)[first] ?? "";
+  const args = appendArgs(first, state);
+  // The state is named only where it changes the answer. For a thread
+  // that can simply take `progress` it is noise; for one that cannot,
+  // it is the whole explanation for the unfamiliar verb being offered.
+  const named = !state
+    ? `Never opened: ${first}`
+    : args.startsWith("--ev progress")
+      ? `Missing: ${first}`
+      : `Missing: ${first}, which is ${state}`;
   return {
     verdict: "fail",
-    detail: known
-      ? `no event this turn for ${missing.join(", ")}`
-      : `${first} was never opened`,
+    detail: state ? `no event this turn for ${missing.join(", ")}` : `${first} was never opened`,
     reason: [
       "The turn is not complete until the ledger has an event for every " +
-        `thread it changed. ${known ? "Missing" : "Never opened"}: ${first}.`,
+        `thread it changed. ${named}.`,
       "",
-      command,
+      `  node ${LEDGER} append ${args}`,
     ].join("\n"),
   };
+}
+
+/**
+ * The append a thread in `state` can actually take.
+ *
+ * Driven by the same transition table the recorder validates against,
+ * so the offer cannot drift from what the recorder will accept — and
+ * each kind's own required fields come with it, since a legal verb
+ * missing its arguments fails just as loudly as an illegal one.
+ */
+function appendArgs(thread, state) {
+  const [next] = TRANSITIONS[state] ?? [];
+  const extra = {
+    opened: '--title "<one line>" --ticket <owner/repo#n>',
+    reopened: '--title "<one line>" --ticket <owner/repo#n>',
+    progress: '--pct <n> --note "<what changed>"',
+    unblocked: '--note "<what changed>"',
+  };
+  return `--ev ${next} --thread ${thread} ${extra[next] ?? '--note "<what changed>"'}`.trim();
 }
 
 // Priority order. First failure wins; the rest wait for the next turn.
