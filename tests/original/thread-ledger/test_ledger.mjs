@@ -5,6 +5,7 @@
 // transcript counting) is a thin shell over them.
 
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -467,6 +468,73 @@ describe("OneLogPerConversation", () => {
     writeLog(root, "zzz", [{ ...opened("a"), at: "2026-01-01T00:00:00+00:00" }]);
     writeLog(root, "aaa", [{ ...opened("b", { ticket: "o/r#2" }), at: "2026-06-01T00:00:00+00:00" }]);
     assert.deepEqual(readAll(root).map((e) => e.thread), ["a", "b"]);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+});
+
+// A store holding several conversations is the documented shape — one
+// log file per session, folded together. Rendering has to work there,
+// and it is exercised through the shipped CLI rather than through the
+// functions: the render that broke in production broke in `main`, which
+// resolved a session identity that rendering never uses, and no test
+// calling the functions directly could have seen it.
+describe("MultiSessionRender", () => {
+  /** Run the CLI with no HOME, the way CI has no transcript to fall back on. */
+  function cli(root, ...args) {
+    return spawnSync(process.execPath, [path.join(SKILL, "ledger.mjs"), "--root", root, ...args], {
+      encoding: "utf8",
+      env: { PATH: process.env.PATH, HOME: fs.mkdtempSync(path.join(os.tmpdir(), "nohome-")) },
+    });
+  }
+
+  function twoSessionStore() {
+    const root = tempStore();
+    for (const name of ["session_one", "session_two"]) {
+      writeLog(root, name, [{ ...opened(`${name}-a`), at: "2026-01-01T00:00:00+00:00" }]);
+      fs.writeFileSync(
+        path.join(root, "ledger", `${name}.url`),
+        `https://x.test/code/${name}\n`,
+        "utf8",
+      );
+    }
+    return root;
+  }
+
+  it("renders markdown from a store with two conversations", () => {
+    const root = twoSessionStore();
+    const out = path.join(root, "LEDGER.md");
+    const result = cli(root, "render", "--format", "md", "--out", out);
+    assert.equal(result.status, 0, `render failed: ${result.stderr}`);
+    const text = fs.readFileSync(out, "utf8");
+    assert.match(text, /session_one-a/);
+    assert.match(text, /session_two-a/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("renders the page from a store with two conversations", () => {
+    const root = twoSessionStore();
+    const out = path.join(root, "page.html");
+    const result = cli(root, "render", "--out", out);
+    assert.equal(result.status, 0, `render failed: ${result.stderr}`);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("reports folded state from a store with two conversations", () => {
+    const root = twoSessionStore();
+    const result = cli(root, "state");
+    assert.equal(result.status, 0, `state failed: ${result.stderr}`);
+    assert.equal(JSON.parse(result.stdout).length, 2);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("appending still needs to know which conversation it is", () => {
+    // The identity requirement is real for writes — it is only reads
+    // that never needed it. Relaxing both would drop the guard that
+    // keeps one conversation from acquiring two logs.
+    const root = twoSessionStore();
+    const result = cli(root, "append", "--ev", "progress", "--thread", "x", "--pct", "1");
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /cannot tell which conversation this is/);
     fs.rmSync(root, { recursive: true, force: true });
   });
 });
