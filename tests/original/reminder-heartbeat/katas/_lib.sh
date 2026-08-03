@@ -41,6 +41,13 @@ kata_repo() {
             git -C "$work" add -A
             git -C "$work" commit -q -m "feat: the work this turn did"
             ;;
+        untouched)
+            # A clone the session never worked in: put on a branch that
+            # was never pushed, carrying no commit of its own. Every
+            # commit it holds is already on the remote under another
+            # name, so there is nothing to push and nothing to report.
+            git -C "$work" checkout -q -b claude/never-pushed
+            ;;
         behind)
             # Work reaches origin, then the local branch is moved back —
             # the shape a rolled-back container comes up in. The tree is
