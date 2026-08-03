@@ -1,0 +1,13 @@
+{
+  "status": "active",
+  "stop_hook_active": false,
+  "summary_written_at": "2026-08-03T20:09:20.000Z",
+  "exit": 2,
+  "check": "turn-summary",
+  "sealed": false,
+  "reason": [
+    "The turn is not complete until {{home}}/.claude/turn-summary.txt names the threads behind it. It committed to skills and declared no thread.",
+    "",
+    "  printf 'threads: %s\\ntickets: %s\\n' '<thread-slug>, <thread-slug>' '<owner/repo#n>' > {{home}}/.claude/turn-summary.txt"
+  ]
+}
