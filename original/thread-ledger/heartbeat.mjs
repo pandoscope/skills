@@ -474,15 +474,48 @@ function readStdin() {
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   const raw = readStdin();
+  // Parsed OUTSIDE the try, so the loop guard survives a crash. Reading
+  // it inside `run` put it beyond any throw in `context` — a single
+  // torn line in a store log then blocked every Stop including the
+  // guarded one, which is the trapped session this whole design exists
+  // to avoid, reached through its own crash handler.
+  let input = {};
   try {
-    process.exit(run(raw.trim() ? JSON.parse(raw) : {}));
+    input = raw.trim() ? JSON.parse(raw) : {};
+  } catch {
+    // Unparsable stdin is itself a crash, handled below with no guard
+    // available — one block, and the platform's next Stop carries
+    // readable JSON or the same fault repeats visibly.
+  }
+
+  try {
+    process.exit(run(input));
   } catch (err) {
-    // A crashed heartbeat must never end the turn quietly. Exiting 0
-    // here would make a broken check indistinguishable from a passing
-    // one — the failure class this whole mechanism exists to remove —
-    // and exiting 1 is silently non-blocking. So the crash blocks, in
-    // full, once: the loop guard releases the next Stop either way.
     const detail = err instanceof LedgerError ? err.message : (err.stack ?? String(err));
+    // The crash reaches the compliance log with no verdicts, because
+    // none were reached. An empty verdict list is the honest shape of
+    // "nothing was checked" — and a crash that logged nothing would be
+    // invisible to the one record built to observe this mechanism.
+    try {
+      logCompliance(
+        { session: null, msg: null, guarded: input.stop_hook_active === true },
+        [],
+        "crashed",
+        "heartbeat-crashed",
+      );
+    } catch {
+      // The log lives under HOME; if that is unwritable too, the stderr
+      // below is the only channel left and it still gets used.
+    }
+    // A crashed heartbeat must never end the turn quietly: exiting 0
+    // would make a broken check indistinguishable from a passing one,
+    // and exit 1 is silently non-blocking. But it blocks ONCE — the
+    // guard applies to a crash exactly as it applies to a reason,
+    // because a fault the model cannot fix must not trap the session.
+    // On the guarded fire the reason is withheld like any other: it was
+    // already delivered in full, and stderr at exit 0 reaches only the
+    // diagnostics log anyway.
+    if (input.stop_hook_active === true) process.exit(0);
     process.stderr.write(
       "The ledger heartbeat could not check this turn, so nothing verified " +
         `its bookkeeping:\n\n${detail}\n`,
