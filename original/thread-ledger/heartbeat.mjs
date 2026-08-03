@@ -241,10 +241,20 @@ function checkTurnSummary(ctx) {
  * log that exists to tell them apart.
  */
 function checkPushed(ctx) {
+  // Unset is a deployment declining this check. Set-and-missing is a
+  // typo, and reporting it as a pass over zero clones would file a
+  // misconfiguration as health in the log built to tell those apart.
+  // Both are "nothing was examined", which is what the verdict says.
   if (!ctx.repoRoot) {
     return {
       verdict: "unconfigured",
       detail: "HEARTBEAT_REPO_ROOT is unset — no clones were examined",
+    };
+  }
+  if (!fs.existsSync(ctx.repoRoot)) {
+    return {
+      verdict: "unconfigured",
+      detail: `HEARTBEAT_REPO_ROOT names ${ctx.repoRoot}, which does not exist — no clones were examined`,
     };
   }
   for (const repo of ctx.clones) {
@@ -443,7 +453,20 @@ function logCompliance(ctx, verdicts, outcome, fired) {
 
 /** Everything the checks read, gathered once. */
 function context(input) {
-  const root = process.env.SESSION_MEMORY_ROOT || resolveRoot(null);
+  // A store root that is set and wrong is worse than one that is unset:
+  // the recorder would create a fresh ledger tree at the phantom path
+  // and seal into it, so the real store grows unsealed tails while every
+  // turn reports success. Refusing here sends it through the crash path,
+  // which blocks once and says so.
+  const named = process.env.SESSION_MEMORY_ROOT;
+  if (named && !fs.existsSync(named)) {
+    throw new LedgerError(
+      `SESSION_MEMORY_ROOT names ${named}, which does not exist. Nothing was ` +
+        "checked and nothing was recorded — sealing into a store that is not " +
+        "there would leave the real one looking unfinished.",
+    );
+  }
+  const root = named || resolveRoot(null);
   const transcript = input.transcript_path ?? null;
   const text = transcript && fs.existsSync(transcript) ? fs.readFileSync(transcript, "utf8") : "";
   const turnStart = lastUserTurnAt(text);
