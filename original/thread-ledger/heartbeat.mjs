@@ -27,6 +27,7 @@
 //     SESSION_MEMORY_ROOT   the store clone this session writes to
 //     HEARTBEAT_REPO_ROOT   directory holding the session's repo clones
 //     LEDGER_SESSION_URL    this conversation's URL — the log's identity
+//     DECISION_MEMORY_ROOT  the decision store clone, when there is one
 //
 // The store root comes from the environment, never from cwd. The
 // platform's own Stop hook silently no-ops in multi-repo sessions
@@ -398,6 +399,158 @@ function checkLedgerEvent(ctx) {
   };
 }
 
+// --------------------------------------------------------- decisions
+
+// DECISION:SCOPE — only the MARKED half of documenting-decisions is
+// mechanized. "A decision was made and never marked" is not decidable
+// from observed state: the skill's own rule exempts routine changes,
+// and nothing separates an interpolation from a pattern-follow. A check
+// guessing at it would fire on every commit and be disabled in a day.
+/** The marker documenting-decisions places, added by a commit. */
+const MARKER = /^\+.*DECISION:(ARCH|SCOPE|IFACE|SEC|IRREV|NOVEL)\b/;
+
+/** The file the recorder writes when a session is open in a checkout. */
+const RECORDER_STATE = ".recorder-session.json";
+
+/**
+ * Decision markers this turn's commits ADDED, in order.
+ *
+ * DECISION:SCOPE — the turn's diff, never the working tree.
+ *
+ * The diff, not the working tree. Every repo accumulates markers, and a
+ * check reading the tree would collect all of them, block on the first
+ * forever, and be switched off by the end of the day — a reminder that
+ * is right about things the turn cannot fix is a reminder nobody keeps.
+ */
+function markersThisTurn(repo, turnStart) {
+  const diff = gitOrNull(
+    repo.path,
+    "log",
+    `--since=${turnStart.toISOString()}`,
+    "--unified=0",
+    "--format=",
+    "-p",
+  );
+  if (!diff) return [];
+  const found = [];
+  let file = null;
+  for (const line of diff.split("\n")) {
+    if (line.startsWith("+++ b/")) {
+      file = line.slice(6);
+      continue;
+    }
+    const hit = MARKER.exec(line);
+    if (hit) found.push({ at: `${repo.name}/${file}`, tag: hit[1] });
+  }
+  return found;
+}
+
+/**
+ * Records the decision store gained this turn.
+ *
+ * DECISION:NOVEL — git, not mtime, unlike every other freshness test
+ * in this file.
+ *
+ * Git rather than mtime, which check 1 uses for the turn summary: a
+ * store cloned during the session carries its whole corpus at the
+ * clone's timestamp, and mtime would read every historical record as
+ * written this turn — the check passing hardest exactly where the
+ * session is freshest. Untracked files count, because a record written
+ * and not yet committed exists; check 2 chases the commit.
+ */
+function recordsThisTurn(root, turnStart) {
+  const added = gitOrNull(
+    root,
+    "log",
+    `--since=${turnStart.toISOString()}`,
+    "--diff-filter=A",
+    "--name-only",
+    "--format=",
+    "--",
+    "decisions",
+  );
+  const status = gitOrNull(root, "status", "--porcelain", "--untracked-files=all", "--", "decisions");
+  const untracked = (status ?? "")
+    .split("\n")
+    .filter((line) => line.startsWith("?? "))
+    .map((line) => line.slice(3));
+  return [...(added ?? "").split("\n"), ...untracked]
+    .map((name) => name.trim())
+    .filter((name) => name.endsWith(".json"));
+}
+
+/**
+ * Check 4 — a decision marked in the code has a record beside it.
+ *
+ * The reasoning behind a decision is free to write down in the turn
+ * that made it and can only be reconstructed afterwards; a
+ * reconstructed prediction scores nothing, which is the whole purpose
+ * of the record. So the reminder has to arrive in that turn.
+ *
+ * What it does NOT check, deliberately: whether a decision that was
+ * made got marked at all. The skill's own rule is that routine changes
+ * carry no marker, and nothing observable separates an interpolation
+ * from a pattern-follow — a check guessing at that would fire on every
+ * commit, which is how reminders get turned off. The marked half is
+ * observable on both sides, so that is the half mechanized.
+ */
+function checkDecisionRecord(ctx) {
+  if (!ctx.turnStart) {
+    return { verdict: "unconfigured", detail: "no turn boundary to measure against" };
+  }
+  // A session with no decision store is the ordinary case. Filing that
+  // as a pass would put "checked and clean" and "never looked" in the
+  // same column of the log built to tell them apart.
+  if (!ctx.decisionRoot) {
+    return {
+      verdict: "unconfigured",
+      detail: "DECISION_MEMORY_ROOT is unset — no decision store was examined",
+    };
+  }
+  if (!fs.existsSync(path.join(ctx.decisionRoot, ".git"))) {
+    return {
+      verdict: "unconfigured",
+      detail: `DECISION_MEMORY_ROOT names ${ctx.decisionRoot}, which is not a clone — no decision store was examined`,
+    };
+  }
+  const markers = ctx.clones.flatMap((repo) => markersThisTurn(repo, ctx.turnStart));
+  if (!markers.length) {
+    return { verdict: "pass", detail: "no decision markers landed this turn" };
+  }
+  const records = recordsThisTurn(ctx.decisionRoot, ctx.turnStart);
+  if (records.length) {
+    return {
+      verdict: "pass",
+      detail: `${markers.length} markers, ${records.length} records this turn`,
+    };
+  }
+
+  // `open` mints a session branch off the default branch every time it
+  // runs, so offering it to a checkout that already has one strands the
+  // records committed on the branch it replaces — a reminder whose own
+  // command loses work. The state file says which case this is, so the
+  // offer is read rather than guessed, exactly as check 3 reads the
+  // transition table.
+  // DECISION:ARCH — the offered command is read from the recorder's own
+  // state file, not fixed.
+  const recorder = `python ${path.join(ctx.decisionRoot, "tools", "record.py")}`;
+  const opened = fs.existsSync(path.join(ctx.decisionRoot, RECORDER_STATE));
+  const [first] = markers;
+  return {
+    verdict: "fail",
+    detail:
+      `${markers.length} marker${markers.length === 1 ? "" : "s"} added this turn ` +
+      "with no record in the decision store",
+    reason: [
+      "The turn is not complete until every decision it marked has a " +
+        `record. Marked and unrecorded: ${markers.length} marker` +
+        `${markers.length === 1 ? "" : "s"}, first at ${first.at} (${first.tag}).`,
+      "",
+      `  ${opened ? "" : `${recorder} open && `}${recorder} record --from <drafts.json>`,
+    ].join("\n"),
+  };
+}
+
 /**
  * The append a thread in `state` can actually take.
  *
@@ -422,6 +575,7 @@ const CHECKS = [
   { check: "turn-summary", run: checkTurnSummary },
   { check: "pushed", run: checkPushed },
   { check: "ledger-event", run: checkLedgerEvent },
+  { check: "decision-record", run: checkDecisionRecord },
 ];
 
 // ------------------------------------------------------- compliance log
@@ -496,6 +650,11 @@ function context(input) {
     // whatever the environment says; beyond that the hook needs telling.
     conversations: new Set(readAll(root).map((event) => event.anchor?.session).filter(Boolean)).size,
     repoRoot: process.env.HEARTBEAT_REPO_ROOT || null,
+    // DECISION:IFACE — a fourth environment variable rather than
+    // deriving the store from the clone list: naming it is what lets a
+    // deployment decline the check, and an inferred store cannot be
+    // told apart from a missing one.
+    decisionRoot: process.env.DECISION_MEMORY_ROOT || null,
     clones: clonesUnder(process.env.HEARTBEAT_REPO_ROOT || null),
     summary: readTurnSummary(),
     events: readAll(root),
