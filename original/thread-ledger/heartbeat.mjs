@@ -26,6 +26,7 @@
 //
 //     SESSION_MEMORY_ROOT   the store clone this session writes to
 //     HEARTBEAT_REPO_ROOT   directory holding the session's repo clones
+//     LEDGER_SESSION_URL    this conversation's URL — the log's identity
 //
 // The store root comes from the environment, never from cwd. The
 // platform's own Stop hook silently no-ops in multi-repo sessions
@@ -308,7 +309,19 @@ function context(input) {
   const transcript = input.transcript_path ?? null;
   const text = transcript && fs.existsSync(transcript) ? fs.readFileSync(transcript, "utf8") : "";
   const turnStart = lastUserTurnAt(text);
-  const [session, sessionUrl] = resolveSession(root, null, input.session_id, transcript);
+  // The conversation's URL is the log's identity, and the hook is not
+  // told it — `session_id` is a platform-local id that matches no log
+  // in the store. With one conversation recorded, guessing lands on the
+  // right answer by luck; with two it writes the seal to a log nobody
+  // reads. So identity comes from the environment, exactly as the store
+  // root does, and falls back to the recorder's own resolution only
+  // when the environment stays quiet.
+  const [session, sessionUrl] = resolveSession(
+    root,
+    process.env.LEDGER_SESSION_URL || null,
+    input.session_id,
+    transcript,
+  );
   return {
     root,
     transcript,
