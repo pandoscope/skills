@@ -1,0 +1,13 @@
+{
+  "status": "active",
+  "stop_hook_active": false,
+  "summary_written_at": "2026-08-03T21:07:40.000Z",
+  "exit": 2,
+  "check": "ledger-event",
+  "sealed": false,
+  "reason": [
+    "The turn is not complete until the ledger has an event for every thread it changed. Never opened: exporter.",
+    "",
+    "  node {{ledger}} append --ev opened --thread exporter --title \"<one line>\" --ticket <owner/repo#n>"
+  ]
+}

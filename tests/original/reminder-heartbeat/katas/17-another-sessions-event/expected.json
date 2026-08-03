@@ -1,0 +1,15 @@
+{
+  "status": "active",
+  "stop_hook_active": false,
+  "summary_written_at": "2026-08-03T22:09:30.000Z",
+  "session_url": "https://claude.test/code/session_kata_mine",
+  "session": "session_kata_mine",
+  "exit": 2,
+  "check": "ledger-event",
+  "sealed": false,
+  "reason": [
+    "The turn is not complete until the ledger has an event for every thread it changed. Missing: alpha.",
+    "",
+    "  node {{ledger}} append --ev progress --thread alpha --pct <n> --note \"<what changed>\""
+  ]
+}
