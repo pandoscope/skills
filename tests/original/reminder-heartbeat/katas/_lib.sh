@@ -41,6 +41,17 @@ kata_repo() {
             git -C "$work" add -A
             git -C "$work" commit -q -m "feat: the work this turn did"
             ;;
+        behind)
+            # Work reaches origin, then the local branch is moved back —
+            # the shape a rolled-back container comes up in. The tree is
+            # clean and the branch name is right, so nothing but the
+            # comparison against origin can tell.
+            echo "landed upstream" >> "$work/README.md"
+            git -C "$work" add -A
+            git -C "$work" commit -q -m "feat: work that reached origin"
+            git -C "$work" push -q origin claude/kata
+            git -C "$work" reset -q --hard HEAD~1
+            ;;
         *)
             echo "kata_repo: unknown state '$state' for repo '$name'" >&2
             exit 1
