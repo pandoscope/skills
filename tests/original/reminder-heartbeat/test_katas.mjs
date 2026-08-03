@@ -81,9 +81,15 @@ function readSpec(dir) {
   return JSON.parse(fs.readFileSync(path.join(dir, "expected.json"), "utf8"));
 }
 
-/** The store root a staged kata's heartbeat writes to. */
-function storeOf(dir) {
-  return path.join(dir, "store");
+/**
+ * The store root a staged kata's heartbeat writes to.
+ *
+ * `store_in` lets a kata put the store somewhere else — under the repo
+ * root, say, which is where the hook can end up reporting on a clone
+ * only it writes to.
+ */
+function storeOf(dir, spec) {
+  return path.join(dir, spec?.store_in ?? "store");
 }
 
 /**
@@ -94,11 +100,11 @@ function storeOf(dir) {
  * expanded text keeps the wording exact without pinning it to a checkout
  * location.
  */
-function expand(text, dir) {
+function expand(text, dir, spec) {
   return text
     .replaceAll("{{ledger}}", LEDGER)
     .replaceAll("{{home}}", path.join(dir, "home"))
-    .replaceAll("{{store}}", storeOf(dir))
+    .replaceAll("{{store}}", storeOf(dir, spec))
     .replaceAll("{{repos}}", path.join(dir, "repos"))
     .replaceAll("{{transcript}}", path.join(dir, "transcript.jsonl"));
 }
@@ -131,7 +137,7 @@ function fire(dir, spec, script = HEARTBEAT) {
     env: {
       PATH: process.env.PATH,
       HOME: path.join(dir, "home"),
-      SESSION_MEMORY_ROOT: storeOf(dir),
+      SESSION_MEMORY_ROOT: storeOf(dir, spec),
       HEARTBEAT_REPO_ROOT: path.join(dir, "repos"),
       // Only set when the kata names it, so every other kata keeps
       // exercising the path a session without it takes.
@@ -143,15 +149,15 @@ function fire(dir, spec, script = HEARTBEAT) {
 }
 
 /** The log files in the kata's store, by name. */
-function logFilesIn(dir) {
-  const logs = path.join(storeOf(dir), "ledger");
+function logFilesIn(dir, spec) {
+  const logs = path.join(storeOf(dir, spec), "ledger");
   return fs.readdirSync(logs).filter((name) => name.endsWith(".jsonl")).sort();
 }
 
 /** Events in one of the store's logs. */
-function ledgerEventsIn(dir, name) {
+function ledgerEventsIn(dir, spec, name) {
   return fs
-    .readFileSync(path.join(storeOf(dir), "ledger", `${name}.jsonl`), "utf8")
+    .readFileSync(path.join(storeOf(dir, spec), "ledger", `${name}.jsonl`), "utf8")
     .split("\n")
     .filter((line) => line.trim())
     .map((line) => JSON.parse(line));
@@ -167,7 +173,7 @@ function ledgerEventsIn(dir, name) {
  */
 function logNameFor(dir, spec) {
   if (spec?.session) return spec.session;
-  const logs = path.join(storeOf(dir), "ledger");
+  const logs = path.join(storeOf(dir, spec), "ledger");
   const found = fs.readdirSync(logs).filter((name) => name.endsWith(".jsonl"));
   assert.equal(found.length, 1, "a kata records exactly one session");
   return path.basename(found[0], ".jsonl");
@@ -175,8 +181,8 @@ function logNameFor(dir, spec) {
 
 /** Freeze what the store looked like before the hook ran. */
 function baseline(dir, spec) {
-  spec.logs_before = logFilesIn(dir);
-  spec.sealed_before = ledgerEventsIn(dir, logNameFor(dir, spec)).filter(
+  spec.logs_before = logFilesIn(dir, spec);
+  spec.sealed_before = ledgerEventsIn(dir, spec, logNameFor(dir, spec)).filter(
     (event) => event.ev === "sealed",
   ).length;
 }
@@ -207,7 +213,7 @@ function assertKata(name, dir, spec, result) {
   );
   assert.equal(
     result.stderr,
-    spec.reason.length ? `${expand(spec.reason.join("\n"), dir)}\n` : "",
+    spec.reason.length ? `${expand(spec.reason.join("\n"), dir, spec)}\n` : "",
     `${name}: the reason text is part of the contract`,
   );
 
@@ -218,11 +224,11 @@ function assertKata(name, dir, spec, result) {
   // this turn should have touched.
   const log = logNameFor(dir, spec);
   assert.deepEqual(
-    logFilesIn(dir),
+    logFilesIn(dir, spec),
     spec.logs_before,
     `${name}: the run wrote a log for a conversation that is not this one`,
   );
-  const sealed = ledgerEventsIn(dir, log).filter((event) => event.ev === "sealed");
+  const sealed = ledgerEventsIn(dir, spec, log).filter((event) => event.ev === "sealed");
   const added = sealed.length - spec.sealed_before;
   assert.equal(added, spec.sealed ? 1 : 0, `${name}: seals added to ${log}`);
 
