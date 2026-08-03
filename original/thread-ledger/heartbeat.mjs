@@ -117,6 +117,19 @@ function gitOrNull(repo, ...args) {
 
 /** Check 1 — the turn declared what it touched. */
 function checkTurnSummary(ctx) {
+  if (!ctx.summary.exists) {
+    return {
+      verdict: "fail",
+      detail: "no turn summary",
+      reason: [
+        `The turn is not complete until ${ctx.summary.path} describes it. ` +
+          "Write the ledger threads and the tickets this turn touched.",
+        "",
+        `  printf 'threads: %s\\ntickets: %s\\n' '<thread-slug>, <thread-slug>' ` +
+          `'<owner/repo#n>' > ${ctx.summary.path}`,
+      ].join("\n"),
+    };
+  }
   return { verdict: "pass", detail: `${ctx.summary.threads.length} threads declared` };
 }
 
