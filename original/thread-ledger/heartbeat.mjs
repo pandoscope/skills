@@ -220,6 +220,11 @@ function checkPushed(ctx) {
     };
   }
   for (const repo of ctx.clones) {
+    // The store is the hook's own output, not the session's work: the
+    // seal dirties it, so reporting it would be the hook observing
+    // itself and blocking every turn on a commit nobody can make.
+    // Pushing it belongs to the seal protocol's third phase, unbuilt.
+    if (ctx.root && path.resolve(repo.path) === path.resolve(ctx.root)) continue;
     const branch = gitOrNull(repo.path, "rev-parse", "--abbrev-ref", "HEAD") ?? "HEAD";
     // Uncommitted before unpushed: a change that is not committed cannot
     // be pushed, and HEAD against origin cannot see it at all.
@@ -228,8 +233,8 @@ function checkPushed(ctx) {
         verdict: "fail",
         detail: `${repo.name} has uncommitted changes`,
         reason: [
-          "The turn is not complete until every repo it changed is committed " +
-            `and pushed. Uncommitted: ${repo.name}.`,
+          "The turn is not complete until every clone is committed and " +
+            `pushed. Uncommitted: ${repo.name}.`,
           "",
           `  git -C ${repo.path} add -A && git -C ${repo.path} commit -m ` +
             `"<type>: <what changed>" && git -C ${repo.path} push -u origin ${branch}`,
@@ -264,8 +269,8 @@ function checkPushed(ctx) {
         verdict: "fail",
         detail: `${repo.name} is ${behind} commits behind ${upstream}`,
         reason: [
-          "The turn is not complete until every repo it changed matches " +
-            `its pushed branch. Behind origin: ${repo.name}.`,
+          "The turn is not complete until every clone matches its pushed " +
+            `branch. Behind origin: ${repo.name}.`,
           "",
           `  git -C ${repo.path} fetch origin ${branch} && ` +
             `git -C ${repo.path} merge --ff-only origin/${branch}`,
@@ -282,8 +287,8 @@ function checkPushed(ctx) {
       verdict: "fail",
       detail: `${repo.name} holds ${unpushed} commits that are on no remote`,
       reason: [
-        "The turn is not complete until every repo it changed is committed " +
-          `and pushed. Unpushed: ${repo.name}.`,
+        "The turn is not complete until every clone is committed and " +
+          `pushed. Unpushed: ${repo.name}.`,
         "",
         `  git -C ${repo.path} push -u origin ${branch}`,
       ].join("\n"),
