@@ -99,7 +99,8 @@ function expand(text, dir) {
     .replaceAll("{{ledger}}", LEDGER)
     .replaceAll("{{home}}", path.join(dir, "home"))
     .replaceAll("{{store}}", storeOf(dir))
-    .replaceAll("{{repos}}", path.join(dir, "repos"));
+    .replaceAll("{{repos}}", path.join(dir, "repos"))
+    .replaceAll("{{transcript}}", path.join(dir, "transcript.jsonl"));
 }
 
 // -------------------------------------------------------------- running

@@ -1,0 +1,13 @@
+{
+  "status": "active",
+  "stop_hook_active": false,
+  "summary_written_at": "2020-01-01T00:00:00.000Z",
+  "exit": 2,
+  "check": "turn-summary",
+  "sealed": false,
+  "reason": [
+    "The turn is not complete until this hook can tell where it began. The transcript it was given holds no message from the principal, so nothing establishes the turn's boundary and no check downstream can be trusted.",
+    "",
+    "  ls -l {{transcript}}"
+  ]
+}
