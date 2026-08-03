@@ -178,6 +178,36 @@ function checkPushed(ctx) {
       };
     }
     const upstream = gitOrNull(repo.path, "rev-parse", "--abbrev-ref", "@{upstream}");
+    const behind = upstream
+      ? gitOrNull(repo.path, "rev-list", "--count", `HEAD..${upstream}`)
+      : null;
+    // Behind before ahead. Divergence from the pushed branch runs both
+    // ways, and the direction that arrives silently is this one: a
+    // clone rolled back by a resume has a clean tree, the right branch
+    // name and every file in place. A clone that is BOTH has to
+    // reconcile before it can push, so naming the push first would hand
+    // over a command that cannot succeed.
+    //
+    // What this cannot see, deliberately: a restore that rolls `.git`
+    // back takes the remote-tracking refs with it, so both sides of the
+    // comparison move together and nothing local differs. Catching it
+    // needs a fetch, and a fetch per clone per turn is the wrong price
+    // for a check whose worth is being cheap enough to always run. The
+    // SessionStart clone report fetches once, at the moment a resume
+    // would produce the rollback; that is where the case is covered.
+    if (behind && behind !== "0") {
+      return {
+        verdict: "fail",
+        detail: `${repo.name} is ${behind} commits behind ${upstream}`,
+        reason: [
+          "The turn is not complete until every repo it changed matches " +
+            `its pushed branch. Behind origin: ${repo.name}.`,
+          "",
+          `  git -C ${repo.path} fetch origin ${branch} && ` +
+            `git -C ${repo.path} merge --ff-only origin/${branch}`,
+        ].join("\n"),
+      };
+    }
     const ahead = upstream
       ? gitOrNull(repo.path, "rev-list", "--count", "@{upstream}..HEAD")
       : null;
