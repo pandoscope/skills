@@ -153,6 +153,14 @@ function ledgerEvents(dir) {
     );
 }
 
+/** The kata's log file name, which is also the session it records. */
+function logNameFor(dir) {
+  const logs = path.join(storeOf(dir), "ledger");
+  const found = fs.readdirSync(logs).filter((name) => name.endsWith(".jsonl"));
+  assert.equal(found.length, 1, "a kata records exactly one session");
+  return path.basename(found[0], ".jsonl");
+}
+
 /** Compliance records the hook wrote, oldest first. */
 function complianceLog(dir) {
   const file = path.join(dir, "home", ".claude", "reminder-compliance.jsonl");
@@ -188,6 +196,23 @@ function assertKata(name, dir, spec, result) {
   // the question is whether THIS run added one, not whether any exists.
   const added = sealed.length - spec.sealed_before;
   assert.equal(added, spec.sealed ? 1 : 0, `${name}: seals added by this run`);
+
+  // A seal names no thread, so its anchor is the ONLY thing that says
+  // which conversation and which point in it the mark belongs to. The
+  // seal sequence is meant to read as a per-turn table of contents over
+  // the transcript, and every part of that rests on this field — an
+  // anchorless seal would still count, still satisfy the tail
+  // predicate, and resolve to nothing.
+  if (spec.sealed) {
+    const mark = sealed[sealed.length - 1];
+    const log = logNameFor(dir);
+    assert.equal(mark.anchor?.session, log, `${name}: the seal names its session`);
+    assert.ok(
+      Number.isInteger(mark.anchor?.msg),
+      `${name}: the seal carries a transcript position, got ${mark.anchor?.msg}`,
+    );
+    assert.match(mark.anchor?.url ?? "", /^https?:\/\//, `${name}: the seal links its conversation`);
+  }
 
   // Every check's verdict is logged whatever happens — that log is the
   // input for measuring whether reminders change behaviour at all, and
@@ -265,17 +290,44 @@ function brokenHeartbeat(dir, body) {
   return file;
 }
 
+/**
+ * A heartbeat that runs the real one, then breaks one property.
+ *
+ * Gates written as hand-rolled stubs are their own trap. A stub that
+ * writes no stderr trips the reason assertion long before the seal or
+ * the compliance log is ever reached — so the gate turns red for a
+ * reason unrelated to its name, and the protection it claims to prove
+ * stays untested while looking proven. Measured: two gates here did
+ * exactly that. Breaking a single field of a genuine run is the only
+ * way a gate names the assertion it actually exercises.
+ *
+ * `tail` runs after the real hook, with `dir` (the store's ledger
+ * directory) and `home` (the hook's local state) in scope.
+ */
+function realThenBreak(tail) {
+  return (
+    'import fs from "node:fs";\n' +
+    `import { run } from ${JSON.stringify(HEARTBEAT)};\n` +
+    'const code = run(JSON.parse(fs.readFileSync(0, "utf8")));\n' +
+    'const dir = process.env.SESSION_MEMORY_ROOT + "/ledger";\n' +
+    'const home = process.env.HOME + "/.claude";\n' +
+    'const logs = fs.readdirSync(dir).filter((n) => n.endsWith(".jsonl"));\n' +
+    tail +
+    "process.exit(code);\n"
+  );
+}
+
 describe("KataRunnerRedGates", () => {
   const drift = "01-four-turns-of-drift";
 
-  /** Run the founding kata against `body` and return the failure, if any. */
-  function gate(body) {
-    const dir = stage(drift);
+  /** Run `kata` against `body` and return the failure, if any. */
+  function gate(body, kata = drift) {
+    const dir = stage(kata);
     const spec = readSpec(dir);
     spec.sealed_before = ledgerEvents(dir).filter((event) => event.ev === "sealed").length;
     const script = brokenHeartbeat(dir, body);
     try {
-      assertKata(drift, dir, spec, fire(dir, spec, script));
+      assertKata(kata, dir, spec, fire(dir, spec, script));
     } catch (err) {
       return err;
     }
@@ -299,10 +351,9 @@ describe("KataRunnerRedGates", () => {
     // mark would say the bookkeeping is complete when it is not.
     assert.ok(
       gate(
-        'import fs from "node:fs";\n' +
-          'const log = process.env.SESSION_MEMORY_ROOT + "/ledger/session_kata_drift.jsonl";\n' +
-          'fs.appendFileSync(log, JSON.stringify({ ev: "sealed" }) + "\\n");\n' +
-          "process.exit(2);\n",
+        realThenBreak(
+          'fs.appendFileSync(dir + "/" + logs[0], JSON.stringify({ ev: "sealed" }) + "\\n");\n',
+        ),
       ),
       "a heartbeat that sealed a blocked turn passed the kata",
     );
@@ -310,8 +361,32 @@ describe("KataRunnerRedGates", () => {
 
   it("catches a heartbeat that logs nothing", () => {
     assert.ok(
-      gate('process.stderr.write("x\\n");\nprocess.exit(2);\n'),
+      gate(realThenBreak('fs.rmSync(home + "/reminder-compliance.jsonl");\n')),
       "a heartbeat with no compliance log passed the kata",
+    );
+  });
+
+  it("catches a seal that resolves to no conversation", () => {
+    // A seal names no thread, so stripping its anchor leaves a mark
+    // that still counts, still satisfies the tail predicate, and points
+    // nowhere.
+    assert.ok(
+      gate(
+        realThenBreak(
+          "for (const name of logs) {\n" +
+            '  const file = dir + "/" + name;\n' +
+            '  const kept = fs.readFileSync(file, "utf8").split("\\n").map((line) => {\n' +
+            "    if (!line.trim()) return line;\n" +
+            "    const event = JSON.parse(line);\n" +
+            '    if (event.ev === "sealed") delete event.anchor;\n' +
+            "    return JSON.stringify(event);\n" +
+            "  });\n" +
+            '  fs.writeFileSync(file, kept.join("\\n"));\n' +
+            "}\n",
+        ),
+        "02-question-only-turn",
+      ),
+      "an anchorless seal passed the kata",
     );
   });
 });
