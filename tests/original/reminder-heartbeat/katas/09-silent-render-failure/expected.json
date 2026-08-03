@@ -1,0 +1,9 @@
+{
+  "status": "backlog",
+  "stop_hook_active": false,
+  "summary_written_at": "2026-08-02T18:08:40.000Z",
+  "exit": 2,
+  "check": "artifact-fresh",
+  "sealed": false,
+  "reason": []
+}
