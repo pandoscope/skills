@@ -1,0 +1,2 @@
+{"type":"user","timestamp":"2026-08-03T22:00:00.000Z","message":{"role":"user","content":"Carry on with alpha."}}
+{"type":"assistant","timestamp":"2026-08-03T22:09:12.500Z","message":{"role":"assistant","content":[{"type":"text","text":"Done."}]}}

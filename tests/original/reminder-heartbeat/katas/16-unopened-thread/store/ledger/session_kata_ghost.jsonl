@@ -1,0 +1,3 @@
+{"ev":"opened","thread":"alpha","title":"Alpha","ticket":"o/r#81","at":"2026-08-03T20:00:00+00:00","anchor":{"session":"session_kata_ghost","msg":1,"url":"https://claude.test/code/session_kata_ghost"}}
+{"ev":"sealed","at":"2026-08-03T20:00:05+00:00","anchor":{"session":"session_kata_ghost","msg":1,"url":"https://claude.test/code/session_kata_ghost"}}
+{"ev":"progress","thread":"alpha","pct":40,"at":"2026-08-03T21:06:00+00:00","anchor":{"session":"session_kata_ghost","msg":2,"url":"https://claude.test/code/session_kata_ghost"}}

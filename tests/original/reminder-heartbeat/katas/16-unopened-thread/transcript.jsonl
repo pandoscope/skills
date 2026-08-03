@@ -1,0 +1,2 @@
+{"type":"user","timestamp":"2026-08-03T21:00:00.000Z","message":{"role":"user","content":"Start the exporter work."}}
+{"type":"assistant","timestamp":"2026-08-03T21:07:30.100Z","message":{"role":"assistant","content":[{"type":"text","text":"Started; recording both threads."}]}}
