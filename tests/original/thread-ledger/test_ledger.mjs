@@ -1195,6 +1195,75 @@ describe("Seals", () => {
   });
 });
 
+// ------------------------------------------------------ diligence digest
+
+/** A well-formed digest; tests below break one field at a time. */
+function digest(extra = {}) {
+  return {
+    turns: 2,
+    executions: { sealed: 1, blocked: 2, unsealed: 1, observed: 0 },
+    checks: { "turn-summary": { fired: 2, cleared: 1, ignored: 1 } },
+    tokens: { input: 10, output: 20, cacheRead: 30, cacheCreation: 40 },
+    models: ["claude-test-1"],
+    ...extra,
+  };
+}
+
+describe("DiligenceDigest", () => {
+  it("a seal without a digest stays valid", () => {
+    validate({ ev: "sealed" }, []);
+  });
+
+  it("a seal carries a well-formed digest", () => {
+    validate({ ev: "sealed", diligence: digest() }, []);
+  });
+
+  it("tokens may be null — a reset is a gap, not a number", () => {
+    validate({ ev: "sealed", diligence: digest({ tokens: null, reset: true }) }, []);
+  });
+
+  it("a digest that is not an object is rejected", () => {
+    throws(() => validate({ ev: "sealed", diligence: "looks fine" }, []), "diligence");
+  });
+
+  it("a digest without a turn count is rejected", () => {
+    throws(() => validate({ ev: "sealed", diligence: digest({ turns: undefined }) }, []), "turns");
+  });
+
+  it("a digest with a non-integer execution count is rejected", () => {
+    const bad = digest({ executions: { sealed: 1, blocked: "two", unsealed: 0, observed: 0 } });
+    throws(() => validate({ ev: "sealed", diligence: bad }, []), "executions");
+  });
+
+  it("a digest with an unknown outcome is rejected", () => {
+    const bad = digest({ executions: { sealed: 1, blocked: 0, unsealed: 0, observed: 0, crashed: 1 } });
+    throws(() => validate({ ev: "sealed", diligence: bad }, []), "executions");
+  });
+
+  it("a check row missing a counter is rejected", () => {
+    const bad = digest({ checks: { pushed: { fired: 1, cleared: 1 } } });
+    throws(() => validate({ ev: "sealed", diligence: bad }, []), "checks");
+  });
+
+  it("tokens missing a component is rejected — a partial sum reads as a total", () => {
+    const bad = digest({ tokens: { input: 1, output: 2, cacheRead: 3 } });
+    throws(() => validate({ ev: "sealed", diligence: bad }, []), "tokens");
+  });
+
+  it("models must be strings", () => {
+    throws(() => validate({ ev: "sealed", diligence: digest({ models: [42] }) }, []), "models");
+  });
+
+  it("a digest on a thread event is rejected — it describes a stretch, not a thread", () => {
+    const event = { ...opened("a"), diligence: digest() };
+    throws(() => validate(event, []), "diligence");
+  });
+
+  it("the CLI has no flag that reaches the digest", () => {
+    throws(() => parseArgs(["append", "--diligence", "{}"]), "unknown option");
+  });
+});
+
 // -------------------------------------------------------- markdown view
 
 describe("MarkdownView", () => {
