@@ -64,6 +64,17 @@ export const TRANSITIONS = {
 // a two-step dance for fields code determines more accurately.
 export const RECORDER_OWNED = ["at", "anchor"];
 
+// Who wrote an event, when it was not the session whose log it lands in.
+// Absent is the ordinary case and means the session itself, so no
+// existing event has to be rewritten to carry a value.
+//
+// A closed list rather than free text: provenance is only worth
+// recording if it can be relied on to mean something, and a typo that
+// invents a writer is indistinguishable from a writer nobody knows
+// about. `bot` is an Actions workflow — the only writer besides a
+// session that the store has.
+export const WRITERS = ["bot"];
+
 export const RANK = { high: 0, normal: 1, low: 2 };
 export const BLOCKED_ON = ["internal", "external", "principal"];
 
@@ -222,6 +233,11 @@ export function isStale(events, thread) {
  */
 export function validate(event, history) {
   const kind = event.ev;
+  if (event.by !== undefined && !WRITERS.includes(event.by)) {
+    throw new LedgerError(
+      `by must be one of ${WRITERS.join(", ")}, got ${JSON.stringify(event.by)}`,
+    );
+  }
   if (!EVENTS.includes(kind)) {
     throw new LedgerError(
       `unknown event kind ${JSON.stringify(kind)}; expected one of ${EVENTS.join(", ")}`,

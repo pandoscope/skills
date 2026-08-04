@@ -500,7 +500,7 @@ const CRASH_CSS = `
 const FLAGS = [
   "root", "session", "transcript", "session-url", "ev", "thread", "title",
   "ticket", "parent", "deps", "urgency", "importance", "pct", "note", "on",
-  "what", "trigger", "out", "format",
+  "what", "trigger", "out", "format", "by",
 ];
 const BOOLS = ["conversation-only", "no-push"];
 
@@ -552,6 +552,7 @@ function eventFrom(opts) {
   copyIf("trigger");
   copyIf("urgency");
   copyIf("importance");
+  copyIf("by");
   if (opts["conversation-only"]) event.conversation_only = true;
   if (opts.deps) event.deps = opts.deps.split(",").map((s) => s.trim()).filter(Boolean);
   if (opts.pct !== undefined) event.pct = Number.parseInt(opts.pct, 10);
@@ -563,7 +564,7 @@ const USAGE = `ledger — a session's open-work record
   ledger append --ev <kind> --thread <slug> [--title …] [--ticket owner/repo#1]
                 [--conversation-only] [--deps a,b] [--urgency high]
                 [--pct 40] [--note …] [--on internal] [--what …] [--trigger …]
-                [--no-push]
+                [--by bot] [--no-push]
   ledger state
   ledger render --out <file> [--format html|md] [--title …] [--session-url …]
 
