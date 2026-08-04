@@ -286,9 +286,29 @@ function assertKata(name, dir, spec, result) {
   // Every check's verdict is logged whatever happens — that log is the
   // input for measuring whether reminders change behaviour at all, and
   // logging only failures would measure only the failures.
-  const [record, ...extra] = complianceLog(dir);
+  // The hook's record is the LAST one: a kata may stage the records an
+  // earlier cycle of the same turn already wrote, which is the only way
+  // to express a turn that took more than one round-trip.
+  const written = complianceLog(dir);
+  const before = spec.records_before ?? 0;
+  assert.equal(
+    written.length,
+    before + 1,
+    `${name}: one Stop, one compliance record`,
+  );
+  const record = written[written.length - 1];
   assert.ok(record, `${name}: nothing reached the compliance log`);
-  assert.deepEqual(extra, [], `${name}: one turn, one compliance record`);
+
+  // Stamped on every record, because a report cannot recover them: the
+  // transcript they come from is local, discarded with the container,
+  // and rewritten by compaction.
+  assert.equal(record.cycle, spec.cycle ?? 1, `${name}: which Stop of this turn`);
+  if (spec.model !== undefined) {
+    assert.equal(record.model, spec.model, `${name}: the model that took the turn`);
+  }
+  if (spec.tokens) {
+    assert.deepEqual(record.tokens, spec.tokens, `${name}: cumulative usage at this Stop`);
+  }
   // A kata may expect no verdicts at all — a heartbeat that crashed
   // before it could evaluate anything still has to leave a record, and
   // an empty verdict list is the honest shape of "nothing was checked".
