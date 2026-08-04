@@ -335,6 +335,11 @@ export function push(root, session, summary) {
   if (fs.existsSync(path.join(ledgerDir(root), `${session}.url`))) {
     git(root, "add", `ledger/${session}.url`);
   }
+  // The heartbeat's raw stretch records. It writes them beside the seal
+  // but never pushes, so this push is their only ride to the remote.
+  if (fs.existsSync(path.join(root, "diligence", `${session}.jsonl`))) {
+    git(root, "add", `diligence/${session}.jsonl`);
+  }
   git(
     root,
     "-c",
