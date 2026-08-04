@@ -32,11 +32,34 @@ export function boot(root = document) {
     data.session_url ?? null,
   );
   root.getElementById("crash")?.remove();
+  wireSessionFilter(root);
   wire(root);
   fitAll(root);
   paint(root);
   setInterval(() => paint(root), 60000);
   diag(root);
+}
+
+/**
+ * Hide rows the chosen session never touched.
+ *
+ * Pure show/hide over data-sessions — the fold, the ordering and the
+ * summary stay those of the whole store, so what the filter changes is
+ * visibility, never truth. Rows without the attribute (threads whose
+ * events carry no anchors) stay visible under every filter: absence of
+ * provenance must not read as absence of work.
+ */
+function wireSessionFilter(root) {
+  const control = root.getElementById("session-filter");
+  if (!control) return;
+  control.addEventListener("change", () => {
+    const wanted = control.value;
+    for (const row of root.querySelectorAll(".thread")) {
+      const from = row.getAttribute("data-sessions");
+      row.style.display =
+        !wanted || !from || from.split(" ").includes(wanted) ? "" : "none";
+    }
+  });
 }
 
 function readData(root) {
