@@ -17,6 +17,7 @@ import {
   fold,
   isUserTurn,
   lastUserTurnAt,
+  transcriptUsage,
   mergeLogLines,
   orderClosed,
   orderOpen,
@@ -491,6 +492,55 @@ describe("Anchors", () => {
       lastUserTurnAt(JSON.stringify({ type: "assistant", message: { content: "hi" } })),
       null,
     );
+  });
+
+  // Cost accounting. Each assistant message is one API call billed on
+  // its own, so summing across them is the total rather than a double
+  // count of one context — and the number is only useful as a
+  // difference between two points, which is why it is stored raw.
+  it("usage sums across every assistant message", () => {
+    const call = (out, read, model) =>
+      JSON.stringify({
+        type: "assistant",
+        message: {
+          model,
+          usage: {
+            input_tokens: 5,
+            output_tokens: out,
+            cache_read_input_tokens: read,
+            cache_creation_input_tokens: 0,
+          },
+        },
+      });
+    const text = [call(100, 1000, "model-a"), call(20, 1100, "model-a")].join("\n");
+    assert.deepEqual(transcriptUsage(text), {
+      model: "model-a",
+      input: 10,
+      output: 120,
+      cacheRead: 2100,
+      cacheCreation: 0,
+    });
+  });
+
+  it("usage survives a torn line and a message with none", () => {
+    const text = [
+      '{"type":"assistant","message":{"model":"m","usage":{"output_tokens":7}}}',
+      '{"type":"assistant","message":{"content":"no usage on this one"}}',
+      '{"type":"user","message":{"content":"not counted"}}',
+      '{"type":"assistant","message":{"usage":{"output_t',
+    ].join("\n");
+    assert.equal(transcriptUsage(text).output, 7);
+    assert.equal(transcriptUsage("").model, null);
+  });
+
+  // A session can change model mid-run, and the verdict being recorded
+  // belongs to whoever took THIS turn.
+  it("the model is the newest one seen", () => {
+    const text = [
+      '{"type":"assistant","message":{"model":"old"}}',
+      '{"type":"assistant","message":{"model":"new"}}',
+    ].join("\n");
+    assert.equal(transcriptUsage(text).model, "new");
   });
 
   it("the anchor shows index, distance and clock", () => {

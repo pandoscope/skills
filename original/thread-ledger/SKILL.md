@@ -129,6 +129,13 @@ open` mints a new session branch every time it runs, stranding the
 records committed on the branch it replaces. The hook reads the
 recorder's own state and offers the command that matches it.
 
+## Diligence
+
+`diligence.mjs` reads the compliance log and reports what the reminders
+cost against what they buy — per turn, per check, per model. Cycle 1 is
+the unprompted baseline, and everything above it is the reminder's price
+in round-trips. The report prints its own limits beside its numbers.
+
 ## Ordering
 
 Rendering order is computed from the events, so nothing here needs

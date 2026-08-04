@@ -47,6 +47,7 @@ import {
   countUserTurns,
   currentStates,
   lastUserTurnAt,
+  transcriptUsage,
 } from "./core.mjs";
 import { append, readAll, resolveRoot, resolveSession, tail } from "./ledger.mjs";
 
@@ -607,6 +608,30 @@ const CHECKS = [
 // ------------------------------------------------------- compliance log
 
 /**
+ * Which Stop of this turn this is, counted from the log itself.
+ *
+ * `stop_hook_active` only says "at least one block already happened",
+ * so it cannot tell a second cycle from a fifth. The log can, and it is
+ * the same file the answer has to be written to.
+ */
+function cycleOf(file, ctx) {
+  if (!fs.existsSync(file)) return 1;
+  let seen = 0;
+  for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      const record = JSON.parse(line);
+      if (record.session === ctx.session && record.msg === ctx.msg) seen += 1;
+    } catch {
+      // A torn line is not a cycle. Counting one would be worse than
+      // missing it: the cost of a real cycle would land on the wrong
+      // turn, where nothing could ever contradict it.
+    }
+  }
+  return seen + 1;
+}
+
+/**
  * Record every check's verdict, pass or fail.
  *
  * This log is the input for measuring whether reminders change
@@ -620,6 +645,19 @@ function logCompliance(ctx, verdicts, outcome, fired) {
     at: new Date().toISOString().replace(/\.\d+Z$/, "+00:00"),
     session: ctx.session,
     msg: ctx.msg,
+    // Which Stop of this turn. Cycle 1 is the model's unprompted
+    // attempt — it has not been reminded yet — so cycle-1 verdicts are
+    // the no-reminder baseline, measured without a second arm to run.
+    // Everything above 1 exists only because this hook blocked, and is
+    // the reminder's cost in round-trips.
+    cycle: cycleOf(file, ctx),
+    model: ctx.usage.model,
+    tokens: {
+      input: ctx.usage.input,
+      output: ctx.usage.output,
+      cacheRead: ctx.usage.cacheRead,
+      cacheCreation: ctx.usage.cacheCreation,
+    },
     guarded: ctx.guarded,
     outcome,
     fired,
@@ -669,6 +707,7 @@ function context(input) {
     session,
     sessionUrl,
     msg: countUserTurns(text),
+    usage: transcriptUsage(text),
     turnStart: turnStart ? new Date(turnStart) : null,
     guarded: input.stop_hook_active === true,
     namedItself: Boolean(process.env.LEDGER_SESSION_URL),
@@ -763,7 +802,12 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
     // invisible to the one record built to observe this mechanism.
     try {
       logCompliance(
-        { session: null, msg: null, guarded: input.stop_hook_active === true },
+        {
+          session: null,
+          msg: null,
+          usage: { model: null, input: 0, output: 0, cacheRead: 0, cacheCreation: 0 },
+          guarded: input.stop_hook_active === true,
+        },
         [],
         "crashed",
         "heartbeat-crashed",
