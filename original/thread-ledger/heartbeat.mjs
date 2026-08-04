@@ -27,7 +27,7 @@
 //     SESSION_MEMORY_ROOT   the store clone this session writes to
 //     HEARTBEAT_REPO_ROOT   directory holding the session's repo clones
 //     LEDGER_SESSION_URL    this conversation's URL — the log's identity
-//     DECISION_MEMORY_ROOT  the decision store clone, when there is one
+//     DECISION_MEMORY_URL   the decision store, when the session has one
 //
 // The store root comes from the environment, never from cwd. The
 // platform's own Stop hook silently no-ops in multi-repo sessions
@@ -48,7 +48,7 @@ import {
   currentStates,
   lastUserTurnAt,
 } from "./core.mjs";
-import { append, readAll, resolveRoot, resolveSession } from "./ledger.mjs";
+import { append, readAll, resolveRoot, resolveSession, tail } from "./ledger.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const LEDGER = path.join(HERE, "ledger.mjs");
@@ -413,6 +413,26 @@ const MARKER = /^\+.*DECISION:(ARCH|SCOPE|IFACE|SEC|IRREV|NOVEL)\b/;
 const RECORDER_STATE = ".recorder-session.json";
 
 /**
+ * The clone of the store `url` names, or null when none is checked out.
+ *
+ * Found, not configured. The store's own convention is to clone fresh
+ * per recording session rather than reuse an attached checkout, so
+ * there is no conventional path to derive — and a derived path that
+ * happened to exist would be read whether or not it was the right
+ * store. Matching is on the trailing owner/repo pair, because managed
+ * environments rewrite remotes through local proxies; that is the same
+ * comparison the recorder itself makes before it will write.
+ */
+function storeCheckout(url, clones) {
+  const wanted = tail(url);
+  for (const repo of clones) {
+    const origin = gitOrNull(repo.path, "remote", "get-url", "origin");
+    if (origin && tail(origin) === wanted) return repo.path;
+  }
+  return null;
+}
+
+/**
  * Decision markers this turn's commits ADDED, in order.
  *
  * DECISION:SCOPE — the turn's diff, never the working tree.
@@ -501,27 +521,33 @@ function checkDecisionRecord(ctx) {
   // A session with no decision store is the ordinary case. Filing that
   // as a pass would put "checked and clean" and "never looked" in the
   // same column of the log built to tell them apart.
-  if (!ctx.decisionRoot) {
+  if (!ctx.decisionUrl) {
     return {
       verdict: "unconfigured",
-      detail: "DECISION_MEMORY_ROOT is unset — no decision store was examined",
+      detail: "DECISION_MEMORY_URL is unset — no decision store was examined",
     };
   }
-  if (!fs.existsSync(path.join(ctx.decisionRoot, ".git"))) {
+  // Never the value. The store URLs are secrets, and the compliance log
+  // is a file this hook appends to on every single turn — naming the
+  // variable is what a misconfiguration needs to be fixed anyway.
+  const store = storeCheckout(ctx.decisionUrl, ctx.clones);
+  if (!store) {
     return {
       verdict: "unconfigured",
-      detail: `DECISION_MEMORY_ROOT names ${ctx.decisionRoot}, which is not a clone — no decision store was examined`,
+      detail:
+        "DECISION_MEMORY_URL names a store with no checkout among the " +
+        "session's clones — no decision store was examined",
     };
   }
   const markers = ctx.clones.flatMap((repo) => markersThisTurn(repo, ctx.turnStart));
   if (!markers.length) {
     return { verdict: "pass", detail: "no decision markers landed this turn" };
   }
-  const records = recordsThisTurn(ctx.decisionRoot, ctx.turnStart);
+  const records = recordsThisTurn(store, ctx.turnStart);
   if (records.length) {
     return {
       verdict: "pass",
-      detail: `${markers.length} markers, ${records.length} records this turn`,
+      detail: `${markers.length} marked, ${records.length} recorded this turn`,
     };
   }
 
@@ -533,8 +559,8 @@ function checkDecisionRecord(ctx) {
   // transition table.
   // DECISION:ARCH — the offered command is read from the recorder's own
   // state file, not fixed.
-  const recorder = `python ${path.join(ctx.decisionRoot, "tools", "record.py")}`;
-  const opened = fs.existsSync(path.join(ctx.decisionRoot, RECORDER_STATE));
+  const recorder = `python ${path.join(store, "tools", "record.py")}`;
+  const opened = fs.existsSync(path.join(store, RECORDER_STATE));
   const [first] = markers;
   return {
     verdict: "fail",
@@ -650,11 +676,12 @@ function context(input) {
     // whatever the environment says; beyond that the hook needs telling.
     conversations: new Set(readAll(root).map((event) => event.anchor?.session).filter(Boolean)).size,
     repoRoot: process.env.HEARTBEAT_REPO_ROOT || null,
-    // DECISION:IFACE — a fourth environment variable rather than
-    // deriving the store from the clone list: naming it is what lets a
-    // deployment decline the check, and an inferred store cannot be
-    // told apart from a missing one.
-    decisionRoot: process.env.DECISION_MEMORY_ROOT || null,
+    // DECISION:IFACE — the store is named by its URL, the variable the
+    // environment already sets, and its checkout is FOUND rather than
+    // configured. A second path variable would have to be derived, and
+    // the store's convention is to clone fresh per recording session —
+    // so there is no conventional path to derive it to.
+    decisionUrl: process.env.DECISION_MEMORY_URL || null,
     clones: clonesUnder(process.env.HEARTBEAT_REPO_ROOT || null),
     summary: readTurnSummary(),
     events: readAll(root),
