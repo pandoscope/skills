@@ -143,6 +143,12 @@ button.stat{font:inherit;font-family:ui-monospace,SFMono-Regular,Menlo,monospace
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chip:hover{border-color:var(--accent);color:var(--accent)}
 .chip.on{border-color:var(--accent);color:var(--accent);background:var(--fill)}
+/* Older sessions accumulate behind the toggle, not across the header.
+   Without the script the toggle is inert, but every session's BLOCK is
+   still on the page — only the shortcut chips are folded. */
+.chip.overflow{display:none}
+.chips.open .chip.overflow{display:inline-block}
+.chip.toggle{border-style:dashed}
 .sess{border:1px solid var(--line);border-radius:7px;background:var(--panel);
   padding:.35rem .55rem}
 .rollup{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.74rem;
@@ -812,7 +818,7 @@ function sessionBlock(entry, current) {
   return (
     `<div class="sess" data-session="${esc(entry.session)}">${rollupHtml(entry)}` +
     `<details class="rules"${current ? " open" : ""}>` +
-    `<summary>${plural(entry.stretches.length, "stretch")} — ${esc(entry.session)}</summary>` +
+    `<summary>stretches (${entry.stretches.length})</summary>` +
     folded +
     `<ol class="stretchlist">${recent.join("")}</ol>` +
     `</details></div>`
@@ -840,18 +846,44 @@ function currentSession(sessions, sessionUrl) {
  * (wired in page.mjs; the markup is inert without the script, and every
  * block stays readable because visibility is the script's only job).
  */
+/** How many session chips show before the rest fold behind a toggle. */
+const RECENT_CHIPS = 4;
+
+/**
+ * A chip's text: the raw name while it is short, date + id tail once it
+ * is not. Session ids accumulate and none of their length carries
+ * information a reader scans by — the day it was live and the tail that
+ * disambiguates it do. The full name stays in the tooltip.
+ */
+function chipLabel(entry) {
+  const name = entry.session;
+  if (name.length <= 14) return esc(name);
+  const last = entry.stretches[entry.stretches.length - 1];
+  const date = last?.at ? `${last.at.slice(5, 10)} ·` : "";
+  return `${esc(date)}…${esc(name.slice(-6))}`;
+}
+
 function stretchesSection(events, sessionUrl, diligence) {
   const sessions = stretchesOf(events, diligence);
   if (!sessions.some((entry) => entry.stretches.length)) return "";
   const current = currentSession(sessions, sessionUrl);
   const chips = [
     `<button class="chip" data-session="" type="button">all</button>`,
-    ...sessions.map(
-      (entry) =>
-        `<button class="chip${entry.session === current ? " on" : ""}" ` +
-        `data-session="${esc(entry.session)}" type="button">${esc(entry.session)}</button>`,
-    ),
+    ...sessions.map((entry, index) => {
+      const on = entry.session === current ? " on" : "";
+      // The newest chips show; older sessions accumulate behind the
+      // toggle instead of wrapping the header into a wall of ids.
+      const overflow = !on && index >= RECENT_CHIPS ? " overflow" : "";
+      return (
+        `<button class="chip${on}${overflow}" data-session="${esc(entry.session)}"` +
+        ` title="${esc(entry.session)}" type="button">${chipLabel(entry)}</button>`
+      );
+    }),
   ];
+  const hidden = (chips.join("").match(/class="chip overflow"/g) ?? []).length;
+  if (hidden) {
+    chips.push(`<button class="chip toggle" type="button">+${hidden} older</button>`);
+  }
   return (
     `<section class="sessions"><div class="chips">${chips.join("")}</div>` +
     sessions.map((entry) => sessionBlock(entry, entry.session === current)).join("") +

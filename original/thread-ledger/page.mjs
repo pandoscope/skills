@@ -74,6 +74,14 @@ function wireSessionChips(root) {
     }
   };
   for (const chip of chips) {
+    if (chip.classList.contains("toggle")) {
+      chip.addEventListener("click", () => {
+        const open = chip.closest(".chips").classList.toggle("open");
+        chip.textContent = open ? "fewer" : chip.getAttribute("data-more");
+      });
+      chip.setAttribute("data-more", chip.textContent);
+      continue;
+    }
     chip.addEventListener("click", () => apply(chip.getAttribute("data-session")));
   }
   const selected = chips.find((chip) => chip.classList.contains("on"));
