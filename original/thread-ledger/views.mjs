@@ -840,8 +840,8 @@ function currentSession(sessions, sessionUrl) {
  * (wired in page.mjs; the markup is inert without the script, and every
  * block stays readable because visibility is the script's only job).
  */
-function stretchesSection(events, sessionUrl) {
-  const sessions = stretchesOf(events);
+function stretchesSection(events, sessionUrl, diligence) {
+  const sessions = stretchesOf(events, diligence);
   if (!sessions.some((entry) => entry.stretches.length)) return "";
   const current = currentSession(sessions, sessionUrl);
   const chips = [
@@ -867,13 +867,13 @@ function stretchesSection(events, sessionUrl) {
  * `events` carries the raw log for the parts folding drops — the seal
  * sequence the stretches section reads.
  */
-export function renderBody(threads, title, nowMsg = null, codes = {}, sessionUrl = null, events = []) {
+export function renderBody(threads, title, nowMsg = null, codes = {}, sessionUrl = null, events = [], diligence = []) {
   const open = orderOpen(threads);
   const closed = orderClosed(threads);
   return (
     `<header><h1>${esc(title)}</h1>${summary(open, closed)}` +
     `</header>` +
-    stretchesSection(events, sessionUrl) +
+    stretchesSection(events, sessionUrl, diligence) +
     `<main><ol class="threads">` +
     open.map((thread) => openRow(thread, nowMsg, codes, sessionUrl)).join("") +
     `</ol><hr><ol class="threads done">` +

@@ -130,6 +130,30 @@ function ledgerDir(root) {
   return path.join(root, "ledger");
 }
 
+/**
+ * Every raw diligence record in the store, oldest file order.
+ *
+ * These are the per-Stop records the heartbeat flushes beside each
+ * seal. The page embeds them so digest-less seals can project their
+ * digest at render time; a torn line is skipped, not thrown on.
+ */
+export function readDiligence(root) {
+  const dir = path.join(root, "diligence");
+  if (!fs.existsSync(dir)) return [];
+  const records = [];
+  for (const name of fs.readdirSync(dir).filter((file) => file.endsWith(".jsonl")).sort()) {
+    for (const line of fs.readFileSync(path.join(dir, name), "utf8").split("\n")) {
+      if (!line.trim()) continue;
+      try {
+        records.push(JSON.parse(line));
+      } catch {
+        // A torn record must not deny the rest of the corpus a render.
+      }
+    }
+  }
+  return records;
+}
+
 function logFiles(root) {
   const dir = ledgerDir(root);
   if (!fs.existsSync(dir)) return [];
@@ -445,7 +469,7 @@ function bundle() {
  * the file carries each fact once and filters or graphs added later work
  * on the data rather than on markup.
  */
-export function renderPage(events, title, nowMsg, codes, sessionUrl) {
+export function renderPage(events, title, nowMsg, codes, sessionUrl, diligence = []) {
   // `</` inside the payload would close the script element early and let
   // a thread title inject markup. The escape is invisible to JSON.parse,
   // so the embedded data stays byte-faithful.
@@ -455,6 +479,7 @@ export function renderPage(events, title, nowMsg, codes, sessionUrl) {
     title,
     now_msg: nowMsg ?? null,
     session_url: sessionUrl ?? null,
+    diligence,
   }).replace(/<\//g, "<\\/");
 
   // The crash banner is the DEFAULT content, removed on a successful
@@ -638,7 +663,7 @@ export function main(argv) {
     const generated = new Date().toISOString().slice(0, 16).replace("T", " ") + " UTC";
     page = renderMarkdown(folded, title, nowMsg, codes, generated, sessionUrl);
   } else {
-    page = renderPage(events, title, nowMsg, codes, sessionUrl);
+    page = renderPage(events, title, nowMsg, codes, sessionUrl, readDiligence(root));
   }
   fs.writeFileSync(opts.out, page, "utf8");
   process.stdout.write(`wrote ${opts.out}\n`);

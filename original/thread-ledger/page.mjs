@@ -31,6 +31,7 @@ export function boot(root = document) {
     data.codes ?? {},
     data.session_url ?? null,
     data.events,
+    data.diligence ?? [],
   );
   root.getElementById("crash")?.remove();
   wireSessionChips(root);
