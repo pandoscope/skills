@@ -28,6 +28,7 @@
 //     HEARTBEAT_REPO_ROOT   directory holding the session's repo clones
 //     LEDGER_SESSION_URL    this conversation's URL — the log's identity
 //     DECISION_MEMORY_URL   the decision store, when the session has one
+//     LEDGER_RENDER_PATH    the rendered ledger page this session republishes
 //
 // The store root comes from the environment, never from cwd. The
 // platform's own Stop hook silently no-ops in multi-repo sessions
@@ -579,6 +580,70 @@ function checkDecisionRecord(ctx) {
 }
 
 /**
+ * Check 5 — the rendered ledger page is newer than what it should show.
+ *
+ * The silent-render incident, twice over: a dead render workflow hidden
+ * for 21 runs by hand-rendering, then the published artifact drifting
+ * 15 events stale the moment a compaction dropped the habit — while
+ * every mechanized check held. The page kept rendering; it rendered
+ * yesterday. Absence and success looked identical, which is this
+ * hook's founding failure class.
+ *
+ * DECISION:SCOPE — freshness is the rendered FILE's mtime, because the
+ * publish itself leaves no file evidence (it is a harness tool call).
+ * The verifiable half is the render, and blocking there puts the
+ * republish one step away, which is where check 3 already puts the
+ * append.
+ */
+function checkArtifactFresh(ctx) {
+  if (!ctx.turnStart) {
+    return { verdict: "unconfigured", detail: "no turn boundary to measure against" };
+  }
+  if (!ctx.renderPath) {
+    return {
+      verdict: "unconfigured",
+      detail: "LEDGER_RENDER_PATH is unset — no rendered page was examined",
+    };
+  }
+  // The newest event a reader could be missing. Seals are excluded:
+  // the hook writes one after every green turn, AFTER the render, so
+  // counting them would put every healthy turn one render behind its
+  // own seal, forever — a reminder that is always right and never
+  // useful. Check 2 refuses to observe the hook's write in space; this
+  // is the same rule in time.
+  const newest = ctx.events
+    .filter((event) => event.ev !== "sealed")
+    .map((event) => (event.at ? new Date(event.at).getTime() : 0))
+    .reduce((a, b) => Math.max(a, b), 0);
+  if (!newest) {
+    return { verdict: "pass", detail: "no events to show — nothing to render" };
+  }
+  const renderedAt = fs.existsSync(ctx.renderPath) ? fs.statSync(ctx.renderPath).mtime.getTime() : 0;
+  if (renderedAt >= newest) {
+    return { verdict: "pass", detail: "rendered page is newer than the newest event" };
+  }
+  // The command carries --session-url when the session knows it: a
+  // store holding several conversations refuses to render without one,
+  // and a command that errors leaves the model improvising inside the
+  // single turn the hook allows it.
+  const name = ctx.sessionUrl ? ` --session-url ${ctx.sessionUrl}` : "";
+  return {
+    verdict: "fail",
+    detail: renderedAt
+      ? `rendered page predates the newest event by ${Math.round((newest - renderedAt) / 1000)}s`
+      : `nothing rendered at ${ctx.renderPath}`,
+    reason: [
+      "The turn is not complete until the rendered ledger page is newer " +
+        `than the newest event it should show. ${ctx.renderPath} ` +
+        `${renderedAt ? "predates the log" : "does not exist"}.`,
+      "",
+      `  node ${LEDGER} --root ${ctx.root}${name} render --out ${ctx.renderPath} ` +
+        '--title "Thread ledger" — then republish the artifact from that file.',
+    ].join("\n"),
+  };
+}
+
+/**
  * The append a thread in `state` can actually take.
  *
  * Driven by the same transition table the recorder validates against,
@@ -603,6 +668,7 @@ const CHECKS = [
   { check: "pushed", run: checkPushed },
   { check: "ledger-event", run: checkLedgerEvent },
   { check: "decision-record", run: checkDecisionRecord },
+  { check: "artifact-fresh", run: checkArtifactFresh },
 ];
 
 // ------------------------------------------------------- compliance log
@@ -721,6 +787,7 @@ function context(input) {
     // the store's convention is to clone fresh per recording session —
     // so there is no conventional path to derive it to.
     decisionUrl: process.env.DECISION_MEMORY_URL || null,
+    renderPath: process.env.LEDGER_RENDER_PATH || null,
     clones: clonesUnder(process.env.HEARTBEAT_REPO_ROOT || null),
     summary: readTurnSummary(),
     events: readAll(root),

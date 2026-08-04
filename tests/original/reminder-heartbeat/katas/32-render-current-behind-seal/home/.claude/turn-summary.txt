@@ -1,2 +1,2 @@
-threads: render-fix
-tickets: pandoscope/skills#45
+threads:
+tickets:
