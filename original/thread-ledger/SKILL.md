@@ -53,6 +53,13 @@ that has already been measured insufficient here.
 `sealed` is the one kind you never write: `heartbeat.mjs` appends it
 when a turn's checks are green. It describes the log rather than any
 thread, so it carries no thread at all.
+Each seal carries a `diligence` digest the hook computes from its own
+compliance log — the stretch since the previous seal, never a window
+anyone chooses — and the stretch's raw per-Stop records flush to
+`diligence/<session>.jsonl` in the store beside it.
+The digest is computed, never typed:
+a seal composed by hand about the turn's own conduct would be
+self-report, and the recorder has no flag that reaches the field.
 
 Splitting a thread: `opened` the children with `parent` set to the
 original's slug. The parent keeps its own lifecycle.
@@ -147,6 +154,17 @@ in round-trips. The report prints its own limits beside its numbers.
 `HEARTBEAT_OBSERVE` runs every check and logs every verdict while
 surfacing nothing: the unobserved arm, for measuring what the reminder
 itself changes.
+
+The rendered page makes the same numbers legible per stretch:
+a sessions section leads the page — one chip per session, and the chip
+both unfolds that session's stretches and filters the thread lists.
+Every seal is a thin rule carrying when, the threads touched, the
+checks that fired (ignored ones marked), the reminder count, and total
+tokens and wall-span weighted against the session's own median.
+Clean stretches stay quiet; reminders go amber; a stretch that was
+reminded and still did not finish goes red.
+A compaction reset renders as an explicit gap, never as zero, and
+seals from before the digest existed collapse to one counted line.
 
 ## Ordering
 
