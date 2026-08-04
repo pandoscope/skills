@@ -23,6 +23,7 @@ import {
   orderOpen,
   sessionFromUrl,
   stamp,
+  tierOf,
   validate,
 } from "../../../original/thread-ledger/core.mjs";
 import {
@@ -303,6 +304,74 @@ describe("TitlesWithoutScript", () => {
   });
 });
 
+// ---------------------------------------------------------- tier colours
+
+describe("TierColours", () => {
+  it("a row carries its tier as a class, and quiet threads carry none", () => {
+    const events = [
+      opened("loud", { urgency: "high" }),
+      opened("quiet"),
+      opened("stuck", { importance: "high" }),
+      { ev: "blocked", thread: "stuck", on: "internal", what: "w" },
+    ];
+    const body = renderBody(fold(events), "t");
+    assert.match(body, /class="thread[^"]*t-urgent/);
+    assert.match(body, /class="thread[^"]*t-blocking-important/);
+    assert.doesNotMatch(body, /class="thread[^"]*t-(?:urgent|important)[^"]*"[^>]*>[\s\S]{0,40}quiet/);
+  });
+
+  // Violet is the page's own signal for the one state where the reader
+  // is the bottleneck; a tier colour on top would bury it.
+  it("blocked-on-principal keeps violet and takes no tier class", () => {
+    const events = [
+      opened("you", { urgency: "high" }),
+      { ev: "blocked", thread: "you", on: "principal", what: "review" },
+    ];
+    const body = renderBody(fold(events), "t");
+    assert.match(body, /s-blocked-principal/);
+    assert.doesNotMatch(body, /t-blocking-urgent/);
+  });
+
+  it("the palette is in the stylesheet, both tiers of red", () => {
+    assert.match(CSS, /t-blocking-urgent/);
+    assert.match(CSS, /t-blocking-important/);
+    assert.match(CSS, /t-urgent/);
+    assert.match(CSS, /t-important/);
+  });
+});
+
+// --------------------------------------------------------- session filter
+
+describe("SessionFilter", () => {
+  const withAnchors = [
+    { ...opened("a", { title: "one" }), anchor: { session: "s1", msg: 1, url: "https://claude.test/s1" } },
+    { ...opened("b", { title: "two" }), anchor: { session: "s2", msg: 4, url: "https://claude.test/s2" } },
+    { ev: "progress", thread: "a", pct: 5, anchor: { session: "s2", msg: 5, url: "https://claude.test/s2" } },
+  ];
+
+  // The filter works on data the events already carry: every anchor
+  // names its session, so the row only has to say which sessions its
+  // events came from and the control only has to hide the rest.
+  it("rows carry the sessions whose events built them", () => {
+    const body = renderBody(fold(withAnchors), "t");
+    assert.match(body, /data-sessions="[^"]*s1[^"]*s2|data-sessions="[^"]*s2[^"]*s1/);
+    assert.match(body, /data-sessions="s2"/);
+  });
+
+  it("the page offers one filter option per session, ALL by default", () => {
+    const body = renderBody(fold(withAnchors), "t");
+    assert.match(body, /<select id="session-filter"/);
+    assert.match(body, /<option value=""[^>]*>/);
+    assert.match(body, /<option value="s1"/);
+    assert.match(body, /<option value="s2"/);
+  });
+
+  it("a store with one session gets no filter control", () => {
+    const events = [{ ...opened("a"), anchor: { session: "s1", msg: 1 } }];
+    assert.doesNotMatch(renderBody(fold(events), "t"), /session-filter/);
+  });
+});
+
 // -------------------------------------------------------------- session
 
 describe("SessionLink", () => {
@@ -541,6 +610,98 @@ describe("Anchors", () => {
       '{"type":"assistant","message":{"model":"new"}}',
     ].join("\n");
     assert.equal(transcriptUsage(text).model, "new");
+  });
+
+  // ------------------------------------------------- reprioritized
+
+  // Priorities fold only on opening events, so without this a live
+  // thread's urgency, importance and deps could never be corrected —
+  // and the ledger cannot be the owner of fields it cannot amend.
+  it("reprioritized updates deps, urgency and importance on a live thread", () => {
+    const events = [
+      opened("a", { urgency: "low" }),
+      opened("b"),
+      { ev: "reprioritized", thread: "a", urgency: "high", deps: ["b"] },
+    ];
+    validate(events[2], events.slice(0, 2));
+    const [a] = fold(events);
+    assert.equal(a.urgency, "high");
+    assert.deepEqual(a.deps, ["b"]);
+    assert.equal(a.importance, "normal");
+  });
+
+  // Metadata, not a move: correcting a blocked thread's priority must
+  // not force a false unblocked into the log — same rule as promoted.
+  it("reprioritized leaves the work state untouched", () => {
+    const events = [
+      opened("a"),
+      { ev: "blocked", thread: "a", on: "internal", what: "w" },
+    ];
+    validate({ ev: "reprioritized", thread: "a", urgency: "high" }, events);
+    const [a] = fold([...events, { ev: "reprioritized", thread: "a", urgency: "high" }]);
+    assert.ok(a.blocked, "still blocked");
+    assert.equal(currentStates([...events, { ev: "reprioritized", thread: "a", urgency: "high" }]).a, "blocked");
+  });
+
+  it("reprioritized needs a live thread and at least one field", () => {
+    throws(
+      () => validate({ ev: "reprioritized", thread: "ghost", urgency: "high" }, []),
+      "no prior event",
+    );
+    throws(
+      () => validate({ ev: "reprioritized", thread: "a" }, [opened("a")]),
+      "at least one of",
+    );
+    throws(
+      () => validate({ ev: "reprioritized", thread: "a", urgency: "sky-high" }, [opened("a")]),
+      "urgency",
+    );
+    throws(
+      () =>
+        validate({ ev: "reprioritized", thread: "a", urgency: "high" }, [
+          opened("a"),
+          { ev: "completed", thread: "a" },
+        ]),
+      "illegal transition",
+    );
+  });
+
+  it("a corrected priority moves the thread in the ordering", () => {
+    const threads = fold([
+      opened("quiet"),
+      opened("loud"),
+      { ev: "reprioritized", thread: "loud", urgency: "high", importance: "high" },
+    ]);
+    assert.equal(orderOpen(threads)[0].thread, "loud");
+  });
+
+  // ---------------------------------------------------- session filter
+
+  it("the fold records which sessions touched a thread", () => {
+    const [a] = fold([
+      { ...opened("a"), anchor: { session: "s1", msg: 1 } },
+      { ev: "progress", thread: "a", pct: 5, anchor: { session: "s2", msg: 3 } },
+    ]);
+    assert.deepEqual([...a.sessions].sort(), ["s1", "s2"]);
+  });
+
+  // ------------------------------------------------------ tier (SK#58)
+
+  // The palette, as ruled: blocked+urgent red, blocked+important light
+  // red, urgent orange, important yellow. Blocked-on-principal keeps
+  // violet — the one state where the reader is the bottleneck — and the
+  // quiet default stays quiet: a colour on everything is a colour on
+  // nothing.
+  it("tierOf implements the ruled palette with a quiet default", () => {
+    const t = (extra) => tierOf({ urgency: "normal", importance: "normal", ...extra });
+    assert.equal(t({ blocked: { on: "internal" }, urgency: "high" }), "blocking-urgent");
+    assert.equal(t({ blocked: { on: "external" }, importance: "high" }), "blocking-important");
+    assert.equal(t({ urgency: "high" }), "urgent");
+    assert.equal(t({ importance: "high" }), "important");
+    assert.equal(t({ blocked: { on: "principal" }, urgency: "high" }), null);
+    assert.equal(t({}), null);
+    // Urgency outranks importance when both apply.
+    assert.equal(t({ blocked: { on: "internal" }, urgency: "high", importance: "high" }), "blocking-urgent");
   });
 
   it("the anchor shows index, distance and clock", () => {
