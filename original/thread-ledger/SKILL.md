@@ -129,6 +129,11 @@ open` mints a new session branch every time it runs, stranding the
 records committed on the branch it replaces. The hook reads the
 recorder's own state and offers the command that matches it.
 
+**Republish the page after appending.** The rendered file is compared
+against the newest event, so a stale artifact blocks the turn. Render
+with `--session-url`: a store holding several conversations refuses
+without one.
+
 ## Diligence
 
 `diligence.mjs` reads the compliance log and reports what the reminders
