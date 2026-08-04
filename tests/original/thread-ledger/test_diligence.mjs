@@ -6,7 +6,15 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { perCheck, perModel, report, turnsOf } from "../../../original/thread-ledger/diligence.mjs";
+import {
+  digestOf,
+  perCheck,
+  perModel,
+  report,
+  stretchOf,
+  turnsOf,
+} from "../../../original/thread-ledger/diligence.mjs";
+import { validateDiligence } from "../../../original/thread-ledger/core.mjs";
 
 /** One compliance record, with the fields the report reads. */
 function stamp(msg, cycle, opts = {}) {
@@ -171,5 +179,105 @@ describe("Diligence", () => {
 
   it("says so rather than dividing by zero on an empty log", () => {
     assert.match(report([]), /nothing to measure/);
+  });
+});
+
+// ------------------------------------------------------------ stretches
+
+describe("Stretches", () => {
+  it("the first stretch spans the whole log, with no baseline", () => {
+    const records = [stamp(1, 1, { output: 100 })];
+    const { window, baseline } = stretchOf(records, "s1");
+    assert.equal(window.length, 1);
+    assert.equal(baseline, null);
+  });
+
+  it("a stretch starts after the previous seal and ends at the current one", () => {
+    const records = [
+      stamp(1, 1, { output: 100 }),
+      stamp(2, 1, { outcome: "blocked", fired: "ledger-event", verdicts: failedLedger, output: 200 }),
+      stamp(2, 2, { output: 300 }),
+    ];
+    const { window, baseline } = stretchOf(records, "s1");
+    assert.equal(window.length, 2);
+    assert.equal(baseline.msg, 1);
+  });
+
+  it("another session's records are not in the window", () => {
+    const records = [stamp(3, 1, { session: "s2" }), stamp(4, 1)];
+    const { window } = stretchOf(records, "s1");
+    assert.deepEqual(window.map((record) => record.msg), [4]);
+  });
+});
+
+describe("Digest", () => {
+  it("a clean single-turn stretch digests quiet", () => {
+    const { window, baseline } = stretchOf([stamp(1, 1, { output: 500 })], "s1");
+    const digest = digestOf(window, baseline);
+    assert.equal(digest.turns, 1);
+    assert.deepEqual(digest.executions, { sealed: 1, blocked: 0, unsealed: 0, observed: 0 });
+    assert.deepEqual(digest.checks, {});
+    assert.equal(digest.tokens.output, 500);
+    assert.deepEqual(digest.models, ["model-a"]);
+    assert.equal(digest.reset, undefined);
+  });
+
+  it("the digest it writes is the digest the schema accepts", () => {
+    const { window, baseline } = stretchOf([stamp(1, 1, { output: 500 })], "s1");
+    validateDiligence(digestOf(window, baseline));
+  });
+
+  it("stretch tokens are the counter difference from the previous seal", () => {
+    const records = [
+      stamp(1, 1, { output: 100 }),
+      stamp(2, 1, { outcome: "blocked", fired: "ledger-event", verdicts: failedLedger, output: 200 }),
+      stamp(2, 2, { output: 350 }),
+    ];
+    const { window, baseline } = stretchOf(records, "s1");
+    assert.equal(digestOf(window, baseline).tokens.output, 250);
+  });
+
+  it("a counter reset inside the window is a gap, never zero", () => {
+    const records = [
+      stamp(1, 1, { output: 9000 }),
+      stamp(2, 1, { output: 40 }),
+    ];
+    const { window, baseline } = stretchOf(records, "s1");
+    const digest = digestOf(window, baseline);
+    assert.equal(digest.tokens, null);
+    assert.equal(digest.reset, true);
+  });
+
+  it("counts reminders and gave-ups by outcome", () => {
+    const records = [
+      stamp(1, 1, { outcome: "blocked", fired: "ledger-event", verdicts: failedLedger }),
+      stamp(1, 2, { outcome: "unsealed", fired: "ledger-event", verdicts: failedLedger }),
+      stamp(2, 1, { outcome: "blocked", fired: "turn-summary", verdicts: failedLedger }),
+      stamp(2, 2, { output: 10 }),
+    ];
+    const { window, baseline } = stretchOf(records, "s1");
+    const digest = digestOf(window, baseline);
+    assert.equal(digest.turns, 2);
+    assert.deepEqual(digest.executions, { sealed: 1, blocked: 2, unsealed: 1, observed: 0 });
+  });
+
+  it("per-check counters cover only checks that fired", () => {
+    const records = [
+      stamp(1, 1, { outcome: "blocked", fired: "ledger-event", verdicts: failedLedger }),
+      stamp(1, 2, { output: 10 }),
+    ];
+    const { window, baseline } = stretchOf(records, "s1");
+    assert.deepEqual(digestOf(window, baseline).checks, {
+      "ledger-event": { fired: 1, cleared: 1, ignored: 0 },
+    });
+  });
+
+  it("models are the distinct ones seen, unknowns dropped", () => {
+    const records = [
+      stamp(1, 1, { outcome: "blocked", fired: "ledger-event", verdicts: failedLedger, model: "model-b" }),
+      stamp(1, 2, { model: null }),
+    ];
+    const { window, baseline } = stretchOf(records, "s1");
+    assert.deepEqual(digestOf(window, baseline).models, ["model-b"]);
   });
 });
