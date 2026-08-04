@@ -1683,6 +1683,49 @@ describe("StretchFold", () => {
     assert.deepEqual(s1.tail.threads, ["a"]);
   });
 
+  // The digest is a projection of retained data. When the seal itself
+  // carries none (it predates the field) but the raw per-Stop records
+  // reached the store, the projection is computed at render time — the
+  // same digestOf, joined by the msg both sides already carry.
+  it("raw records give a digest-less seal a render-time digest", () => {
+    const rec = (msg, outcome, output, cycle = 1) => ({
+      session: "s1",
+      msg,
+      cycle,
+      outcome,
+      fired: outcome === "blocked" ? "ledger-event" : null,
+      model: "model-a",
+      tokens: { input: 0, output, cacheRead: 0, cacheCreation: 0 },
+      verdicts: [],
+    });
+    const events = [
+      sessEvent("s1", 0, { ...opened("a"), anchor: { session: "s1", msg: 1 } }),
+      sessEvent("s1", 1, { ev: "sealed", anchor: { session: "s1", msg: 1 } }),
+      sessEvent("s1", 2, { ev: "progress", thread: "a", pct: 10, anchor: { session: "s1", msg: 2 } }),
+      sessEvent("s1", 3, { ev: "sealed", anchor: { session: "s1", msg: 2 } }),
+    ];
+    const records = [
+      rec(1, "sealed", 100),
+      rec(2, "blocked", 250),
+      rec(2, "sealed", 300, 2),
+    ];
+    const [s1] = stretchesOf(events, records);
+    assert.equal(s1.stretches[0].digest.executions.sealed, 1);
+    assert.equal(s1.stretches[1].digest.executions.blocked, 1);
+    // Token cost differences against the previous stretch's last record.
+    assert.equal(s1.stretches[1].digest.tokens.output, 200);
+  });
+
+  it("a seal with no matching records stays legacy", () => {
+    const events = [
+      sessEvent("s1", 0, { ...opened("a"), anchor: { session: "s1", msg: 1 } }),
+      sessEvent("s1", 1, { ev: "sealed", anchor: { session: "s1", msg: 1 } }),
+    ];
+    const other = [{ session: "s2", msg: 1, outcome: "sealed", tokens: null, verdicts: [] }];
+    const [s1] = stretchesOf(events, other);
+    assert.equal(s1.stretches[0].digest, null);
+  });
+
   it("a legacy seal folds with no digest, and stays a stretch", () => {
     const events = [
       sessEvent("s1", 0, opened("a")),
@@ -1701,6 +1744,30 @@ describe("StretchFold", () => {
       sessEvent("new", 3, { ev: "sealed" }),
     ];
     assert.deepEqual(stretchesOf(events).map((entry) => entry.session), ["new", "old"]);
+  });
+});
+
+describe("DiligenceOnThePage", () => {
+  it("the rendered page embeds the store's raw diligence records", () => {
+    const root = tempStore();
+    writeLog(root, "s1", [
+      { ...opened("a"), at: "2026-01-01T00:00:00+00:00", anchor: { session: "s1", msg: 1 } },
+      { ev: "sealed", at: "2026-01-01T00:01:00+00:00", anchor: { session: "s1", msg: 1 } },
+    ]);
+    fs.mkdirSync(path.join(root, "diligence"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, "diligence", "s1.jsonl"),
+      `${JSON.stringify({ session: "s1", msg: 1, outcome: "sealed", marker: "diligence-embed-proof" })}\n`,
+    );
+    const out = path.join(root, "page.html");
+    const result = spawnSync(
+      process.execPath,
+      [path.join(SKILL, "ledger.mjs"), "--root", root, "render", "--out", out],
+      { encoding: "utf8", env: { PATH: process.env.PATH, HOME: fs.mkdtempSync(path.join(os.tmpdir(), "nohome-")) } },
+    );
+    assert.equal(result.status, 0, `render failed: ${result.stderr}`);
+    assert.match(fs.readFileSync(out, "utf8"), /diligence-embed-proof/);
+    fs.rmSync(root, { recursive: true, force: true });
   });
 });
 
