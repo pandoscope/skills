@@ -1,0 +1,1 @@
+{"at":"2026-08-04T09:10:00+00:00","session":"session_kata_cycles","msg":2,"turn":2,"cycle":1,"guarded":false,"outcome":"blocked","fired":"ledger-event","model":"claude-opus-5","tokens":{"input":40,"output":1000,"cacheRead":100000,"cacheCreation":500},"verdicts":[]}

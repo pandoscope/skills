@@ -1,0 +1,14 @@
+{
+  "status": "active",
+  "stop_hook_active": true,
+  "summary_written_at": "2026-08-04T09:12:50.000Z",
+  "session": "session_kata_cycles",
+  "records_before": 1,
+  "exit": 0,
+  "check": null,
+  "sealed": true,
+  "cycle": 2,
+  "model": "claude-opus-5",
+  "tokens": {"input": 58, "output": 1420, "cacheRead": 302500, "cacheCreation": 500},
+  "reason": []
+}
