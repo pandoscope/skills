@@ -472,6 +472,66 @@ describe("OneLogPerConversation", () => {
   });
 });
 
+// Conversations overlap in time: one starts, a second starts and ends,
+// the first writes again. Ordering whole files puts every one of the
+// first file's later events before every one of the second's, so an
+// older event lands on top of a newer one — and because the recorder
+// validates each append against this order, the state machine then
+// guards a history that never happened.
+describe("EventOrderAcrossFiles", () => {
+  /** Two overlapping logs: the earlier file also holds the latest event. */
+  function overlappingStore() {
+    const root = tempStore();
+    writeLog(root, "first", [
+      { ...opened("a"), at: "2026-01-01T00:00:00+00:00" },
+      { ev: "progress", thread: "a", note: "latest", pct: 90, at: "2026-06-01T00:00:00+00:00" },
+    ]);
+    writeLog(root, "second", [
+      { ev: "progress", thread: "a", note: "middle", pct: 20, at: "2026-03-01T00:00:00+00:00" },
+    ]);
+    return root;
+  }
+
+  it("events interleave by stamp across files", () => {
+    const root = overlappingStore();
+    assert.deepEqual(readAll(root).map((e) => e.pct), [undefined, 20, 90]);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("the newest event decides the folded state", () => {
+    const root = overlappingStore();
+    const [thread] = fold(readAll(root));
+    assert.equal(thread.pct, 90);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("same stamp keeps the writing file's line order", () => {
+    // Line order inside a file is the tiebreak: a second of wall clock
+    // holds several appends, and only the file knows which came first.
+    const root = tempStore();
+    writeLog(root, "first", [
+      { ...opened("a"), at: "2026-01-01T00:00:00+00:00" },
+      { ev: "progress", thread: "a", note: "earlier line", pct: 10, at: "2026-06-01T00:00:00+00:00" },
+      { ev: "progress", thread: "a", note: "later line", pct: 30, at: "2026-06-01T00:00:00+00:00" },
+    ]);
+    assert.deepEqual(readAll(root).map((e) => e.pct), [undefined, 10, 30]);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("an unstamped event sorts after every stamped one", () => {
+    // Unstamped means pre-contract, which is older than anything the
+    // recorder wrote — but it cannot be placed, so it goes last rather
+    // than silently claiming a position it does not have.
+    const root = tempStore();
+    writeLog(root, "first", [{ ...opened("a") }]);
+    writeLog(root, "second", [
+      { ev: "progress", thread: "a", note: "stamped", pct: 40, at: "2026-03-01T00:00:00+00:00" },
+    ]);
+    assert.deepEqual(readAll(root).map((e) => e.ev), ["progress", "opened"]);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+});
+
 // A store holding several conversations is the documented shape — one
 // log file per session, folded together. Rendering has to work there,
 // and it is exercised through the shipped CLI rather than through the
