@@ -93,14 +93,21 @@ function storeOf(dir, spec) {
 }
 
 /**
- * The decision store a kata names, or null when it names none.
+ * The decision store URL a kata names, or null when it names none.
  *
- * Named rather than defaulted: a deployment with no decision store is
- * the ordinary case, and every kata that stays silent about one keeps
- * exercising the path such a session takes.
+ * The URL, not a path: `DECISION_MEMORY_URL` is what an environment
+ * actually sets, and the hook has to find the checkout itself. A kata
+ * naming a store it never cloned is therefore expressible, which is the
+ * ordinary case for a store whose convention is to clone fresh per
+ * recording session.
  */
-function decisionRoot(dir, spec) {
-  return spec?.decision_root ? path.join(dir, spec.decision_root) : null;
+function decisionUrl(dir, spec) {
+  return spec?.decision_url ? path.join(dir, ".origins", `${spec.decision_url}.git`) : null;
+}
+
+/** Where that store's checkout sits, for reason text that names it. */
+function decisionCheckout(dir, spec) {
+  return spec?.decision_url ? path.join(dir, "repos", spec.decision_url) : null;
 }
 
 /**
@@ -117,7 +124,7 @@ function expand(text, dir, spec) {
     .replaceAll("{{home}}", path.join(dir, "home"))
     .replaceAll("{{store}}", storeOf(dir, spec))
     .replaceAll("{{repos}}", path.join(dir, "repos"))
-    .replaceAll("{{decisions}}", decisionRoot(dir, spec) ?? "")
+    .replaceAll("{{decisions}}", decisionCheckout(dir, spec) ?? "")
     .replaceAll("{{transcript}}", path.join(dir, "transcript.jsonl"));
 }
 
@@ -157,7 +164,7 @@ function fire(dir, spec, script = HEARTBEAT) {
       // Only set when the kata names it, so every other kata keeps
       // exercising the path a session without it takes.
       ...(spec.session_url ? { LEDGER_SESSION_URL: spec.session_url } : {}),
-      ...(decisionRoot(dir, spec) ? { DECISION_MEMORY_ROOT: decisionRoot(dir, spec) } : {}),
+      ...(decisionUrl(dir, spec) ? { DECISION_MEMORY_URL: decisionUrl(dir, spec) } : {}),
     },
   });
   assert.equal(result.error, undefined, `the hook did not run: ${result.error}`);
