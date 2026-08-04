@@ -525,6 +525,16 @@ describe("Provenance", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  it("a writer's log does not look like a conversation's", () => {
+    // The reverse of the guard exemption: with only the workflow's log
+    // present, a session's first append would be refused for splitting
+    // a conversation's log that is not a conversation's at all.
+    const root = tempStore();
+    writeLog(root, "bot", [{ ev: "completed", thread: "a", by: "bot", at: "2026-01-01T00:00:00+00:00" }]);
+    checkSessionFile(root, "session_abc");
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
   it("the writer survives stamping", () => {
     const stamped = stamp({ ev: "completed", thread: "a", by: "bot" }, "s", 1, null);
     assert.equal(stamped.by, "bot");
