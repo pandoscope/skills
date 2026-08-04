@@ -587,7 +587,10 @@ export function main(argv) {
   }
 
   const root = resolveRoot(opts.root);
-  const transcript = findTranscript(opts.transcript);
+  // A writer that is not a conversation has no transcript. Looking for
+  // one anyway finds the most recently modified session's, and stamps
+  // that session's message count onto the workflow's events.
+  const transcript = opts.by ? null : findTranscript(opts.transcript);
 
   // Identity is resolved for WRITES only. A write has to know which
   // conversation it belongs to; a read folds every log in the store and

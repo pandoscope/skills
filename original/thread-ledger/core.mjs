@@ -387,7 +387,11 @@ export function stamp(event, session, msg, url, now) {
   // corpus is written that way and the stamp is what orders files
   // against each other.
   stamped.at = (now ?? new Date()).toISOString().replace(/\.\d+Z$/, "+00:00");
-  stamped.anchor = { session, msg };
+  stamped.anchor = { session };
+  // A position in a conversation, when there is one to have a position
+  // in. Recording it as null would be a claim that the conversation has
+  // no messages rather than that there is no conversation.
+  if (msg !== null && msg !== undefined) stamped.anchor.msg = msg;
   if (url) stamped.anchor.url = url;
   return stamped;
 }
