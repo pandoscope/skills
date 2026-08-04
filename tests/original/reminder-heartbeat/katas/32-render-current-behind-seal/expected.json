@@ -1,0 +1,10 @@
+{
+  "status": "active",
+  "stop_hook_active": false,
+  "summary_written_at": "2026-08-02T18:25:30.000Z",
+  "render_path": "artifact/ledger.html",
+  "exit": 0,
+  "check": null,
+  "sealed": true,
+  "reason": []
+}

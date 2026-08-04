@@ -1,9 +1,14 @@
 {
-  "status": "backlog",
+  "status": "active",
   "stop_hook_active": false,
   "summary_written_at": "2026-08-02T18:08:40.000Z",
+  "render_path": "artifact/ledger.html",
   "exit": 2,
   "check": "artifact-fresh",
   "sealed": false,
-  "reason": []
+  "reason": [
+    "The turn is not complete until the rendered ledger page is newer than the newest event it should show. {{render}} predates the log.",
+    "",
+    "  node {{ledger}} --root {{store}} --session-url https://claude.test/code/session_kata_render render --out {{render}} --title \"Thread ledger\" — then republish the artifact from that file."
+  ]
 }
