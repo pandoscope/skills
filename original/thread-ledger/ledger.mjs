@@ -139,51 +139,48 @@ function logFiles(root) {
 }
 
 /**
- * The file's earliest stamp, for ordering files against each other.
- *
- * A file whose first line carries no stamp sorts by name alone, after
- * every stamped file — unstamped means pre-contract, which is older than
- * anything the recorder has written.
- */
-function firstStamp(file) {
-  try {
-    for (const line of fs.readFileSync(file, "utf8").split("\n")) {
-      if (line.trim()) return [JSON.parse(line).at ?? "~", path.basename(file)];
-    }
-  } catch {
-    // Unreadable or malformed: sorts last, by name.
-  }
-  return ["~", path.basename(file)];
-}
-
-/**
  * Every event across every session file, in global order.
  *
- * Files are ordered by their first event's stamp, not by their name.
- * Name order is not time order, and when it disagrees the folded state
- * silently takes an older event as the newer one — which is how a
- * session that had split its log across two files came out showing stale
- * progress with nothing reporting a problem. Within a file, line order
- * is absolute and load-bearing.
+ * Events interleave by their own stamp. Conversations overlap — one
+ * starts, a second starts and ends, the first writes again — so ordering
+ * whole files puts every later event of the earlier-starting file ahead
+ * of every event of the other, and the fold takes an older event as the
+ * newer one. Nothing looks wrong: both files are valid, the state is
+ * merely built in an order that never happened.
+ *
+ * Two ties break it, in order: line position within a file, because a
+ * second of wall clock holds several appends and only the file knows
+ * which came first; then the filename, so two files stamped alike order
+ * the same way on every machine.
+ *
+ * An event with no stamp sorts after every stamped one. Unstamped means
+ * pre-contract, which is older than anything the recorder has written —
+ * but it cannot be placed, and last is the position that claims least.
  */
 export function readAll(root) {
-  const files = logFiles(root).sort((a, b) => {
-    const [sa, sb] = [firstStamp(a), firstStamp(b)];
-    return sa[0] < sb[0] ? -1 : sa[0] > sb[0] ? 1 : sa[1] < sb[1] ? -1 : sa[1] > sb[1] ? 1 : 0;
-  });
   const events = [];
-  for (const file of files) {
+  for (const file of logFiles(root)) {
+    const name = path.basename(file);
     const lines = fs.readFileSync(file, "utf8").split("\n");
     lines.forEach((line, index) => {
       if (!line.trim()) return;
       try {
-        events.push(JSON.parse(line));
+        events.push({ event: JSON.parse(line), name, line: index });
       } catch (err) {
         throw new LedgerError(`${file}:${index + 1} is not valid JSON: ${err.message}`);
       }
     });
   }
-  return events;
+  const key = (entry) => [entry.event.at ?? "~", entry.name, entry.line];
+  events.sort((a, b) => {
+    const [ka, kb] = [key(a), key(b)];
+    for (let i = 0; i < ka.length; i += 1) {
+      if (ka[i] < kb[i]) return -1;
+      if (ka[i] > kb[i]) return 1;
+    }
+    return 0;
+  });
+  return events.map((entry) => entry.event);
 }
 
 // ----------------------------------------------------------- identity
