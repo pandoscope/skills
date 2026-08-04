@@ -122,6 +122,44 @@ describe("Diligence", () => {
     assert.deepEqual(rows.map((row) => row.model).sort(), ["(unrecorded)", "model-a"]);
   });
 
+  // Compaction rewrites the transcript, so the cumulative counters can
+  // move BACKWARDS between two stamps of one turn. A negative cost is
+  // not a discount; it is a reset observed mid-turn, and reporting it
+  // as data would quietly subtract from every aggregate it lands in.
+  it("a counter reset mid-turn makes the cost unknown, not negative", () => {
+    const records = [
+      stamp(6, 1, { outcome: "blocked", fired: "ledger-event", verdicts: failedLedger, output: 9000 }),
+      stamp(6, 2, { output: 40 }),
+    ];
+    const [turn] = turnsOf(records);
+    assert.equal(turn.cost, null);
+  });
+
+  // The research split this measure demands: a first-pass miss is
+  // attention, a miss REPEATED after the reminder was delivered is the
+  // model ignoring known work. The complement of cleared conflates that
+  // with "turn ended, nothing was ignored" — so ignored is its own
+  // column, and the two cannot be told apart from cleared alone.
+  it("failing again after the reminder counts as ignored, not merely uncleared", () => {
+    const shown = [
+      stamp(1, 1, { outcome: "blocked", fired: "ledger-event", verdicts: failedLedger }),
+      stamp(1, 2, { outcome: "unsealed", fired: "ledger-event", verdicts: failedLedger }),
+    ];
+    const interrupted = [
+      stamp(2, 1, { outcome: "blocked", fired: "ledger-event", verdicts: failedLedger }),
+    ];
+    const row = perCheck([...shown, ...interrupted], turnsOf([...shown, ...interrupted])).find(
+      (r) => r.check === "ledger-event",
+    );
+    assert.equal(row.fired, 3);
+    assert.equal(row.ignored, 1); // cycle 2 of turn 1 — reminder shown, still failing
+    assert.equal(row.cleared, 0); // turn 2's single stamp ignored nothing: no reminder landed
+  });
+
+  it("the baseline caveat is printed: cycle 1 is aware, not unmonitored", () => {
+    assert.match(report([stamp(1, 1)]), /knows the hook exists/);
+  });
+
   // The limits travel with the numbers. A measurement whose caveats
   // live in a ticket gets quoted without them.
   it("prints what it cannot see alongside what it can", () => {
