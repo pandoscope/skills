@@ -133,6 +133,48 @@ export function countUserTurns(text) {
 }
 
 /**
+ * What the transcript cost, and which model spent it.
+ *
+ * Cumulative across every assistant message, because each one is a
+ * separate API call and each call is billed on its own — summing them
+ * is the total, not a double count of one context.
+ *
+ * Deliberately raw. The interesting numbers are differences between two
+ * points in time, but computing a difference at write time would
+ * silently attribute one stretch of work to another the moment a
+ * measurement point is missed; a monotone counter cannot. It also means
+ * a change of mind about the metric does not invalidate what has
+ * already been recorded.
+ *
+ * `model` is the newest one seen: a session can change model mid-run,
+ * and what matters for a turn's verdict is who took that turn.
+ */
+export function transcriptUsage(text) {
+  const total = { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 };
+  let model = null;
+  for (const line of String(text).split("\n")) {
+    if (!line.trim()) continue;
+    let record;
+    try {
+      record = JSON.parse(line);
+    } catch {
+      // A partial trailing line has no usage to count.
+      continue;
+    }
+    if (record?.type !== "assistant") continue;
+    const message = record.message ?? {};
+    if (message.model) model = message.model;
+    const usage = message.usage;
+    if (!usage) continue;
+    total.input += usage.input_tokens ?? 0;
+    total.output += usage.output_tokens ?? 0;
+    total.cacheRead += usage.cache_read_input_tokens ?? 0;
+    total.cacheCreation += usage.cache_creation_input_tokens ?? 0;
+  }
+  return { model, ...total };
+}
+
+/**
  * Latest work-state event kind per thread.
  *
  * Metadata events are skipped: promoting a thread tells you nothing
