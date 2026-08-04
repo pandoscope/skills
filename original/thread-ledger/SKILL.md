@@ -124,6 +124,11 @@ nothing. A marker already in the tree is an earlier turn's debt, not
 this one's. Only the *marked* half is mechanized — judging what deserves
 a marker stays with you.
 
+**Never re-open a recorder session that is already open.** `record.py
+open` mints a new session branch every time it runs, stranding the
+records committed on the branch it replaces. The hook reads the
+recorder's own state and offers the command that matches it.
+
 ## Ordering
 
 Rendering order is computed from the events, so nothing here needs

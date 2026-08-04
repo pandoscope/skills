@@ -60,7 +60,7 @@ function git(root, ...args) {
   }
 }
 
-function tail(url) {
+export function tail(url) {
   const trimmed = String(url).replace(/\/+$/, "").replace(/\.git$/, "");
   const parts = trimmed.replace(/:/g, "/").split("/").filter(Boolean);
   return parts.slice(-2).join("/").toLowerCase();
