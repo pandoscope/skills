@@ -5,6 +5,7 @@
   "decision_url": "decision-memory",
   "exit": 0,
   "check": null,
+  "check4_verdict": "unconfigured",
   "sealed": true,
   "reason": []
 }
