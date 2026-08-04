@@ -646,7 +646,7 @@ describe("Anchors", () => {
   it("reprioritized needs a live thread and at least one field", () => {
     throws(
       () => validate({ ev: "reprioritized", thread: "ghost", urgency: "high" }, []),
-      "no prior event",
+      "ever opened",
     );
     throws(
       () => validate({ ev: "reprioritized", thread: "a" }, [opened("a")]),
@@ -662,7 +662,7 @@ describe("Anchors", () => {
           opened("a"),
           { ev: "completed", thread: "a" },
         ]),
-      "illegal transition",
+      "is completed",
     );
   });
 

@@ -6,6 +6,7 @@
 // state of its own.
 
 import {
+  tierOf,
   RANK,
   TERMINAL,
   TICKET_RE,
@@ -112,6 +113,27 @@ button.stat{font:inherit;font-family:ui-monospace,SFMono-Regular,Menlo,monospace
 .s-blocked-external .pill{color:var(--accent);border-color:currentColor}
 .s-blocked-principal .pill{color:var(--you);border-color:currentColor;font-weight:600}
 .s-parked .pill{border-style:dashed}
+/* Severity tiers (skills#58). The card border carries the tier at a
+   distance; blocked-on-principal is deliberately absent — violet owns
+   that state, and the quiet default stays quiet. Light red is the
+   awkward tier everywhere: here it is the red hue at lower weight. */
+:root{--t-red:#d92d20; --t-red-soft:#f97066; --t-orange:#e8590c; --t-yellow:#b78103}
+@media (prefers-color-scheme:dark){
+  :root{--t-red:#f97066; --t-red-soft:#e0726a; --t-orange:#ff922b; --t-yellow:#e3b341}
+}
+:root[data-theme=dark]{--t-red:#f97066; --t-red-soft:#e0726a; --t-orange:#ff922b; --t-yellow:#e3b341}
+:root[data-theme=light]{--t-red:#d92d20; --t-red-soft:#f97066; --t-orange:#e8590c; --t-yellow:#b78103}
+.thread.t-blocking-urgent{border-color:var(--t-red);box-shadow:inset 3px 0 0 var(--t-red)}
+.thread.t-blocking-important{border-color:var(--t-red-soft);box-shadow:inset 3px 0 0 var(--t-red-soft)}
+.thread.t-urgent{border-color:var(--t-orange);box-shadow:inset 3px 0 0 var(--t-orange)}
+.thread.t-important{border-color:var(--t-yellow);box-shadow:inset 3px 0 0 var(--t-yellow)}
+.t-blocking-urgent .pill{color:var(--t-red);border-color:currentColor;font-weight:600}
+.t-blocking-important .pill{color:var(--t-red-soft);border-color:currentColor}
+/* The filter control, header-right, invisible when the page has one
+   session to show. */
+.filter{font-size:.78rem;color:var(--dim);display:flex;gap:.4rem;align-items:center}
+.filter select{font:inherit;color:var(--fg);background:var(--panel);
+  border:1px solid var(--line);border-radius:6px;padding:.15rem .4rem}
 .note{color:var(--dim);font-size:.84rem}
 hr{border:0;border-top:1px solid var(--line);margin:2.25rem 0 1rem}
 .done{gap:0}
@@ -496,7 +518,8 @@ function openRow(thread, nowMsg, codes, sessionUrl) {
     ? ticketPrefix(thread.ticket, codes)
     : ticketPicker(thread, codes);
   return (
-    `<li class="thread${muted}${depth} ${stateClass(thread)}" style="--pct:${pct}%"` +
+    `<li class="thread${muted}${depth} ${stateClass(thread)}${tierClass(thread)}"` +
+    ` style="--pct:${pct}%"${sessionsAttr(thread)}` +
     ` aria-label="${pct} percent done">${ref}` +
     titleHtml(title, detail, thread.url ?? sessionUrl) +
     pills(thread) +
@@ -506,6 +529,18 @@ function openRow(thread, nowMsg, codes, sessionUrl) {
   );
 }
 
+/** The severity tier as a class, or nothing — the quiet default. */
+function tierClass(thread) {
+  const tier = tierOf(thread);
+  return tier ? ` t-${tier}` : "";
+}
+
+/** Which sessions built this row, for the page's session filter. */
+function sessionsAttr(thread) {
+  if (!thread.sessions?.length) return "";
+  return ` data-sessions="${esc(thread.sessions.join(" "))}"`;
+}
+
 function closedRow(thread, nowMsg, codes, sessionUrl) {
   const dropped = thread.state === "dropped";
   const mark = dropped ? "☐" : "☑";
@@ -513,7 +548,8 @@ function closedRow(thread, nowMsg, codes, sessionUrl) {
   const label = dropped ? "dropped" : "done";
   const title = thread.title ?? thread.thread;
   return (
-    `<li class="thread closed ${label}"><span class="mark">${mark}</span>` +
+    `<li class="thread closed ${label}"${sessionsAttr(thread)}>` +
+    `<span class="mark">${mark}</span>` +
     `<span class="title">${ticketPrefix(thread.ticket, codes)}` +
     `${sessionLink(title, thread.url ?? sessionUrl)}</span>` +
     anchorHtml(thread, nowMsg) +
@@ -557,11 +593,33 @@ function summary(open, closed) {
  * Called in the browser, on data the page was handed or fetched. The
  * same function could run anywhere; nothing in it touches a document.
  */
+/**
+ * The session filter, only where it can filter anything.
+ *
+ * Built from the anchors the events already carry — the log records
+ * nothing new for this. ALL stays the default: the unfiltered page is
+ * the overview, and a sticky filter would make it lie to its next
+ * reader. The control is inert without the script, which is why it is
+ * plain markup the script wires rather than script-created.
+ */
+function sessionFilter(threads) {
+  const sessions = [...new Set(threads.flatMap((thread) => thread.sessions ?? []))];
+  if (sessions.length < 2) return "";
+  return (
+    `<label class="filter">session <select id="session-filter">` +
+    `<option value="" selected>all</option>` +
+    sessions.map((name) => `<option value="${esc(name)}">${esc(name)}</option>`).join("") +
+    `</select></label>`
+  );
+}
+
 export function renderBody(threads, title, nowMsg = null, codes = {}, sessionUrl = null) {
   const open = orderOpen(threads);
   const closed = orderClosed(threads);
   return (
-    `<header><h1>${esc(title)}</h1>${summary(open, closed)}</header>` +
+    `<header><h1>${esc(title)}</h1>${summary(open, closed)}` +
+    sessionFilter(threads) +
+    `</header>` +
     `<main><ol class="threads">` +
     open.map((thread) => openRow(thread, nowMsg, codes, sessionUrl)).join("") +
     `</ol><hr><ol class="threads done">` +

@@ -16,6 +16,7 @@ export const EVENTS = [
   "unblocked",
   "parked",
   "promoted",
+  "reprioritized",
   "stale",
   "synced",
   "sealed",
@@ -40,7 +41,7 @@ export const LOG_EVENTS = ["sealed"];
 // `stale` and `synced` join it: they describe whether the FORGE TICKET
 // still reflects what the session knows, which is orthogonal to whether
 // the thread is blocked.
-export const METADATA_EVENTS = ["promoted", "stale", "synced"];
+export const METADATA_EVENTS = ["promoted", "stale", "synced", "reprioritized"];
 
 // Legal successors per current WORK state. A thread's work state is the
 // kind of its most recent non-metadata event. Enforced against the fold
@@ -283,6 +284,26 @@ export function validate(event, history) {
 
 /** Rules for events that describe a thread rather than move it. */
 function validateMetadata(kind, event, history, thread) {
+  if (kind === "reprioritized") {
+    // Standing, not a move — same family as promoted. It exists because
+    // deps, urgency and importance otherwise fold only on opening
+    // events, and a ledger that owns those fields must be able to amend
+    // them without forcing a false state change into the log.
+    const fields = ["deps", "urgency", "importance"].filter((f) => event[f] !== undefined);
+    if (!fields.length) {
+      throw new LedgerError(
+        "reprioritized needs at least one of 'deps', 'urgency', 'importance'",
+      );
+    }
+    for (const field of ["urgency", "importance"]) {
+      if (event[field] !== undefined && !(event[field] in RANK)) {
+        throw new LedgerError(
+          `${field} must be one of ${Object.keys(RANK).join(", ")}, got ${JSON.stringify(event[field])}`,
+        );
+      }
+    }
+    return;
+  }
   if (kind === "promoted") {
     if (!event.ticket) {
       throw new LedgerError("promoted needs the 'ticket' it was promoted to");
@@ -398,6 +419,7 @@ export function fold(events) {
         order: index,
         pct: 0,
         events: [],
+        sessions: [],
         blocked: null,
         parked: null,
         stale: null,
@@ -406,6 +428,11 @@ export function fold(events) {
     }
     const thread = threads.get(name);
     thread.events.push(event);
+    // Which conversations built this row — read off the anchors the
+    // events already carry, so the page can filter by session without
+    // the log recording anything new.
+    const from = event.anchor?.session;
+    if (from && !thread.sessions.includes(from)) thread.sessions.push(from);
     if (!METADATA_EVENTS.includes(kind)) thread.state = kind;
     thread.anchor = event.anchor ?? null;
     thread.at = event.at ?? null;
@@ -441,6 +468,10 @@ export function fold(events) {
     } else if (kind === "promoted") {
       thread.ticket = event.ticket;
       thread.conversation_only = false;
+    } else if (kind === "reprioritized") {
+      if (event.deps !== undefined) thread.deps = event.deps;
+      if (event.urgency !== undefined) thread.urgency = event.urgency;
+      if (event.importance !== undefined) thread.importance = event.importance;
     } else if (kind === "stale") {
       thread.stale = event.what;
     } else if (kind === "synced") {
@@ -452,6 +483,28 @@ export function fold(events) {
     }
   });
   return [...threads.values()];
+}
+
+/**
+ * The severity tier a thread renders as, or null for the quiet default.
+ *
+ * The ruled palette (skills#58): blocked work outranks live work at the
+ * same priority, urgency outranks importance, and blocked-on-principal
+ * takes NO tier — the page already gives it violet, the one state where
+ * the reader is the bottleneck, and a severity colour on top would bury
+ * exactly that signal. Everything else stays uncoloured, because a
+ * colour on everything is a colour on nothing.
+ */
+export function tierOf(thread) {
+  if (thread.blocked?.on === "principal") return null;
+  const urgent = thread.urgency === "high";
+  const important = thread.importance === "high";
+  const blocking = Boolean(thread.blocked);
+  if (blocking && urgent) return "blocking-urgent";
+  if (blocking && important) return "blocking-important";
+  if (urgent) return "urgent";
+  if (important) return "important";
+  return null;
 }
 
 /**

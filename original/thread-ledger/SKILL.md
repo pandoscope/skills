@@ -45,6 +45,7 @@ that has already been measured insufficient here.
 | A conversation thread became work | `promoted` with its ticket |
 | The ticket no longer says what the session knows | `stale` with `what` changed |
 | The ticket has been brought back in line | `synced` |
+| The priorities on a live thread were wrong | `reprioritized` with the corrected `deps`, `urgency` or `importance` |
 | Finished | `completed` |
 | Abandoned | `dropped` with why |
 | Finished thing needs more work | `reopened` |
@@ -75,12 +76,15 @@ instead of surfacing as a wrong page later.
   has nothing to be out of date, and the prompt the marker generates is
   only as useful as the sentence naming what the ticket is missing.
   Marking stale twice, or syncing a current ticket, is rejected.
-- **`promoted`, `stale` and `synced` are metadata, not moves.** They
-  record what happened to the *ticket*, which says nothing about
-  whether the thread is blocked — so they are legal wherever the
-  thread is live and leave the work state untouched. Inside the state
-  machine, filing a ticket for a blocked thread would have forced a
-  false `unblocked` into the log.
+- **`promoted`, `stale`, `synced` and `reprioritized` are metadata,
+  not moves.** The first three record what happened to the *ticket*;
+  `reprioritized` corrects the thread's own `deps`, `urgency` or
+  `importance`. Neither kind says anything about whether the work is
+  blocked, so all four are legal wherever the thread is live and leave
+  the work state untouched. Inside the state machine, filing a ticket
+  for a blocked thread would have forced a false `unblocked` into the
+  log — and priorities, which fold only on opening events, could never
+  be corrected at all.
 - **`at` and `anchor` are recorder-owned.** Supply them and they are
   overwritten — code determines them more accurately than an agent
   estimating.
