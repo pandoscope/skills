@@ -494,6 +494,37 @@ describe("Provenance", () => {
     );
   });
 
+  it("a writer files under its own name, never a conversation's", () => {
+    // The workflow is not a conversation, so it does not go through
+    // session resolution at all. Passing its name as a session id would
+    // lose to the store's remembered URL — deliberately, because the
+    // platform's session id matches no log and the URL is the better
+    // guess for a session. A writer that is not one needs neither.
+    //
+    // Through the CLI, because the routing is in the command and an
+    // event filed in the wrong log is exactly what nothing downstream
+    // can see.
+    const root = tempStore();
+    resolveSession(root, "https://x.test/s/abc", null, null);
+    writeLog(root, "session_abc", [{ ...opened("a"), at: "2026-01-01T00:00:00+00:00" }]);
+
+    const run = spawnSync(
+      process.execPath,
+      [
+        path.join(SKILL, "ledger.mjs"), "--root", root, "append",
+        "--ev", "completed", "--thread", "a", "--by", "bot", "--no-push",
+      ],
+      { encoding: "utf8", env: { PATH: process.env.PATH, HOME: root } },
+    );
+
+    assert.equal(run.status, 0, run.stderr);
+    const stamped = JSON.parse(run.stdout);
+    assert.equal(stamped.anchor.session, "bot");
+    assert.equal(stamped.anchor.url, undefined);
+    assert.ok(fs.existsSync(path.join(root, "ledger", "bot.jsonl")));
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
   it("the writer survives stamping", () => {
     const stamped = stamp({ ev: "completed", thread: "a", by: "bot" }, "s", 1, null);
     assert.equal(stamped.by, "bot");
