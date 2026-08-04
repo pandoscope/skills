@@ -40,6 +40,7 @@ import {
   checkSessionFile,
   countUserMessages,
   parseArgs,
+  push,
   readAll,
   renderPage,
   resolveSession,
@@ -1628,5 +1629,38 @@ describe("ReconcilingConcurrentAppends", () => {
     const merged = mergeLogLines(["{broken", line("2026-01-01T00:00:00+00:00", "a")], []);
     assert.equal(merged.length, 2);
     assert.equal(merged[0], "{broken");
+  });
+});
+
+// ----------------------------------------------------------- publishing
+
+describe("PushCarriesTheStretch", () => {
+  it("the session's diligence file rides the same push as its log", () => {
+    // The hook writes diligence/<session>.jsonl but never pushes; the
+    // recorder's push is the only ride to the remote, and a push that
+    // left the file behind would strand the raw records the seal's
+    // digest claims are retained.
+    const root = tempStore();
+    const sh = (...args) => spawnSync("git", ["-C", root, ...args], { encoding: "utf8" });
+    sh("init", "-q", "-b", "main");
+    sh("config", "user.email", "t@example.test");
+    sh("config", "user.name", "t");
+    const origin = fs.mkdtempSync(path.join(os.tmpdir(), "ledger-origin-"));
+    spawnSync("git", ["init", "-q", "--bare", origin], { encoding: "utf8" });
+    sh("remote", "add", "origin", origin);
+    fs.writeFileSync(path.join(root, "ledger", "s.jsonl"), `${JSON.stringify({ ev: "sealed" })}\n`);
+    fs.mkdirSync(path.join(root, "diligence"), { recursive: true });
+    fs.writeFileSync(path.join(root, "diligence", "s.jsonl"), `${JSON.stringify({ cycle: 1 })}\n`);
+
+    push(root, "s", "sealed");
+
+    const shipped = spawnSync(
+      "git",
+      ["-C", origin, "ls-tree", "-r", "--name-only", "main"],
+      { encoding: "utf8" },
+    ).stdout;
+    assert.match(shipped, /diligence\/s\.jsonl/);
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(origin, { recursive: true, force: true });
   });
 });
