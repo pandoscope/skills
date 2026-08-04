@@ -27,6 +27,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   LedgerError,
+  WRITERS,
   countUserTurns,
   fold,
   mergeLogLines,
@@ -193,7 +194,11 @@ export function readAll(root) {
  * merely built from the wrong one.
  */
 export function checkSessionFile(root, session) {
-  const existing = logFiles(root).map((file) => path.basename(file, ".jsonl"));
+  const existing = logFiles(root)
+    .map((file) => path.basename(file, ".jsonl"))
+    // A writer's log is not a conversation's, so it neither counts as
+    // the conversation already logging nor is something to append to.
+    .filter((name) => !WRITERS.includes(name));
   if (existing.length === 1 && existing[0] !== session) {
     throw new LedgerError(
       `this store logs session ${JSON.stringify(existing[0])}, not ` +
