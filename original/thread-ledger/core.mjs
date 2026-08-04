@@ -251,7 +251,14 @@ export function validate(event, history) {
           "mark look like that thread's state",
       );
     }
+    if (event.diligence !== undefined) validateDiligence(event.diligence);
     return;
+  }
+  if (event.diligence !== undefined) {
+    throw new LedgerError(
+      `diligence describes the stretch a seal closes, not a thread — it is ` +
+        `only legal on ${LOG_EVENTS.join(", ")}, not on ${kind}`,
+    );
   }
 
   const thread = event.thread;
@@ -294,6 +301,84 @@ export function validate(event, history) {
     throw new LedgerError(
       "parked needs a named 'trigger': a revisit condition without an " +
         "observer is a revisit that never happens",
+    );
+  }
+}
+
+// The digest's execution outcomes, one per way a heartbeat run can end.
+export const OUTCOMES = ["sealed", "blocked", "unsealed", "observed"];
+
+function counter(value) {
+  return Number.isInteger(value) && value >= 0;
+}
+
+/**
+ * Throw LedgerError unless `digest` is a well-formed diligence payload.
+ *
+ * The payload is computed by the heartbeat from its compliance log,
+ * never typed — but the store outlives any one writer, so the shape is
+ * enforced where events enter it, exactly like every other field.
+ *
+ * Shape: `turns` (positive integer), `executions` (a count per outcome
+ * in OUTCOMES, no others), `checks` (per check name: fired/cleared/
+ * ignored counters), `tokens` (the four-component sum, or null when a
+ * counter reset inside the window — a gap, never zero), `models`
+ * (strings), and optionally `reset: true` naming that gap.
+ */
+export function validateDiligence(digest) {
+  if (typeof digest !== "object" || digest === null || Array.isArray(digest)) {
+    throw new LedgerError(`diligence must be an object, got ${JSON.stringify(digest)}`);
+  }
+  if (!Number.isInteger(digest.turns) || digest.turns < 1) {
+    throw new LedgerError(`diligence.turns must be a positive integer, got ${JSON.stringify(digest.turns)}`);
+  }
+  const executions = digest.executions;
+  if (typeof executions !== "object" || executions === null) {
+    throw new LedgerError("diligence.executions must map each outcome to a count");
+  }
+  for (const [outcome, count] of Object.entries(executions)) {
+    if (!OUTCOMES.includes(outcome) || !counter(count)) {
+      throw new LedgerError(
+        `diligence.executions counts ${OUTCOMES.join(", ")}; got ` +
+          `${JSON.stringify(outcome)}: ${JSON.stringify(count)}`,
+      );
+    }
+  }
+  const checks = digest.checks;
+  if (typeof checks !== "object" || checks === null) {
+    throw new LedgerError("diligence.checks must map each check to its counters");
+  }
+  for (const [name, row] of Object.entries(checks)) {
+    const shaped =
+      typeof row === "object" &&
+      row !== null &&
+      ["fired", "cleared", "ignored"].every((key) => counter(row[key]));
+    if (!shaped) {
+      throw new LedgerError(
+        `diligence.checks[${JSON.stringify(name)}] needs integer fired, ` +
+          `cleared and ignored, got ${JSON.stringify(row)}`,
+      );
+    }
+  }
+  const tokens = digest.tokens;
+  if (tokens !== null) {
+    const shaped =
+      typeof tokens === "object" &&
+      tokens !== null &&
+      ["input", "output", "cacheRead", "cacheCreation"].every((key) => counter(tokens[key]));
+    if (!shaped) {
+      throw new LedgerError(
+        "diligence.tokens must carry integer input, output, cacheRead and " +
+          `cacheCreation, or be null for a reset gap; got ${JSON.stringify(tokens)}`,
+      );
+    }
+  }
+  if (!Array.isArray(digest.models) || digest.models.some((model) => typeof model !== "string")) {
+    throw new LedgerError(`diligence.models must be strings, got ${JSON.stringify(digest.models)}`);
+  }
+  if (digest.reset !== undefined && digest.reset !== true) {
+    throw new LedgerError(
+      `diligence.reset is either absent or true, got ${JSON.stringify(digest.reset)}`,
     );
   }
 }
