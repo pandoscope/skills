@@ -621,6 +621,27 @@ describe("EventOrderAcrossFiles", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  it("an illegal transition split across files is rejected", () => {
+    // The guarantee the ordering restores, pinned end to end: with the
+    // fold misordered, a `completed` in an earlier-starting file was
+    // buried under an older `progress` from a later-starting one, and
+    // the recorder accepted `progress` after `completed` — measured
+    // live before the fix. Validation must see the completion.
+    const root = tempStore();
+    writeLog(root, "first", [
+      { ...opened("a"), at: "2026-01-01T00:00:00+00:00" },
+      { ev: "completed", thread: "a", at: "2026-06-01T00:00:00+00:00" },
+    ]);
+    writeLog(root, "second", [
+      { ev: "progress", thread: "a", pct: 20, at: "2026-03-01T00:00:00+00:00" },
+    ]);
+    throws(
+      () => validate({ ev: "progress", thread: "a", pct: 30 }, readAll(root)),
+      "illegal transition",
+    );
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
   it("an unstamped event sorts after every stamped one", () => {
     // Unstamped means pre-contract, which is older than anything the
     // recorder wrote — but it cannot be placed, so it goes last rather
