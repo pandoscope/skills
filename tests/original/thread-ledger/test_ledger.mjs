@@ -1876,6 +1876,33 @@ describe("StretchesSection", () => {
     assert.match(html, /class="mult hot"[^>]*>×4\.0/);
   });
 
+  it("a long session name renders as date and tail, full name in the tooltip", () => {
+    const name = "session_01KBsy9XFFuRepNnPNc6VqYb";
+    const events = [
+      sessEvent(name, 0, opened("a")),
+      sessEvent(name, 1, { ev: "sealed", diligence: sealDigest() }),
+    ];
+    const html = body(events, `https://x.test/code/${name}`);
+    assert.match(html, /class="chip on"[^>]*title="session_01KBsy9XFFuRepNnPNc6VqYb"[^>]*>01-01 ·…c6VqYb</);
+  });
+
+  it("chips beyond the newest four wait behind a toggle", () => {
+    const events = [];
+    for (let index = 0; index < 6; index += 1) {
+      const name = `s${index}`;
+      events.push(sessEvent(name, index * 2, opened("a")));
+      events.push(sessEvent(name, index * 2 + 1, { ev: "sealed", diligence: sealDigest() }));
+    }
+    const html = body(events, "https://x.test/code/s5");
+    assert.equal((html.match(/class="chip overflow"/g) ?? []).length, 2);
+    assert.match(html, /class="chip toggle"[^>]*>\+2 older</);
+  });
+
+  it("the disclosure summary counts, and leaves naming to the chip", () => {
+    const html = body(twoSessions);
+    assert.match(html, /<summary>stretches \(1\)<\/summary>/);
+  });
+
   it("the tail after the last seal shows as unsealed, with its threads", () => {
     const events = [
       sessEvent("s1", 0, opened("a")),
