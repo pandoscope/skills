@@ -165,6 +165,10 @@ function fire(dir, spec, script = HEARTBEAT) {
       // exercising the path a session without it takes.
       ...(spec.session_url ? { LEDGER_SESSION_URL: spec.session_url } : {}),
       ...(decisionUrl(dir, spec) ? { DECISION_MEMORY_URL: decisionUrl(dir, spec) } : {}),
+      // The baseline arm: verdicts logged, turn never blocked. Only set
+      // when the kata names it, so every other kata keeps proving the
+      // blocking path.
+      ...(spec.observe ? { HEARTBEAT_OBSERVE: "1" } : {}),
     },
   });
   assert.equal(result.error, undefined, `the hook did not run: ${result.error}`);
@@ -318,6 +322,9 @@ function assertKata(name, dir, spec, result) {
     `${name}: every check reports, pass or fail`,
   );
   assert.equal(record.fired, spec.check, `${name}: the check the log says fired`);
+  if (spec.outcome) {
+    assert.equal(record.outcome, spec.outcome, `${name}: the outcome the log records`);
+  }
   if (spec.check2_verdict) {
     assert.equal(
       record.verdicts.find((verdict) => verdict.check === "pushed")?.verdict,
