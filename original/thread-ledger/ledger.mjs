@@ -307,7 +307,10 @@ function findTranscript(explicit) {
  * without writing when validation fails.
  */
 export function append(root, session, event, transcript, sessionUrl) {
-  checkSessionFile(root, session);
+  // The one-log guard asks whether a conversation is splitting its log
+  // in two. A writer that is not a conversation has no such log to
+  // split, and its own is expected to sit beside the sessions'.
+  if (!event.by) checkSessionFile(root, session);
   const history = readAll(root);
   validate(event, history);
   const stamped = stamp(event, session, countUserMessages(transcript), sessionUrl);
@@ -588,12 +591,13 @@ export function main(argv) {
   // conversation — the requirement was real, it was just in the wrong
   // place.
   if (cmd === "append") {
-    const [session, sessionUrl] = resolveSession(
-      root,
-      opts["session-url"],
-      opts.session,
-      transcript,
-    );
+    // A writer that is not a conversation names itself and skips session
+    // resolution, which exists to answer "which conversation is this".
+    // Routed through it, the workflow would inherit a session's name and
+    // URL and its events would read as that session's own work.
+    const [session, sessionUrl] = opts.by
+      ? [opts.by, null]
+      : resolveSession(root, opts["session-url"], opts.session, transcript);
     const stamped = append(root, session, eventFrom(opts), transcript, sessionUrl);
     // Printed before the push, because the write already happened: a
     // push that fails must not make a recorded event look unrecorded.
