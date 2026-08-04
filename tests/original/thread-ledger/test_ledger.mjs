@@ -472,6 +472,39 @@ describe("OneLogPerConversation", () => {
   });
 });
 
+// The recorder assumed one writer. A workflow that closes a thread when
+// its ticket closes is a second one, and an event nobody can attribute
+// is an event nobody can correct: a wrongly closed ticket and a genuine
+// completion read exactly alike.
+describe("Provenance", () => {
+  it("an event with no writer is the session's own", () => {
+    const event = { ev: "progress", thread: "a", pct: 10 };
+    validate(event, [opened("a")]);
+    assert.equal(event.by, undefined);
+  });
+
+  it("a known writer is legal", () => {
+    validate({ ev: "completed", thread: "a", by: "bot" }, [opened("a")]);
+  });
+
+  it("an unknown writer is refused", () => {
+    throws(
+      () => validate({ ev: "completed", thread: "a", by: "ghost" }, [opened("a")]),
+      "by must be one of",
+    );
+  });
+
+  it("the writer survives stamping", () => {
+    const stamped = stamp({ ev: "completed", thread: "a", by: "bot" }, "s", 1, null);
+    assert.equal(stamped.by, "bot");
+  });
+
+  it("--by reaches the event", () => {
+    const [, opts] = parseArgs(["append", "--ev", "completed", "--thread", "a", "--by", "bot"]);
+    assert.equal(opts.by, "bot");
+  });
+});
+
 // Conversations overlap in time: one starts, a second starts and ends,
 // the first writes again. Ordering whole files puts every one of the
 // first file's later events before every one of the second's, so an
