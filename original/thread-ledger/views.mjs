@@ -12,6 +12,8 @@ import {
   TICKET_RE,
   orderClosed,
   orderOpen,
+  sessionFromUrl,
+  stretchesOf,
 } from "./core.mjs";
 
 export const CSS = `
@@ -129,11 +131,42 @@ button.stat{font:inherit;font-family:ui-monospace,SFMono-Regular,Menlo,monospace
 .thread.t-important{border-color:var(--t-yellow);box-shadow:inset 3px 0 0 var(--t-yellow)}
 .t-blocking-urgent .pill{color:var(--t-red);border-color:currentColor;font-weight:600}
 .t-blocking-important .pill{color:var(--t-red-soft);border-color:currentColor}
-/* The filter control, header-right, invisible when the page has one
-   session to show. */
-.filter{font-size:.78rem;color:var(--dim);display:flex;gap:.4rem;align-items:center}
-.filter select{font:inherit;color:var(--fg);background:var(--panel);
-  border:1px solid var(--line);border-radius:6px;padding:.15rem .4rem}
+/* The sessions section: chips pick a session, its stretches unfold
+   beneath, and the thread lists below filter to it. Stretch rules stay
+   quiet when clean — amber marks a reminded stretch, red a gave-up,
+   and everything else is dim monospace a reader scans, not reads. */
+.sessions{margin:0 0 1.5rem;display:flex;flex-direction:column;gap:.5rem}
+.chips{display:flex;flex-wrap:wrap;gap:.35rem}
+.chip{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.72rem;
+  border:1px solid var(--line);background:var(--panel);color:var(--dim);
+  border-radius:999px;padding:.15rem .6rem;cursor:pointer;max-width:14rem;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chip:hover{border-color:var(--accent);color:var(--accent)}
+.chip.on{border-color:var(--accent);color:var(--accent);background:var(--fill)}
+.sess{border:1px solid var(--line);border-radius:7px;background:var(--panel);
+  padding:.35rem .55rem}
+.rollup{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.74rem;
+  color:var(--dim);display:flex;flex-wrap:wrap;gap:.3rem .8rem}
+.rollup b{color:var(--fg);font-weight:600}
+.rules>summary{font-size:.72rem;color:var(--dim);cursor:pointer;margin-top:.25rem}
+.stretchlist{list-style:none;margin:.35rem 0 0;padding:0;display:flex;
+  flex-direction:column;gap:.15rem}
+.stretch{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.72rem;
+  color:var(--dim);border-top:1px solid var(--line);padding:.2rem 0 0}
+.stretch .sthreads{flex:1;min-width:8rem;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;color:var(--fg)}
+.stretch.st-remind{border-top-color:var(--wait)}
+.stretch .remind{color:var(--wait)}
+.stretch.st-gaveup{border-top-color:var(--t-red)}
+.stretch .gaveup{color:var(--t-red);font-weight:600}
+.stretch.tail,.stretch.legacy{border-top-style:dashed;font-style:italic}
+.gap{border:1px dashed var(--wait);color:var(--wait);border-radius:4px;
+  padding:0 .3rem;cursor:help}
+.mult{color:var(--dim)}
+.mult.hot{color:var(--fg);font-weight:600}
+.older>summary{font-size:.7rem;color:var(--dim);cursor:pointer;padding:.15rem 0}
+.stretch .schecks{color:var(--dim)}
 .note{color:var(--dim);font-size:.84rem}
 hr{border:0;border-top:1px solid var(--line);margin:2.25rem 0 1rem}
 .done{gap:0}
@@ -587,39 +620,260 @@ function summary(open, closed) {
   return `<div class="summary">${cells}</div>`;
 }
 
+// ---------------------------------------------------------- stretches
+
+/** How many of a session's newest stretch rows show before folding. */
+const RECENT_STRETCHES = 12;
+
+/** A compact count: 950, 12.6k, 3.4M. */
+export function fmtTokens(value) {
+  if (value < 1000) return String(value);
+  if (value < 1e6) return `${(value / 1000).toFixed(1).replace(/\.0$/, "")}k`;
+  return `${(value / 1e6).toFixed(1).replace(/\.0$/, "")}M`;
+}
+
+/** A compact wall-clock span: 45s, 12m, 1h05. */
+export function fmtSpan(ms) {
+  const minutes = Math.round(ms / 60000);
+  if (minutes < 1) return `${Math.round(ms / 1000)}s`;
+  if (minutes < 60) return `${minutes}m`;
+  return `${Math.floor(minutes / 60)}h${String(minutes % 60).padStart(2, "0")}`;
+}
+
+const sum = (values) => values.reduce((total, value) => total + value, 0);
+
+/** The digest's headline number — the four components together. */
+function totalTokens(digest) {
+  const tokens = digest?.tokens;
+  if (!tokens) return null;
+  return tokens.input + tokens.output + tokens.cacheRead + tokens.cacheCreation;
+}
+
+function median(values) {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+/**
+ * The ×-multiplier against the session's own median, or nothing.
+ *
+ * Same-session median rather than a global yardstick: it controls for
+ * model and task mix, and resists the outliers it exists to flag. Under
+ * three data points a median is mostly noise, so nothing renders.
+ */
+function multiplier(value, mid, count) {
+  if (mid === null || mid <= 0 || count < 3 || value === null) return "";
+  const factor = value / mid;
+  const hot = factor >= 1.5 ? " hot" : "";
+  return ` <span class="mult${hot}">×${factor.toFixed(1)}</span>`;
+}
+
+/** Reminder round-trips in a digest — blocked executions. */
+const remindersOf = (digest) => digest?.executions?.blocked ?? 0;
+/** Blocks the model saw and still did not finish after. */
+const gaveUpsOf = (digest) => digest?.executions?.unsealed ?? 0;
+
+function plural(count, noun) {
+  if (count === 1) return `${count} ${noun}`;
+  return `${count} ${noun.endsWith("h") ? `${noun}es` : `${noun}s`}`;
+}
+
+/** The fired checks, each marked when its reminder was ignored. */
+function checksHtml(digest) {
+  const parts = Object.entries(digest.checks ?? {}).map(([name, row]) => {
+    const ignored = row.ignored ? ` <span class="gaveup">ignored×${row.ignored}</span>` : "";
+    return `${esc(name)}${ignored}`;
+  });
+  if (!parts.length) return "";
+  return `<span class="schecks">${parts.join(", ")}</span>`;
+}
+
+/** One stretch as a thin rule: when, what, friction, cost. */
+function stretchRow(stretch, medians) {
+  const digest = stretch.digest;
+  const reminders = remindersOf(digest);
+  const gaveUps = gaveUpsOf(digest);
+  const cls = gaveUps ? " st-gaveup" : reminders ? " st-remind" : "";
+
+  const parts = [];
+  const clock = stretch.at ? stretch.at.slice(11, 16) : "";
+  const msg = stretch.seal.anchor?.msg;
+  const where = `${clock}${msg !== undefined ? ` #${msg}` : ""}`.trim();
+  const url = stretch.seal.anchor?.url;
+  parts.push(
+    url
+      ? `<a class="anchor" href="${esc(url)}" target="_blank" rel="noreferrer">${esc(where)}</a>`
+      : `<span class="anchor">${esc(where)}</span>`,
+  );
+  parts.push(`<span class="sthreads">${esc(stretch.threads.join(" · ")) || "—"}</span>`);
+  if (digest) {
+    parts.push(checksHtml(digest));
+    if (reminders) parts.push(`<span class="remind">${plural(reminders, "reminder")}</span>`);
+    if (gaveUps) parts.push(`<span class="gaveup">gave up ×${gaveUps}</span>`);
+    const tokens = totalTokens(digest);
+    if (tokens === null) {
+      parts.push(
+        `<span class="gap" title="a counter reset (compaction) inside this ` +
+          `stretch — its cost is unknown, not zero">gap</span>`,
+      );
+    } else {
+      parts.push(
+        `<span>${fmtTokens(tokens)} tok${multiplier(tokens, medians.tokens, medians.count)}</span>`,
+      );
+    }
+  }
+  if (stretch.spanMs !== null) {
+    parts.push(
+      `<span>${fmtSpan(stretch.spanMs)}${multiplier(stretch.spanMs, medians.span, medians.count)}</span>`,
+    );
+  }
+  return `<li class="stretch${cls}">${parts.filter(Boolean).join("")}</li>`;
+}
+
+/**
+ * The rows of one session's stretch list, oldest first.
+ *
+ * Digest-less seals predate the field; each run of them collapses to
+ * one line rather than a wall of empty rules — they stay countable
+ * without burying the stretches that carry data.
+ */
+function stretchItems(entry, medians) {
+  const items = [];
+  let legacy = 0;
+  const flush = () => {
+    if (!legacy) return;
+    items.push(
+      `<li class="stretch legacy">${plural(legacy, "stretch")} · no digest</li>`,
+    );
+    legacy = 0;
+  };
+  for (const stretch of entry.stretches) {
+    if (!stretch.digest) {
+      legacy += 1;
+      continue;
+    }
+    flush();
+    items.push(stretchRow(stretch, medians));
+  }
+  flush();
+  if (entry.tail) {
+    items.push(
+      `<li class="stretch tail">unsealed tail · ` +
+        `${esc(entry.tail.threads.join(" · ")) || plural(entry.tail.count, "event")}</li>`,
+    );
+  }
+  return items;
+}
+
+/** A session's aggregate line: how the whole session went, in one scan. */
+function rollupHtml(entry) {
+  const digests = entry.stretches.map((stretch) => stretch.digest).filter(Boolean);
+  const parts = [];
+  if (digests.length) {
+    const turns = sum(digests.map((digest) => digest.turns));
+    parts.push(`<span><b>${plural(turns, "turn")}</b></span>`);
+    const clean = digests.filter((digest) => !remindersOf(digest) && !gaveUpsOf(digest)).length;
+    parts.push(`<span><b>${Math.round((clean / digests.length) * 100)}%</b> clean</span>`);
+    const reminders = sum(digests.map(remindersOf));
+    if (reminders) parts.push(`<span class="remind"><b>${reminders}</b> reminders</span>`);
+    const gaveUps = sum(digests.map(gaveUpsOf));
+    if (gaveUps) parts.push(`<span class="gaveup"><b>${gaveUps}</b> gave up</span>`);
+    const totals = digests.map(totalTokens).filter((value) => value !== null);
+    if (totals.length) parts.push(`<span><b>${fmtTokens(sum(totals))}</b> tok</span>`);
+    const gaps = digests.length - totals.length;
+    if (gaps) parts.push(`<span class="gap">${plural(gaps, "gap")}</span>`);
+  }
+  const spans = entry.stretches.map((stretch) => stretch.spanMs).filter((ms) => ms !== null);
+  if (spans.length) parts.push(`<span><b>${fmtSpan(sum(spans))}</b></span>`);
+  const legacy = entry.stretches.length - digests.length;
+  if (legacy) parts.push(`<span>${plural(legacy, "stretch")} · no digest</span>`);
+  return `<div class="rollup">${parts.join("")}</div>`;
+}
+
+/** One session's block: rollup always, rules behind a disclosure. */
+function sessionBlock(entry, current) {
+  const digested = entry.stretches.filter((stretch) => stretch.digest);
+  const medians = {
+    count: digested.length,
+    tokens: median(
+      digested.map((stretch) => totalTokens(stretch.digest)).filter((value) => value !== null),
+    ),
+    span: median(entry.stretches.map((stretch) => stretch.spanMs).filter((ms) => ms !== null)),
+  };
+  const items = stretchItems(entry, medians);
+  const recent = items.slice(-RECENT_STRETCHES);
+  const older = items.slice(0, -RECENT_STRETCHES);
+  const folded = older.length
+    ? `<details class="older"><summary>earlier stretches (${older.length})</summary>` +
+      `<ol class="stretchlist">${older.join("")}</ol></details>`
+    : "";
+  return (
+    `<div class="sess" data-session="${esc(entry.session)}">${rollupHtml(entry)}` +
+    `<details class="rules"${current ? " open" : ""}>` +
+    `<summary>${plural(entry.stretches.length, "stretch")} — ${esc(entry.session)}</summary>` +
+    folded +
+    `<ol class="stretchlist">${recent.join("")}</ol>` +
+    `</details></div>`
+  );
+}
+
+/** The session this render belongs to, for the pre-selected chip. */
+function currentSession(sessions, sessionUrl) {
+  if (sessionUrl) {
+    try {
+      const name = sessionFromUrl(sessionUrl);
+      if (sessions.some((entry) => entry.session === name)) return name;
+    } catch {
+      // A URL that names no session falls through to the newest one.
+    }
+  }
+  return sessions[0]?.session ?? null;
+}
+
+/**
+ * The sessions section: chips to pick a session, stretches beneath.
+ *
+ * Replaces the old session dropdown — one selector, both roles: a chip
+ * shows its session's stretches AND filters the thread lists below
+ * (wired in page.mjs; the markup is inert without the script, and every
+ * block stays readable because visibility is the script's only job).
+ */
+function stretchesSection(events, sessionUrl) {
+  const sessions = stretchesOf(events);
+  if (!sessions.some((entry) => entry.stretches.length)) return "";
+  const current = currentSession(sessions, sessionUrl);
+  const chips = [
+    `<button class="chip" data-session="" type="button">all</button>`,
+    ...sessions.map(
+      (entry) =>
+        `<button class="chip${entry.session === current ? " on" : ""}" ` +
+        `data-session="${esc(entry.session)}" type="button">${esc(entry.session)}</button>`,
+    ),
+  ];
+  return (
+    `<section class="sessions"><div class="chips">${chips.join("")}</div>` +
+    sessions.map((entry) => sessionBlock(entry, entry.session === current)).join("") +
+    `</section>`
+  );
+}
+
 /**
  * The page's body, built from folded state.
  *
  * Called in the browser, on data the page was handed or fetched. The
  * same function could run anywhere; nothing in it touches a document.
+ * `events` carries the raw log for the parts folding drops — the seal
+ * sequence the stretches section reads.
  */
-/**
- * The session filter, only where it can filter anything.
- *
- * Built from the anchors the events already carry — the log records
- * nothing new for this. ALL stays the default: the unfiltered page is
- * the overview, and a sticky filter would make it lie to its next
- * reader. The control is inert without the script, which is why it is
- * plain markup the script wires rather than script-created.
- */
-function sessionFilter(threads) {
-  const sessions = [...new Set(threads.flatMap((thread) => thread.sessions ?? []))];
-  if (sessions.length < 2) return "";
-  return (
-    `<label class="filter">session <select id="session-filter">` +
-    `<option value="" selected>all</option>` +
-    sessions.map((name) => `<option value="${esc(name)}">${esc(name)}</option>`).join("") +
-    `</select></label>`
-  );
-}
-
-export function renderBody(threads, title, nowMsg = null, codes = {}, sessionUrl = null) {
+export function renderBody(threads, title, nowMsg = null, codes = {}, sessionUrl = null, events = []) {
   const open = orderOpen(threads);
   const closed = orderClosed(threads);
   return (
     `<header><h1>${esc(title)}</h1>${summary(open, closed)}` +
-    sessionFilter(threads) +
     `</header>` +
+    stretchesSection(events, sessionUrl) +
     `<main><ol class="threads">` +
     open.map((thread) => openRow(thread, nowMsg, codes, sessionUrl)).join("") +
     `</ol><hr><ol class="threads done">` +

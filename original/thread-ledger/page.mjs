@@ -30,9 +30,10 @@ export function boot(root = document) {
     data.now_msg ?? null,
     data.codes ?? {},
     data.session_url ?? null,
+    data.events,
   );
   root.getElementById("crash")?.remove();
-  wireSessionFilter(root);
+  wireSessionChips(root);
   wire(root);
   fitAll(root);
   paint(root);
@@ -41,25 +42,41 @@ export function boot(root = document) {
 }
 
 /**
- * Hide rows the chosen session never touched.
+ * One selector, both roles: a chip shows its session's stretches and
+ * filters the thread lists to that session.
  *
- * Pure show/hide over data-sessions — the fold, the ordering and the
- * summary stay those of the whole store, so what the filter changes is
- * visibility, never truth. Rows without the attribute (threads whose
- * events carry no anchors) stay visible under every filter: absence of
- * provenance must not read as absence of work.
+ * Pure show/hide over data attributes — the fold, the ordering and the
+ * summary stay those of the whole store, so what a chip changes is
+ * visibility, never truth. Rows without data-sessions (threads whose
+ * events carry no anchors) stay visible under every chip: absence of
+ * provenance must not read as absence of work. The rendering session's
+ * chip is pre-selected in the markup, so boot applies it once; without
+ * the script every block stays readable, just unfiltered.
  */
-function wireSessionFilter(root) {
-  const control = root.getElementById("session-filter");
-  if (!control) return;
-  control.addEventListener("change", () => {
-    const wanted = control.value;
+function wireSessionChips(root) {
+  const chips = [...root.querySelectorAll(".chip")];
+  if (!chips.length) return;
+  const apply = (wanted) => {
+    for (const chip of chips) {
+      chip.classList.toggle("on", chip.getAttribute("data-session") === wanted);
+    }
+    for (const block of root.querySelectorAll(".sess")) {
+      const mine = block.getAttribute("data-session") === wanted;
+      block.style.display = !wanted || mine ? "" : "none";
+      const rules = block.querySelector("details.rules");
+      if (rules) rules.open = Boolean(wanted && mine);
+    }
     for (const row of root.querySelectorAll(".thread")) {
       const from = row.getAttribute("data-sessions");
       row.style.display =
         !wanted || !from || from.split(" ").includes(wanted) ? "" : "none";
     }
-  });
+  };
+  for (const chip of chips) {
+    chip.addEventListener("click", () => apply(chip.getAttribute("data-session")));
+  }
+  const selected = chips.find((chip) => chip.classList.contains("on"));
+  if (selected) apply(selected.getAttribute("data-session"));
 }
 
 function readData(root) {

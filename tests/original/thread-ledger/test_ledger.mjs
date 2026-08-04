@@ -352,26 +352,13 @@ describe("SessionFilter", () => {
     { ev: "progress", thread: "a", pct: 5, anchor: { session: "s2", msg: 5, url: "https://claude.test/s2" } },
   ];
 
-  // The filter works on data the events already carry: every anchor
-  // names its session, so the row only has to say which sessions its
-  // events came from and the control only has to hide the rest.
+  // The session chips filter on data the events already carry: every
+  // anchor names its session, so the row only has to say which sessions
+  // its events came from and the chips only have to hide the rest.
   it("rows carry the sessions whose events built them", () => {
     const body = renderBody(fold(withAnchors), "t");
     assert.match(body, /data-sessions="[^"]*s1[^"]*s2|data-sessions="[^"]*s2[^"]*s1/);
     assert.match(body, /data-sessions="s2"/);
-  });
-
-  it("the page offers one filter option per session, ALL by default", () => {
-    const body = renderBody(fold(withAnchors), "t");
-    assert.match(body, /<select id="session-filter"/);
-    assert.match(body, /<option value=""[^>]*>/);
-    assert.match(body, /<option value="s1"/);
-    assert.match(body, /<option value="s2"/);
-  });
-
-  it("a store with one session gets no filter control", () => {
-    const events = [{ ...opened("a"), anchor: { session: "s1", msg: 1 } }];
-    assert.doesNotMatch(renderBody(fold(events), "t"), /session-filter/);
   });
 });
 

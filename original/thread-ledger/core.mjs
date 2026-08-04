@@ -591,6 +591,68 @@ export function fold(events) {
 }
 
 /**
+ * Fold the seal sequence into per-session stretches.
+ *
+ * A stretch is a session's events since its previous seal, ended by a
+ * seal — the same window the heartbeat digests, read here off the
+ * ledger's own events so the page needs nothing the store does not
+ * already publish. Events without an anchor cannot be attributed to a
+ * session and take part in no stretch.
+ *
+ * @returns one entry per session, newest-last-event first (the chip
+ *   order): `{session, stretches, tail}`. Each stretch carries its
+ *   `seal` event, `at`, `digest` (the seal's diligence payload, or null
+ *   for a seal from before the field existed), `threads` touched in its
+ *   span, and `spanMs` — wall-clock from the previous seal (the
+ *   session's first event, for the first stretch), or null when a stamp
+ *   is missing. `tail` is the span after the last seal — a turn that
+ *   did not finish its bookkeeping — as `{count, threads}`, or null.
+ */
+export function stretchesOf(events) {
+  const bySession = new Map();
+  events.forEach((event, index) => {
+    const session = event.anchor?.session;
+    if (!session) return;
+    if (!bySession.has(session)) bySession.set(session, { session, events: [], last: 0 });
+    const entry = bySession.get(session);
+    entry.events.push(event);
+    entry.last = index;
+  });
+
+  const threadsIn = (span) => [...new Set(span.map((event) => event.thread).filter(Boolean))];
+  const msBetween = (from, to) => {
+    if (!from || !to) return null;
+    const ms = new Date(to) - new Date(from);
+    return Number.isFinite(ms) ? ms : null;
+  };
+
+  const sessions = [];
+  for (const entry of bySession.values()) {
+    const stretches = [];
+    let spanStart = entry.events[0]?.at ?? null;
+    let span = [];
+    for (const event of entry.events) {
+      span.push(event);
+      if (event.ev !== "sealed") continue;
+      stretches.push({
+        seal: event,
+        at: event.at ?? null,
+        digest: event.diligence ?? null,
+        threads: threadsIn(span),
+        spanMs: msBetween(spanStart, event.at),
+      });
+      spanStart = event.at ?? spanStart;
+      span = [];
+    }
+    const tail = span.length ? { count: span.length, threads: threadsIn(span) } : null;
+    sessions.push({ session: entry.session, stretches, tail, last: entry.last });
+  }
+  return sessions
+    .sort((a, b) => b.last - a.last)
+    .map(({ last, ...entry }) => entry);
+}
+
+/**
  * The severity tier a thread renders as, or null for the quiet default.
  *
  * The ruled palette (skills#58): blocked work outranks live work at the
