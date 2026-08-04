@@ -9,6 +9,33 @@
   "sealed": true,
   "cycle": 2,
   "model": "claude-opus-5",
-  "tokens": {"input": 58, "output": 1420, "cacheRead": 302500, "cacheCreation": 500},
-  "reason": []
+  "tokens": {
+    "input": 58,
+    "output": 1420,
+    "cacheRead": 302500,
+    "cacheCreation": 500
+  },
+  "reason": [],
+  "digest": {
+    "turns": 1,
+    "executions": {
+      "sealed": 1,
+      "blocked": 1,
+      "unsealed": 0,
+      "observed": 0
+    },
+    "checks": {
+      "ledger-event": {
+        "fired": 1,
+        "cleared": 1,
+        "ignored": 0
+      }
+    },
+    "tokens": {
+      "input": 58,
+      "output": 1420,
+      "cacheRead": 302500,
+      "cacheCreation": 500
+    }
+  }
 }

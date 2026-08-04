@@ -1,0 +1,17 @@
+{
+  "status": "active",
+  "stop_hook_active": false,
+  "summary_written_at": "2026-08-04T11:11:40.000Z",
+  "records_before": 1,
+  "exit": 0,
+  "check": null,
+  "sealed": true,
+  "digest": {
+    "turns": 1,
+    "executions": {"sealed": 1, "blocked": 0, "unsealed": 0, "observed": 0},
+    "checks": {},
+    "tokens": null,
+    "reset": true
+  },
+  "reason": []
+}
