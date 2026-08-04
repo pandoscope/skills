@@ -125,6 +125,7 @@ function expand(text, dir, spec) {
     .replaceAll("{{store}}", storeOf(dir, spec))
     .replaceAll("{{repos}}", path.join(dir, "repos"))
     .replaceAll("{{decisions}}", decisionCheckout(dir, spec) ?? "")
+    .replaceAll("{{render}}", spec?.render_path ? path.join(dir, spec.render_path) : "")
     .replaceAll("{{transcript}}", path.join(dir, "transcript.jsonl"));
 }
 
@@ -169,6 +170,7 @@ function fire(dir, spec, script = HEARTBEAT) {
       // when the kata names it, so every other kata keeps proving the
       // blocking path.
       ...(spec.observe ? { HEARTBEAT_OBSERVE: "1" } : {}),
+      ...(spec.render_path ? { LEDGER_RENDER_PATH: path.join(dir, spec.render_path) } : {}),
     },
   });
   assert.equal(result.error, undefined, `the hook did not run: ${result.error}`);
@@ -318,7 +320,7 @@ function assertKata(name, dir, spec, result) {
   // an empty verdict list is the honest shape of "nothing was checked".
   assert.deepEqual(
     record.verdicts.map((verdict) => verdict.check),
-    spec.verdicts ?? ["turn-summary", "pushed", "ledger-event", "decision-record"],
+    spec.verdicts ?? ["turn-summary", "pushed", "ledger-event", "decision-record", "artifact-fresh"],
     `${name}: every check reports, pass or fail`,
   );
   assert.equal(record.fired, spec.check, `${name}: the check the log says fired`);
