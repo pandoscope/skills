@@ -535,6 +535,35 @@ describe("Provenance", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  it("a writer's event carries no message number", () => {
+    // `msg` is a position in a conversation. A writer that is not one
+    // has no position, and the recorder finds a transcript by taking
+    // the most recently modified one under HOME — so left alone it
+    // stamps the workflow's events with some passing session's count.
+    const root = tempStore();
+    const projects = path.join(root, ".claude", "projects", "p");
+    fs.mkdirSync(projects, { recursive: true });
+    fs.writeFileSync(
+      path.join(projects, "someone-else.jsonl"),
+      `${JSON.stringify({ type: "user", message: { role: "user", content: "hi" } })}\n`,
+      "utf8",
+    );
+    writeLog(root, "session_abc", [{ ...opened("a"), at: "2026-01-01T00:00:00+00:00" }]);
+
+    const run = spawnSync(
+      process.execPath,
+      [
+        path.join(SKILL, "ledger.mjs"), "--root", root, "append",
+        "--ev", "completed", "--thread", "a", "--by", "bot", "--no-push",
+      ],
+      { encoding: "utf8", env: { PATH: process.env.PATH, HOME: root } },
+    );
+
+    assert.equal(run.status, 0, run.stderr);
+    assert.deepEqual(JSON.parse(run.stdout).anchor, { session: "bot" });
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
   it("the writer survives stamping", () => {
     const stamped = stamp({ ev: "completed", thread: "a", by: "bot" }, "s", 1, null);
     assert.equal(stamped.by, "bot");
