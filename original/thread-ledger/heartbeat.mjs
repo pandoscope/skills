@@ -750,6 +750,19 @@ export function run(input) {
     return 0;
   }
 
+  // The baseline arm. HEARTBEAT_OBSERVE runs every check and logs every
+  // verdict without ever surfacing a reason — the arm the Hawthorne
+  // question needs, since a hook that always blocks has no run where
+  // the reminder was withheld. The one thing it must not do is seal:
+  // green seals and nothing else does, in every mode, or the store
+  // starts lying about which turns finished. DECISION:SCOPE — observe
+  // mode is a measurement arm, not a soft deployment; a deployment that
+  // wants no blocking should not install the hook.
+  if (process.env.HEARTBEAT_OBSERVE) {
+    logCompliance(ctx, reported, "observed", failed.check);
+    return 0;
+  }
+
   // The loop guard, read before blocking rather than before checking.
   // `stop_hook_active` is true when this hook already blocked the turn
   // once; blocking again feeds the model the same reason it just acted

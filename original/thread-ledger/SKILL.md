@@ -135,6 +135,9 @@ recorder's own state and offers the command that matches it.
 cost against what they buy — per turn, per check, per model. Cycle 1 is
 the unprompted baseline, and everything above it is the reminder's price
 in round-trips. The report prints its own limits beside its numbers.
+`HEARTBEAT_OBSERVE` runs every check and logs every verdict while
+surfacing nothing: the unobserved arm, for measuring what the reminder
+itself changes.
 
 ## Ordering
 
