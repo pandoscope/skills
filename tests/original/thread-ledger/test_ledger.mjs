@@ -1769,6 +1769,24 @@ describe("DiligenceOnThePage", () => {
     assert.match(fs.readFileSync(out, "utf8"), /diligence-embed-proof/);
     fs.rmSync(root, { recursive: true, force: true });
   });
+
+  it("a session's name sidecar reaches the page", () => {
+    const root = tempStore();
+    writeLog(root, "s1", [
+      { ...opened("a"), at: "2026-01-01T00:00:00+00:00", anchor: { session: "s1", msg: 1 } },
+      { ev: "sealed", at: "2026-01-01T00:01:00+00:00", anchor: { session: "s1", msg: 1 } },
+    ]);
+    fs.writeFileSync(path.join(root, "ledger", "s1.name"), "the alpha build\n");
+    const out = path.join(root, "page.html");
+    const result = spawnSync(
+      process.execPath,
+      [path.join(SKILL, "ledger.mjs"), "--root", root, "render", "--out", out],
+      { encoding: "utf8", env: { PATH: process.env.PATH, HOME: fs.mkdtempSync(path.join(os.tmpdir(), "nohome-")) } },
+    );
+    assert.equal(result.status, 0, `render failed: ${result.stderr}`);
+    assert.match(fs.readFileSync(out, "utf8"), /the alpha build/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
 });
 
 describe("StretchesSection", () => {
@@ -1778,35 +1796,37 @@ describe("StretchesSection", () => {
     sessEvent("s2", 2, opened("b")),
     sessEvent("s2", 3, { ev: "sealed", diligence: sealDigest() }),
   ];
-  const body = (events, sessionUrl = "https://x.test/code/s2") =>
-    renderBody(fold(events), "T", null, {}, sessionUrl, events);
+  const body = (events, sessionUrl = "https://x.test/code/s2", names = {}) =>
+    renderBody(fold(events), "T", null, {}, sessionUrl, events, [], names);
 
-  it("renders a chip per session plus the unfiltered overview", () => {
+  it("the summary is the selected session's identity plus its totals", () => {
     const html = body(twoSessions);
-    assert.match(html, /class="chip[^"]*" data-session="s1"/);
-    assert.match(html, /class="chip[^"]*" data-session="s2"/);
-    assert.match(html, /data-session=""/);
+    assert.match(html, /class="sesshead on" data-session="s2"/);
+    const head = html.match(/<span class="sesshead on"[\s\S]*?<\/span><\/span>/)[0];
+    assert.match(head, /s2/);
+    assert.match(head, /1 turn/);
   });
 
-  it("the rendering session's chip and block are pre-selected", () => {
-    const html = body(twoSessions);
-    assert.match(html, /chip on" data-session="s2"/);
-    assert.match(html, /<details class="rules" open>[\s\S]*?s2/);
+  it("the picker lists every session and the overview, names beside ids", () => {
+    const html = body(twoSessions, "https://x.test/code/s2", { s1: "alpha build" });
+    assert.match(html, /class="opt"[^>]*data-session=""/);
+    assert.match(html, /class="opt"[^>]*data-session="s1"[^>]*>[\s\S]*?alpha build/);
+    assert.match(html, /class="opt"[^>]*data-session="s2"/);
   });
 
-  it("there is no second selector — the section replaced the dropdown", () => {
+  it("the overview head carries the totals across every session", () => {
+    const html = body(twoSessions);
+    const head = html.match(/<span class="sesshead" data-session=""[\s\S]*?<\/span><\/span>/)[0];
+    assert.match(head, /2 turns/);
+  });
+
+  it("there is no second selector — the head is the picker", () => {
     assert.doesNotMatch(body(twoSessions), /id="session-filter"/);
   });
 
   it("no seals, no section", () => {
     const html = body([sessEvent("s1", 0, opened("a"))]);
-    assert.doesNotMatch(html, /class="chips"/);
-  });
-
-  it("a session leads with its rollup line", () => {
-    const html = body(twoSessions);
-    assert.match(html, /class="rollup"/);
-    assert.match(html, /1 turn/);
+    assert.doesNotMatch(html, /class="picker"/);
   });
 
   it("a clean stretch renders quiet, a reminded one amber, a gave-up red", () => {
@@ -1876,31 +1896,29 @@ describe("StretchesSection", () => {
     assert.match(html, /class="mult hot"[^>]*>×4\.0/);
   });
 
-  it("a long session name renders as date and tail, full name in the tooltip", () => {
+  it("a long session id renders as its tail, with the full id in the tooltip", () => {
     const name = "session_01KBsy9XFFuRepNnPNc6VqYb";
     const events = [
       sessEvent(name, 0, opened("a")),
       sessEvent(name, 1, { ev: "sealed", diligence: sealDigest() }),
     ];
     const html = body(events, `https://x.test/code/${name}`);
-    assert.match(html, /class="chip on"[^>]*title="session_01KBsy9XFFuRepNnPNc6VqYb"[^>]*>01-01 ·…c6VqYb</);
+    assert.match(html, /class="sesshead on"[^>]*title="session_01KBsy9XFFuRepNnPNc6VqYb"/);
+    assert.match(html, /…c6VqYb/);
   });
 
-  it("chips beyond the newest four wait behind a toggle", () => {
-    const events = [];
-    for (let index = 0; index < 6; index += 1) {
-      const name = `s${index}`;
-      events.push(sessEvent(name, index * 2, opened("a")));
-      events.push(sessEvent(name, index * 2 + 1, { ev: "sealed", diligence: sealDigest() }));
+  it("only the last seal shows; the rest wait behind one expand", () => {
+    const events = [sessEvent("s1", 0, opened("a"))];
+    for (let index = 1; index <= 5; index += 1) {
+      events.push(sessEvent("s1", index, { ev: "sealed", diligence: sealDigest() }));
     }
-    const html = body(events, "https://x.test/code/s5");
-    assert.equal((html.match(/class="chip overflow"/g) ?? []).length, 2);
-    assert.match(html, /class="chip toggle"[^>]*>\+2 older</);
-  });
-
-  it("the disclosure summary counts, and leaves naming to the chip", () => {
-    const html = body(twoSessions);
-    assert.match(html, /<summary>stretches \(1\)<\/summary>/);
+    const html = body(events, "https://x.test/code/s1");
+    const block = html.match(/<div class="sess" data-session="s1">[\s\S]*?<\/ol><\/div>/)[0];
+    assert.match(block, /<details class="allseals"><summary>all 5 stretches<\/summary>/);
+    // Four folded inside the details, the newest one outside it.
+    const [folded] = block.match(/<details class="allseals">[\s\S]*?<\/details>/);
+    assert.equal((folded.match(/<li class="stretch"/g) ?? []).length, 4);
+    assert.equal((block.match(/<li class="stretch"/g) ?? []).length, 5);
   });
 
   it("the tail after the last seal shows as unsealed, with its threads", () => {
