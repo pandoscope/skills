@@ -2157,6 +2157,37 @@ describe("PushRefusesWhatTheMergeInvalidates", () => {
     fs.rmSync(bot, { recursive: true, force: true });
   });
 
+  // Withdrawal is surgical. The commit that carries a refused event
+  // also carries whatever the heartbeat wrote since the last push —
+  // seal lines, diligence records — and those are observed state that
+  // must reach the store. Only the event is withdrawn; the rest ships.
+  it("withdrawing the event does not take the seal down with it", () => {
+    const { root, origin, bot } = contendedStore();
+    botPublishes(bot, {
+      ev: "completed",
+      thread: "t",
+      by: "bot",
+      at: "2026-01-01T00:10:00+00:00",
+      anchor: { session: "bot" },
+    });
+    // A seal the hook appended after the last push, still uncommitted —
+    // the recorder's commit will sweep it up alongside the event.
+    fs.appendFileSync(
+      path.join(root, "ledger", "s1.jsonl"),
+      `${JSON.stringify({ ev: "sealed", at: "2026-01-01T00:09:00+00:00", anchor: { session: "s1", msg: 1 } })}\n`,
+    );
+    const result = cliAppend(root, "--ev", "progress", "--thread", "t", "--pct", "60", "--note", "stale write");
+    assert.equal(result.status, 1);
+    const remoteTip = sh(root, "ls-remote", "origin", "main").split("\t")[0];
+    const shipped = sh(root, "show", `${remoteTip}:ledger/s1.jsonl`);
+    assert.match(shipped, /"ev":"sealed"/, "the seal must survive the withdrawal");
+    assert.doesNotMatch(shipped, /stale write/);
+    assert.equal(sh(root, "rev-parse", "HEAD").trim(), remoteTip);
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(origin, { recursive: true, force: true });
+    fs.rmSync(bot, { recursive: true, force: true });
+  });
+
   // Concurrency itself stays ordinary: another writer touching a
   // DIFFERENT thread must not turn into a refusal, or every busy hour
   // strands every session.
