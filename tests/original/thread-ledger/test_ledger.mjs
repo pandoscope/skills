@@ -2068,6 +2068,120 @@ describe("PipedOutput", () => {
   });
 });
 
+// ------------------------------------------------- concurrent writers
+
+describe("PushRefusesWhatTheMergeInvalidates", () => {
+  /** git in `dir`, throwing on failure. */
+  function sh(dir, ...args) {
+    const result = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8" });
+    assert.equal(result.status, 0, `git ${args.join(" ")} failed:\n${result.stderr}`);
+    return result.stdout;
+  }
+
+  /**
+   * A store with a bare origin, an opened thread pushed, and a second
+   * writer's clone standing by — the shape skills#78 measured live.
+   */
+  function contendedStore() {
+    const root = tempStore();
+    sh(root, "init", "-q", "-b", "main");
+    sh(root, "config", "user.email", "t@example.test");
+    sh(root, "config", "user.name", "t");
+    const origin = fs.mkdtempSync(path.join(os.tmpdir(), "ledger-origin-"));
+    // `-b main`, or the bare HEAD points at master while everything
+    // pushes main — and the bot's clone silently checks out nothing.
+    spawnSync("git", ["init", "-q", "--bare", "-b", "main", origin], { encoding: "utf8" });
+    sh(root, "remote", "add", "origin", origin);
+    writeLog(root, "s1", [
+      { ...opened("t"), at: "2026-01-01T00:00:00+00:00", anchor: { session: "s1", msg: 1 } },
+    ]);
+    fs.writeFileSync(path.join(root, "ledger", "s1.url"), "https://x.test/code/s1\n");
+    sh(root, "add", "-A");
+    sh(root, "commit", "-q", "-m", "seed");
+    sh(root, "push", "-q", "-u", "origin", "main");
+
+    const bot = fs.mkdtempSync(path.join(os.tmpdir(), "ledger-bot-"));
+    const cloned = spawnSync("git", ["clone", "-q", origin, bot], { encoding: "utf8" });
+    assert.equal(cloned.status, 0, `bot clone failed:\n${cloned.stderr}`);
+    assert.ok(fs.existsSync(path.join(bot, "ledger")), "bot clone checked out the store");
+    sh(bot, "config", "user.email", "bot@example.test");
+    sh(bot, "config", "user.name", "bot");
+    return { root, origin, bot };
+  }
+
+  /** The other writer publishes `event` while our clone stands stale. */
+  function botPublishes(bot, event) {
+    fs.appendFileSync(path.join(bot, "ledger", "bot.jsonl"), `${JSON.stringify(event)}\n`);
+    sh(bot, "add", "ledger/bot.jsonl");
+    sh(bot, "commit", "-q", "-m", "ledger(bot): concurrent write");
+    sh(bot, "push", "-q", "origin", "main");
+  }
+
+  function cliAppend(root, ...args) {
+    return spawnSync(
+      process.execPath,
+      [path.join(SKILL, "ledger.mjs"), "--root", root, "--session", "s1", "append", ...args],
+      { encoding: "utf8", env: { PATH: process.env.PATH, HOME: fs.mkdtempSync(path.join(os.tmpdir(), "nohome-")) } },
+    );
+  }
+
+  // The measured incident: a terminal event lands in another writer's
+  // file, and 86 seconds later a stale clone appends a work event the
+  // local fold genuinely allowed. The push is the only point where both
+  // lines are visible, so the push is where the interleave must die.
+  it("an append the merged fold forbids is refused, and withdrawn", () => {
+    const { root, origin, bot } = contendedStore();
+    botPublishes(bot, {
+      ev: "completed",
+      thread: "t",
+      by: "bot",
+      note: "closed by the loop",
+      at: "2026-01-01T00:10:00+00:00",
+      anchor: { session: "bot" },
+    });
+    const pushed = cliAppend(
+      root, "--ev", "progress", "--thread", "t", "--pct", "60", "--note", "stale write",
+    );
+    assert.equal(pushed.status, 1, "the push must refuse the interleave");
+    assert.match(pushed.stderr, /completed/);
+    assert.match(pushed.stderr, /not recorded|withdrawn/i);
+    // The clone is left clean at the remote state: no unpushed commit
+    // carrying an event nobody validated, nothing stranded.
+    const remoteTip = sh(root, "ls-remote", "origin", "main").split("\t")[0];
+    assert.equal(sh(root, "rev-parse", "HEAD").trim(), remoteTip);
+    // And the remote never saw the illegal line.
+    const shipped = sh(root, "show", `${remoteTip}:ledger/s1.jsonl`);
+    assert.doesNotMatch(shipped, /stale write/);
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(origin, { recursive: true, force: true });
+    fs.rmSync(bot, { recursive: true, force: true });
+  });
+
+  // Concurrency itself stays ordinary: another writer touching a
+  // DIFFERENT thread must not turn into a refusal, or every busy hour
+  // strands every session.
+  it("a benign concurrent write still merges and pushes", () => {
+    const { root, origin, bot } = contendedStore();
+    botPublishes(bot, {
+      ev: "opened",
+      thread: "other",
+      title: "another thread entirely",
+      ticket: "o/r#9",
+      by: "bot",
+      at: "2026-01-01T00:10:00+00:00",
+      anchor: { session: "bot" },
+    });
+    const result = cliAppend(root, "--ev", "progress", "--thread", "t", "--pct", "50");
+    assert.equal(result.status, 0, `benign merge refused: ${result.stderr}`);
+    const remoteTip = sh(root, "ls-remote", "origin", "main").split("\t")[0];
+    const shipped = sh(root, "show", `${remoteTip}:ledger/s1.jsonl`);
+    assert.match(shipped, /"pct":50/);
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(origin, { recursive: true, force: true });
+    fs.rmSync(bot, { recursive: true, force: true });
+  });
+});
+
 // ----------------------------------------------------------- publishing
 
 describe("PushCarriesTheStretch", () => {
