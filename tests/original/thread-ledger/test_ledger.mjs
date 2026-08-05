@@ -1954,6 +1954,7 @@ describe("PushCarriesTheStretch", () => {
     spawnSync("git", ["init", "-q", "--bare", origin], { encoding: "utf8" });
     sh("remote", "add", "origin", origin);
     fs.writeFileSync(path.join(root, "ledger", "s.jsonl"), `${JSON.stringify({ ev: "sealed" })}\n`);
+    fs.writeFileSync(path.join(root, "ledger", "s.name"), "the alpha build\n");
     fs.mkdirSync(path.join(root, "diligence"), { recursive: true });
     fs.writeFileSync(path.join(root, "diligence", "s.jsonl"), `${JSON.stringify({ cycle: 1 })}\n`);
 
@@ -1965,6 +1966,7 @@ describe("PushCarriesTheStretch", () => {
       { encoding: "utf8" },
     ).stdout;
     assert.match(shipped, /diligence\/s\.jsonl/);
+    assert.match(shipped, /ledger\/s\.name/);
     fs.rmSync(root, { recursive: true, force: true });
     fs.rmSync(origin, { recursive: true, force: true });
   });

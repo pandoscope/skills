@@ -374,8 +374,10 @@ export function append(root, session, event, transcript, sessionUrl) {
 /** Commit the session's files and push straight to the default branch. */
 export function push(root, session, summary) {
   git(root, "add", `ledger/${session}.jsonl`);
-  if (fs.existsSync(path.join(ledgerDir(root), `${session}.url`))) {
-    git(root, "add", `ledger/${session}.url`);
+  for (const sidecar of ["url", "name"]) {
+    if (fs.existsSync(path.join(ledgerDir(root), `${session}.${sidecar}`))) {
+      git(root, "add", `ledger/${session}.${sidecar}`);
+    }
   }
   // The heartbeat's raw stretch records. It writes them beside the seal
   // but never pushes, so this push is their only ride to the remote.
