@@ -2068,6 +2068,272 @@ describe("PipedOutput", () => {
   });
 });
 
+// ------------------------------------------------- concurrent writers
+
+describe("PushRefusesWhatTheMergeInvalidates", () => {
+  /** git in `dir`, throwing on failure. */
+  function sh(dir, ...args) {
+    const result = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8" });
+    assert.equal(result.status, 0, `git ${args.join(" ")} failed:\n${result.stderr}`);
+    return result.stdout;
+  }
+
+  /**
+   * A store with a bare origin, an opened thread pushed, and a second
+   * writer's clone standing by — the shape skills#78 measured live.
+   */
+  function contendedStore() {
+    const root = tempStore();
+    sh(root, "init", "-q", "-b", "main");
+    sh(root, "config", "user.email", "t@example.test");
+    sh(root, "config", "user.name", "t");
+    const origin = fs.mkdtempSync(path.join(os.tmpdir(), "ledger-origin-"));
+    // `-b main`, or the bare HEAD points at master while everything
+    // pushes main — and the bot's clone silently checks out nothing.
+    spawnSync("git", ["init", "-q", "--bare", "-b", "main", origin], { encoding: "utf8" });
+    sh(root, "remote", "add", "origin", origin);
+    writeLog(root, "s1", [
+      { ...opened("t"), at: "2026-01-01T00:00:00+00:00", anchor: { session: "s1", msg: 1 } },
+    ]);
+    fs.writeFileSync(path.join(root, "ledger", "s1.url"), "https://x.test/code/s1\n");
+    sh(root, "add", "-A");
+    sh(root, "commit", "-q", "-m", "seed");
+    sh(root, "push", "-q", "-u", "origin", "main");
+
+    const bot = fs.mkdtempSync(path.join(os.tmpdir(), "ledger-bot-"));
+    const cloned = spawnSync("git", ["clone", "-q", origin, bot], { encoding: "utf8" });
+    assert.equal(cloned.status, 0, `bot clone failed:\n${cloned.stderr}`);
+    assert.ok(fs.existsSync(path.join(bot, "ledger")), "bot clone checked out the store");
+    sh(bot, "config", "user.email", "bot@example.test");
+    sh(bot, "config", "user.name", "bot");
+    return { root, origin, bot };
+  }
+
+  /** The other writer publishes `event` while our clone stands stale. */
+  function botPublishes(bot, event) {
+    fs.appendFileSync(path.join(bot, "ledger", "bot.jsonl"), `${JSON.stringify(event)}\n`);
+    sh(bot, "add", "ledger/bot.jsonl");
+    sh(bot, "commit", "-q", "-m", "ledger(bot): concurrent write");
+    sh(bot, "push", "-q", "origin", "main");
+  }
+
+  function cliAppend(root, ...args) {
+    return spawnSync(
+      process.execPath,
+      [path.join(SKILL, "ledger.mjs"), "--root", root, "--session", "s1", "append", ...args],
+      { encoding: "utf8", env: { PATH: process.env.PATH, HOME: fs.mkdtempSync(path.join(os.tmpdir(), "nohome-")) } },
+    );
+  }
+
+  // The measured incident: a terminal event lands in another writer's
+  // file, and 86 seconds later a stale clone appends a work event the
+  // local fold genuinely allowed. The push is the only point where both
+  // lines are visible, so the push is where the interleave must die.
+  it("an append the merged fold forbids is refused, and withdrawn", () => {
+    const { root, origin, bot } = contendedStore();
+    botPublishes(bot, {
+      ev: "completed",
+      thread: "t",
+      by: "bot",
+      note: "closed by the loop",
+      at: "2026-01-01T00:10:00+00:00",
+      anchor: { session: "bot" },
+    });
+    const pushed = cliAppend(
+      root, "--ev", "progress", "--thread", "t", "--pct", "60", "--note", "stale write",
+    );
+    assert.equal(pushed.status, 1, "the push must refuse the interleave");
+    assert.match(pushed.stderr, /completed/);
+    assert.match(pushed.stderr, /not recorded|withdrawn/i);
+    // The clone is left clean at the remote state: no unpushed commit
+    // carrying an event nobody validated, nothing stranded.
+    const remoteTip = sh(root, "ls-remote", "origin", "main").split("\t")[0];
+    assert.equal(sh(root, "rev-parse", "HEAD").trim(), remoteTip);
+    // And the remote never saw the illegal line.
+    const shipped = sh(root, "show", `${remoteTip}:ledger/s1.jsonl`);
+    assert.doesNotMatch(shipped, /stale write/);
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(origin, { recursive: true, force: true });
+    fs.rmSync(bot, { recursive: true, force: true });
+  });
+
+  // Withdrawal is surgical. The commit that carries a refused event
+  // also carries whatever the heartbeat wrote since the last push —
+  // seal lines, diligence records — and those are observed state that
+  // must reach the store. Only the event is withdrawn; the rest ships.
+  it("withdrawing the event does not take the seal down with it", () => {
+    const { root, origin, bot } = contendedStore();
+    botPublishes(bot, {
+      ev: "completed",
+      thread: "t",
+      by: "bot",
+      at: "2026-01-01T00:10:00+00:00",
+      anchor: { session: "bot" },
+    });
+    // A seal the hook appended after the last push, still uncommitted —
+    // the recorder's commit will sweep it up alongside the event.
+    fs.appendFileSync(
+      path.join(root, "ledger", "s1.jsonl"),
+      `${JSON.stringify({ ev: "sealed", at: "2026-01-01T00:09:00+00:00", anchor: { session: "s1", msg: 1 } })}\n`,
+    );
+    const result = cliAppend(root, "--ev", "progress", "--thread", "t", "--pct", "60", "--note", "stale write");
+    assert.equal(result.status, 1);
+    const remoteTip = sh(root, "ls-remote", "origin", "main").split("\t")[0];
+    const shipped = sh(root, "show", `${remoteTip}:ledger/s1.jsonl`);
+    assert.match(shipped, /"ev":"sealed"/, "the seal must survive the withdrawal");
+    assert.doesNotMatch(shipped, /stale write/);
+    assert.equal(sh(root, "rev-parse", "HEAD").trim(), remoteTip);
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(origin, { recursive: true, force: true });
+    fs.rmSync(bot, { recursive: true, force: true });
+  });
+
+  // Concurrency itself stays ordinary: another writer touching a
+  // DIFFERENT thread must not turn into a refusal, or every busy hour
+  // strands every session.
+  it("a benign concurrent write still merges and pushes", () => {
+    const { root, origin, bot } = contendedStore();
+    botPublishes(bot, {
+      ev: "opened",
+      thread: "other",
+      title: "another thread entirely",
+      ticket: "o/r#9",
+      by: "bot",
+      at: "2026-01-01T00:10:00+00:00",
+      anchor: { session: "bot" },
+    });
+    const result = cliAppend(root, "--ev", "progress", "--thread", "t", "--pct", "50");
+    assert.equal(result.status, 0, `benign merge refused: ${result.stderr}`);
+    const remoteTip = sh(root, "ls-remote", "origin", "main").split("\t")[0];
+    const shipped = sh(root, "show", `${remoteTip}:ledger/s1.jsonl`);
+    assert.match(shipped, /"pct":50/);
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(origin, { recursive: true, force: true });
+    fs.rmSync(bot, { recursive: true, force: true });
+  });
+});
+
+// ---------------------------------------------------------- store guard
+
+describe("LedgerGuard", () => {
+  function sh(dir, ...args) {
+    const result = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8" });
+    assert.equal(result.status, 0, `git ${args.join(" ")} failed:\n${result.stderr}`);
+    return result.stdout;
+  }
+
+  function commitAll(root, message) {
+    sh(root, "add", "-A");
+    sh(root, "-c", "user.email=t@example.test", "-c", "user.name=t", "commit", "-q", "-m", message);
+    return sh(root, "rev-parse", "HEAD").trim();
+  }
+
+  /** A store repo with one seeded commit: opened + progress on `t`. */
+  function guardStore() {
+    const root = tempStore();
+    sh(root, "init", "-q", "-b", "main");
+    writeLog(root, "s1", [
+      { ...opened("t"), at: "2026-01-01T00:00:00+00:00", anchor: { session: "s1", msg: 1 } },
+      { ev: "progress", thread: "t", pct: 40, at: "2026-01-01T00:01:00+00:00", anchor: { session: "s1", msg: 1 } },
+    ]);
+    const seed = commitAll(root, "seed");
+    return { root, seed };
+  }
+
+  function guard(root, range) {
+    return spawnSync(
+      process.execPath,
+      [path.join(SKILL, "ledger.mjs"), "--root", root, "guard", "--range", range],
+      { encoding: "utf8", env: { PATH: process.env.PATH, HOME: fs.mkdtempSync(path.join(os.tmpdir(), "nohome-")) } },
+    );
+  }
+
+  const logPath = (root) => path.join(root, "ledger", "s1.jsonl");
+
+  // The #79 incident: two routine git commands removed a published line
+  // and nothing anywhere objected. The guard is the thing that objects.
+  it("a push that removes a ledger line is rejected, naming it", () => {
+    const { root, seed } = guardStore();
+    const lines = fs.readFileSync(logPath(root), "utf8").split("\n").filter((l) => l.trim());
+    fs.writeFileSync(logPath(root), `${lines[0]}\n`, "utf8");
+    const bad = commitAll(root, "conflict resolution gone wrong");
+    const result = guard(root, `${seed}..${bad}`);
+    assert.equal(result.status, 1);
+    assert.match(result.stdout, /removed/i);
+    assert.match(result.stdout, /ledger\/s1\.jsonl/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("a removed diligence record is rejected too — raw records are retained data", () => {
+    const { root, seed } = guardStore();
+    fs.mkdirSync(path.join(root, "diligence"), { recursive: true });
+    fs.writeFileSync(path.join(root, "diligence", "s1.jsonl"), `${JSON.stringify({ cycle: 1 })}\n`);
+    const withRecords = commitAll(root, "flush");
+    fs.writeFileSync(path.join(root, "diligence", "s1.jsonl"), "", "utf8");
+    const bad = commitAll(root, "oops");
+    const result = guard(root, `${withRecords}..${bad}`);
+    assert.equal(result.status, 1);
+    assert.match(result.stdout, /diligence\/s1\.jsonl/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  // The #78 shape, after the fact: the union of two writers' files holds
+  // a transition nobody validated. CI folds what actually landed.
+  it("an added event that is illegal from its history is rejected", () => {
+    const { root, seed } = guardStore();
+    fs.appendFileSync(
+      logPath(root),
+      `${JSON.stringify({ ev: "completed", thread: "t", at: "2026-01-01T00:02:00+00:00", anchor: { session: "s1", msg: 2 } })}\n`,
+    );
+    const closed = commitAll(root, "close");
+    fs.appendFileSync(
+      logPath(root),
+      `${JSON.stringify({ ev: "progress", thread: "t", pct: 60, at: "2026-01-01T00:03:00+00:00", anchor: { session: "s1", msg: 3 } })}\n`,
+    );
+    const bad = commitAll(root, "stale interleave");
+    const result = guard(root, `${closed}..${bad}`);
+    assert.equal(result.status, 1);
+    assert.match(result.stdout, /completed/);
+    assert.match(result.stdout, /progress/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("an ordinary append passes, and says what it checked", () => {
+    const { root, seed } = guardStore();
+    fs.appendFileSync(
+      logPath(root),
+      `${JSON.stringify({ ev: "blocked", thread: "t", on: "internal", what: "waiting", at: "2026-01-01T00:02:00+00:00", anchor: { session: "s1", msg: 2 } })}\n`,
+    );
+    const good = commitAll(root, "append");
+    const result = guard(root, `${seed}..${good}`);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /1 added/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  // The corpus already holds one illegal interleave from before the
+  // guard existed. History is not this push's fault: only lines ADDED
+  // in the range are judged, so the guard can turn on without a
+  // history rewrite — which the deletion rule itself forbids.
+  it("an old illegal transition does not fail a clean push", () => {
+    const { root } = guardStore();
+    fs.appendFileSync(
+      logPath(root),
+      `${JSON.stringify({ ev: "completed", thread: "t", at: "2026-01-01T00:02:00+00:00", anchor: { session: "s1", msg: 2 } })}\n` +
+        `${JSON.stringify({ ev: "progress", thread: "t", pct: 70, at: "2026-01-01T00:03:00+00:00", anchor: { session: "s1", msg: 3 } })}\n`,
+    );
+    const historic = commitAll(root, "the pre-guard corpus, interleave and all");
+    fs.appendFileSync(
+      logPath(root),
+      `${JSON.stringify({ ev: "progress", thread: "t", pct: 80, at: "2026-01-01T00:04:00+00:00", anchor: { session: "s1", msg: 4 } })}\n`,
+    );
+    const clean = commitAll(root, "a legal append on top");
+    const result = guard(root, `${historic}..${clean}`);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+});
+
 // ----------------------------------------------------------- publishing
 
 describe("PushCarriesTheStretch", () => {

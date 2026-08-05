@@ -372,7 +372,7 @@ export function append(root, session, event, transcript, sessionUrl) {
 }
 
 /** Commit the session's files and push straight to the default branch. */
-export function push(root, session, summary) {
+export function push(root, session, summary, event = null) {
   git(root, "add", `ledger/${session}.jsonl`);
   for (const sidecar of ["url", "name"]) {
     if (fs.existsSync(path.join(ledgerDir(root), `${session}.${sidecar}`))) {
@@ -395,7 +395,84 @@ export function push(root, session, summary) {
     "-m",
     `ledger(${session}): ${summary}`,
   );
-  pushWithRebase(root, session);
+  pushWithRebase(root, session, event);
+}
+
+/**
+ * Refuse the push when the merge invalidated the event (skills#78).
+ *
+ * Append validated against the LOCAL fold, which was honest about
+ * everything the clone had — but a concurrent writer lands in its own
+ * file, the rebase merges cleanly, and the union can hold a transition
+ * nobody validated (measured: a bot's `completed`, then a stale
+ * session's `progress` 86 seconds later, silently overriding the
+ * close). The rebase is the only point where both lines are visible,
+ * so this is where the event is checked against the MERGED history —
+ * and withdrawn if the union forbids it, because pushing it would
+ * publish a fold no writer ever approved.
+ */
+function refuseIfMergeInvalidated(root, session, event) {
+  if (!event) return null;
+  const line = JSON.stringify(event);
+  const history = [];
+  let seen = false;
+  for (const item of readAll(root)) {
+    // The event's own line is excluded once — it is the candidate, not
+    // the history it is judged against.
+    if (!seen && JSON.stringify(item) === line) {
+      seen = true;
+      continue;
+    }
+    history.push(item);
+  }
+  try {
+    validate(event, history);
+    return null;
+  } catch (err) {
+    if (!(err instanceof LedgerError)) throw err;
+    // Withdraw the EVENT, not the commit: the same commit carries
+    // whatever the heartbeat wrote since the last push — seal lines,
+    // diligence records — and that is observed state the store must
+    // keep. The event's line is removed, the commit amended, and the
+    // loop pushes the rest.
+    const file = path.join(ledgerDir(root), `${session}.jsonl`);
+    const kept = fs
+      .readFileSync(file, "utf8")
+      .split("\n")
+      .filter((text) => text.trim());
+    const at = kept.lastIndexOf(line);
+    if (at >= 0) kept.splice(at, 1);
+    fs.writeFileSync(file, kept.join("\n") + (kept.length ? "\n" : ""), "utf8");
+    git(root, "add", `ledger/${session}.jsonl`);
+    git(
+      root,
+      "-c",
+      "user.email=noreply@anthropic.com",
+      "-c",
+      "user.name=thread-ledger",
+      "commit",
+      "-q",
+      "--amend",
+      "--no-edit",
+      // The commit may have carried nothing BUT the event; what remains
+      // is empty, and it is dropped just below rather than published as
+      // a commit that records nothing.
+      "--allow-empty",
+    );
+    try {
+      git(root, "diff", "--quiet", "HEAD^", "HEAD");
+      git(root, "reset", "-q", "--hard", "HEAD^");
+    } catch {
+      // Non-empty: the seals and records the commit carried stay in it.
+    }
+    return new LedgerError(
+      `the push was refused and the event WITHDRAWN — it is not recorded. ` +
+        `While this clone was stale, another writer changed the thread, and ` +
+        `against the merged history the event is illegal: ${err.message}\n\n` +
+        `Everything else the commit carried was pushed. Re-read the fold ` +
+        `(ledger state) and append an event that is legal from it.`,
+    );
+  }
 }
 
 /**
@@ -407,12 +484,18 @@ export function push(root, session, summary) {
  * stamp order. Failing here would leave an event written locally and
  * invisible to everyone else.
  */
-function pushWithRebase(root, session, attempts = 3) {
+function pushWithRebase(root, session, event = null, attempts = 3) {
+  let withdrawal = null;
   for (let attempt = 1; ; attempt += 1) {
     try {
       git(root, "push", "-q", "origin", "HEAD:main");
+      // The push carried everything that survived; a withdrawal is
+      // reported only now, so the refusal never strands the seal lines
+      // and diligence records that shared the commit.
+      if (withdrawal) throw withdrawal;
       return;
     } catch (err) {
+      if (err === withdrawal) throw err;
       if (attempt >= attempts) {
         throw new LedgerError(
           `${err.message}\n\nThe event IS written and committed locally; only ` +
@@ -422,6 +505,13 @@ function pushWithRebase(root, session, attempts = 3) {
       }
       git(root, "fetch", "-q", "origin", "main");
       rebaseOntoRemote(root, session);
+      // A lost race means the clone was stale — the one condition under
+      // which the local validation may have approved an event the whole
+      // history forbids. Checked once; after a withdrawal the event is
+      // gone from the file and there is nothing left to judge.
+      if (!withdrawal) {
+        withdrawal = refuseIfMergeInvalidated(root, session, event);
+      }
     }
   }
 }
@@ -459,6 +549,105 @@ function rebaseOntoRemote(root, session) {
     "rebase",
     "--continue",
   );
+}
+
+// -------------------------------------------------------------- guard
+
+/**
+ * The store guard: judge what a push did to the append-only corpus.
+ *
+ * Two rules, both from measured incidents (skills#79, skills#78):
+ *
+ * - No push removes a line from `ledger/*.jsonl` or `diligence/*.jsonl`.
+ *   The log is append-only and the raw records are retained data; a
+ *   deletion is a deletion however it arose — hand edit, bad rebase,
+ *   `checkout --theirs` in a conflict, force push.
+ * - Every event ADDED in the range must be legal from the history that
+ *   precedes it in the folded order. Two writers' files merge cleanly
+ *   in git, so the union can hold a transition nobody validated; this
+ *   is where the union is finally judged. Only added lines are judged —
+ *   history from before the guard is not this push's fault, and the
+ *   deletion rule itself forbids the rewrite that would clean it.
+ *
+ * @param root the store checkout, at the range's end state
+ * @param range a git revision range, e.g. `«before»..«after»`
+ * @returns {{ok: boolean, report: string}} — `report` names every
+ *   violation, or summarises what was checked
+ * @throws LedgerError when git cannot resolve the range
+ */
+export function guardRange(root, range) {
+  const diff = git(
+    root,
+    "diff",
+    "--unified=0",
+    range,
+    "--",
+    "ledger/*.jsonl",
+    "diligence/*.jsonl",
+  );
+  const removed = [];
+  const added = [];
+  let file = null;
+  for (const line of diff.split("\n")) {
+    if (line.startsWith("--- a/")) {
+      file = line.slice(6);
+      continue;
+    }
+    if (line.startsWith("+++ b/")) {
+      if (line !== "+++ /dev/null") file = line.slice(6);
+      continue;
+    }
+    if (line.startsWith("---") || line.startsWith("+++")) continue;
+    if (line.startsWith("-") && line.slice(1).trim()) {
+      removed.push({ file, text: line.slice(1) });
+    } else if (line.startsWith("+") && line.slice(1).trim()) {
+      added.push({ file, text: line.slice(1) });
+    }
+  }
+
+  const violations = removed.map(
+    (item) => `removed from ${item.file}: ${item.text.slice(0, 120)}`,
+  );
+
+  // Judge each added event against the history preceding it in the
+  // folded order of the checkout — the same order every reader uses.
+  const events = readAll(root);
+  const lines = events.map((event) => JSON.stringify(event));
+  const consumed = new Set();
+  for (const item of added) {
+    if (!item.file.startsWith("ledger/")) continue;
+    let event;
+    try {
+      event = JSON.parse(item.text);
+    } catch {
+      violations.push(`unparsable line added to ${item.file}: ${item.text.slice(0, 120)}`);
+      continue;
+    }
+    if (!event?.ev) continue;
+    let at = -1;
+    for (let index = 0; index < lines.length; index += 1) {
+      if (!consumed.has(index) && lines[index] === item.text.trim()) {
+        at = index;
+        break;
+      }
+    }
+    if (at < 0) continue; // Rewritten again later in the range; the final state carries it or the removal rule already fired.
+    consumed.add(at);
+    try {
+      validate(event, events.slice(0, at));
+    } catch (err) {
+      if (!(err instanceof LedgerError)) throw err;
+      violations.push(`illegal event added to ${item.file}: ${err.message}`);
+    }
+  }
+
+  if (violations.length) {
+    return { ok: false, report: violations.join("\n") + "\n" };
+  }
+  return {
+    ok: true,
+    report: `guard: clean — ${added.length} added, 0 removed across ${range}\n`,
+  };
 }
 
 // -------------------------------------------------------------- pages
@@ -559,7 +748,7 @@ const CRASH_CSS = `
 const FLAGS = [
   "root", "session", "transcript", "session-url", "ev", "thread", "title",
   "ticket", "parent", "deps", "urgency", "importance", "pct", "note", "on",
-  "what", "trigger", "out", "format", "by",
+  "what", "trigger", "out", "format", "by", "range",
 ];
 const BOOLS = ["conversation-only", "no-push"];
 
@@ -626,6 +815,7 @@ const USAGE = `ledger — a session's open-work record
                 [--by bot] [--no-push]
   ledger state
   ledger render --out <file> [--format html|md] [--title …] [--session-url …]
+  ledger guard --range <before>..<after>   # append-only + fold guard, for store CI
 
 Global: --root <dir> --session <name> --session-url <url> --transcript <file>
 Store: SESSION_MEMORY_URL (required; unset fails)`;
@@ -661,8 +851,15 @@ export function main(argv) {
     // Printed before the push, because the write already happened: a
     // push that fails must not make a recorded event look unrecorded.
     process.stdout.write(`${JSON.stringify(stamped)}\n`);
-    if (!opts["no-push"]) push(root, session, `${stamped.ev} ${stamped.thread}`);
+    if (!opts["no-push"]) push(root, session, `${stamped.ev} ${stamped.thread}`, stamped);
     return 0;
+  }
+
+  if (cmd === "guard") {
+    if (!opts.range) throw new LedgerError("guard needs --range <before>..<after>");
+    const { ok, report } = guardRange(root, opts.range);
+    process.stdout.write(report);
+    return ok ? 0 : 1;
   }
 
   const events = readAll(root);
