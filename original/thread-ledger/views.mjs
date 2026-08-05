@@ -131,30 +131,46 @@ button.stat{font:inherit;font-family:ui-monospace,SFMono-Regular,Menlo,monospace
 .thread.t-important{border-color:var(--t-yellow);box-shadow:inset 3px 0 0 var(--t-yellow)}
 .t-blocking-urgent .pill{color:var(--t-red);border-color:currentColor;font-weight:600}
 .t-blocking-important .pill{color:var(--t-red-soft);border-color:currentColor}
-/* The sessions section: chips pick a session, its stretches unfold
-   beneath, and the thread lists below filter to it. Stretch rules stay
+/* The sessions section: one head carries the selected session's
+   identity and totals and IS the picker; the dropdown lists every
+   session (and the overview) with names beside ids; beneath, only the
+   last seal shows, the whole run behind one expand. Stretch rules stay
    quiet when clean — amber marks a reminded stretch, red a gave-up,
    and everything else is dim monospace a reader scans, not reads. */
 .sessions{margin:0 0 1.5rem;display:flex;flex-direction:column;gap:.5rem}
-.chips{display:flex;flex-wrap:wrap;gap:.35rem}
-.chip{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.72rem;
-  border:1px solid var(--line);background:var(--panel);color:var(--dim);
-  border-radius:999px;padding:.15rem .6rem;cursor:pointer;max-width:14rem;
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.chip:hover{border-color:var(--accent);color:var(--accent)}
-.chip.on{border-color:var(--accent);color:var(--accent);background:var(--fill)}
-/* Older sessions accumulate behind the toggle, not across the header.
-   Without the script the toggle is inert, but every session's BLOCK is
-   still on the page — only the shortcut chips are folded. */
-.chip.overflow{display:none}
-.chips.open .chip.overflow{display:inline-block}
-.chip.toggle{border-style:dashed}
+.picker{position:relative}
+.picker>summary{list-style:none;cursor:pointer;display:flex;align-items:center;
+  gap:.6rem;border:1px solid var(--line);background:var(--panel);
+  border-radius:7px;padding:.45rem .65rem}
+.picker>summary::-webkit-details-marker{display:none}
+.picker>summary:hover{border-color:var(--accent)}
+.sesshead{display:none;align-items:baseline;gap:.35rem .7rem;flex:1;min-width:0;
+  flex-wrap:wrap}
+.sesshead.on{display:flex}
+.sname{font-weight:600;white-space:nowrap}
+.sid{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.72rem;
+  color:var(--dim);white-space:nowrap}
+.stotals{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.74rem;
+  color:var(--dim)}
+.caret{color:var(--dim);flex:none;font-size:.7rem}
+.options{position:absolute;left:0;right:0;top:calc(100% + .3rem);z-index:40;
+  margin:0;padding:.25rem;list-style:none;border:1px solid var(--line);
+  border-radius:8px;background:var(--panel);
+  box-shadow:0 10px 30px rgb(0 0 0 / .18);display:flex;flex-direction:column;
+  max-height:60vh;overflow:auto}
+.opt{font:inherit;text-align:left;display:flex;align-items:baseline;
+  gap:.35rem .7rem;flex-wrap:wrap;width:100%;border:0;background:none;
+  color:var(--fg);border-radius:6px;padding:.4rem .5rem;cursor:pointer}
+.opt:hover{background:var(--fill)}
+.opt b{white-space:nowrap}
+.oid{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.72rem;
+  color:var(--dim)}
+.ototals{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.72rem;
+  color:var(--dim);margin-left:auto}
 .sess{border:1px solid var(--line);border-radius:7px;background:var(--panel);
   padding:.35rem .55rem}
-.rollup{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.74rem;
-  color:var(--dim);display:flex;flex-wrap:wrap;gap:.3rem .8rem}
-.rollup b{color:var(--fg);font-weight:600}
-.rules>summary{font-size:.72rem;color:var(--dim);cursor:pointer;margin-top:.25rem}
+.allseals>summary{font-size:.72rem;color:var(--dim);cursor:pointer;
+  padding:.1rem 0 .25rem}
 .stretchlist{list-style:none;margin:.35rem 0 0;padding:0;display:flex;
   flex-direction:column;gap:.15rem}
 .stretch{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;
@@ -628,9 +644,6 @@ function summary(open, closed) {
 
 // ---------------------------------------------------------- stretches
 
-/** How many of a session's newest stretch rows show before folding. */
-const RECENT_STRETCHES = 12;
-
 /** A compact count: 950, 12.6k, 3.4M. */
 export function fmtTokens(value) {
   if (value < 1000) return String(value);
@@ -773,33 +786,84 @@ function stretchItems(entry, medians) {
   return items;
 }
 
-/** A session's aggregate line: how the whole session went, in one scan. */
-function rollupHtml(entry) {
-  const digests = entry.stretches.map((stretch) => stretch.digest).filter(Boolean);
+/** A stretch list's aggregate numbers, shared by every head. */
+function totalsText(stretches) {
+  const digests = stretches.map((stretch) => stretch.digest).filter(Boolean);
   const parts = [];
   if (digests.length) {
-    const turns = sum(digests.map((digest) => digest.turns));
-    parts.push(`<span><b>${plural(turns, "turn")}</b></span>`);
+    parts.push(plural(sum(digests.map((digest) => digest.turns)), "turn"));
     const clean = digests.filter((digest) => !remindersOf(digest) && !gaveUpsOf(digest)).length;
-    parts.push(`<span><b>${Math.round((clean / digests.length) * 100)}%</b> clean</span>`);
+    parts.push(`${Math.round((clean / digests.length) * 100)}% clean`);
     const reminders = sum(digests.map(remindersOf));
-    if (reminders) parts.push(`<span class="remind"><b>${reminders}</b> reminders</span>`);
+    if (reminders) parts.push(plural(reminders, "reminder"));
     const gaveUps = sum(digests.map(gaveUpsOf));
-    if (gaveUps) parts.push(`<span class="gaveup"><b>${gaveUps}</b> gave up</span>`);
+    if (gaveUps) parts.push(`gave up ×${gaveUps}`);
     const totals = digests.map(totalTokens).filter((value) => value !== null);
-    if (totals.length) parts.push(`<span><b>${fmtTokens(sum(totals))}</b> tok</span>`);
+    if (totals.length) parts.push(`${fmtTokens(sum(totals))} tok`);
     const gaps = digests.length - totals.length;
-    if (gaps) parts.push(`<span class="gap">${plural(gaps, "gap")}</span>`);
+    if (gaps) parts.push(plural(gaps, "gap"));
   }
-  const spans = entry.stretches.map((stretch) => stretch.spanMs).filter((ms) => ms !== null);
-  if (spans.length) parts.push(`<span><b>${fmtSpan(sum(spans))}</b></span>`);
-  const legacy = entry.stretches.length - digests.length;
-  if (legacy) parts.push(`<span>${plural(legacy, "stretch")} · no digest</span>`);
-  return `<div class="rollup">${parts.join("")}</div>`;
+  const spans = stretches.map((stretch) => stretch.spanMs).filter((ms) => ms !== null);
+  if (spans.length) parts.push(fmtSpan(sum(spans)));
+  const legacy = stretches.length - digests.length;
+  if (legacy) parts.push(`${plural(legacy, "stretch")} · no digest`);
+  return parts.join(" · ");
 }
 
-/** One session's block: rollup always, rules behind a disclosure. */
-function sessionBlock(entry, current) {
+/** The short form of a session id: its distinguishing tail. */
+function shortId(session) {
+  return session.length <= 14 ? session : `…${session.slice(-6)}`;
+}
+
+/** The overview pseudo-session: every stretch, in stamp order. */
+function overviewEntry(sessions) {
+  const stretches = sessions
+    .flatMap((entry) => entry.stretches)
+    .sort((a, b) => ((a.at ?? "") < (b.at ?? "") ? -1 : 1));
+  return { session: "", stretches, tail: null };
+}
+
+/** What an entry is called: its name sidecar, its id tail, or "all". */
+function labelOf(entry, names) {
+  if (entry.session === "") return "all sessions";
+  return names[entry.session] ?? shortId(entry.session);
+}
+
+/**
+ * One head: identity plus totals, shown only while selected.
+ *
+ * Every entry's head is in the markup and the script swaps which one
+ * shows, so picking a session never recomputes anything — the numbers
+ * a head carries were all rendered from the same fold.
+ */
+function sessionHead(entry, names, on) {
+  const named = entry.session !== "" && names[entry.session];
+  const id = named ? `<span class="sid">${esc(shortId(entry.session))}</span>` : "";
+  const title = entry.session === "" ? "every session" : entry.session;
+  return (
+    `<span class="sesshead${on ? " on" : ""}" data-session="${esc(entry.session)}"` +
+    ` title="${esc(title)}"><b class="sname">${esc(labelOf(entry, names))}</b>${id}` +
+    `<span class="stotals">${esc(totalsText(entry.stretches))}</span></span>`
+  );
+}
+
+/** One dropdown row: name, id, and the entry's totals at a glance. */
+function sessionOption(entry, names) {
+  const id = entry.session === "" ? "" : `<span class="oid">${esc(entry.session)}</span>`;
+  return (
+    `<li><button class="opt" data-session="${esc(entry.session)}" type="button">` +
+    `<b>${esc(labelOf(entry, names))}</b>${id}` +
+    `<span class="ototals">${esc(totalsText(entry.stretches))}</span></button></li>`
+  );
+}
+
+/**
+ * One entry's block: the last seal in the open, the run behind one
+ * expand. The tail — a turn whose bookkeeping never finished — stays
+ * beside the last seal, never folded: it is the row that most needs a
+ * reader.
+ */
+function sessionBlock(entry) {
   const digested = entry.stretches.filter((stretch) => stretch.digest);
   const medians = {
     count: digested.length,
@@ -808,20 +872,21 @@ function sessionBlock(entry, current) {
     ),
     span: median(entry.stretches.map((stretch) => stretch.spanMs).filter((ms) => ms !== null)),
   };
-  const items = stretchItems(entry, medians);
-  const recent = items.slice(-RECENT_STRETCHES);
-  const older = items.slice(0, -RECENT_STRETCHES);
-  const folded = older.length
-    ? `<details class="older"><summary>earlier stretches (${older.length})</summary>` +
-      `<ol class="stretchlist">${older.join("")}</ol></details>`
+  let rows = stretchItems(entry, medians);
+  let tailRow = "";
+  if (entry.tail) {
+    tailRow = rows[rows.length - 1];
+    rows = rows.slice(0, -1);
+  }
+  const visible = rows.slice(-1);
+  const folded = rows.slice(0, -1);
+  const expand = folded.length
+    ? `<details class="allseals"><summary>all ${entry.stretches.length} stretches</summary>` +
+      `<ol class="stretchlist">${folded.join("")}</ol></details>`
     : "";
   return (
-    `<div class="sess" data-session="${esc(entry.session)}">${rollupHtml(entry)}` +
-    `<details class="rules"${current ? " open" : ""}>` +
-    `<summary>stretches (${entry.stretches.length})</summary>` +
-    folded +
-    `<ol class="stretchlist">${recent.join("")}</ol>` +
-    `</details></div>`
+    `<div class="sess" data-session="${esc(entry.session)}">${expand}` +
+    `<ol class="stretchlist">${visible.join("")}${tailRow}</ol></div>`
   );
 }
 
@@ -846,47 +911,20 @@ function currentSession(sessions, sessionUrl) {
  * (wired in page.mjs; the markup is inert without the script, and every
  * block stays readable because visibility is the script's only job).
  */
-/** How many session chips show before the rest fold behind a toggle. */
-const RECENT_CHIPS = 4;
-
-/**
- * A chip's text: the raw name while it is short, date + id tail once it
- * is not. Session ids accumulate and none of their length carries
- * information a reader scans by — the day it was live and the tail that
- * disambiguates it do. The full name stays in the tooltip.
- */
-function chipLabel(entry) {
-  const name = entry.session;
-  if (name.length <= 14) return esc(name);
-  const last = entry.stretches[entry.stretches.length - 1];
-  const date = last?.at ? `${last.at.slice(5, 10)} ·` : "";
-  return `${esc(date)}…${esc(name.slice(-6))}`;
-}
-
-function stretchesSection(events, sessionUrl, diligence) {
+function stretchesSection(events, sessionUrl, diligence, names) {
   const sessions = stretchesOf(events, diligence);
   if (!sessions.some((entry) => entry.stretches.length)) return "";
   const current = currentSession(sessions, sessionUrl);
-  const chips = [
-    `<button class="chip" data-session="" type="button">all</button>`,
-    ...sessions.map((entry, index) => {
-      const on = entry.session === current ? " on" : "";
-      // The newest chips show; older sessions accumulate behind the
-      // toggle instead of wrapping the header into a wall of ids.
-      const overflow = !on && index >= RECENT_CHIPS ? " overflow" : "";
-      return (
-        `<button class="chip${on}${overflow}" data-session="${esc(entry.session)}"` +
-        ` title="${esc(entry.session)}" type="button">${chipLabel(entry)}</button>`
-      );
-    }),
-  ];
-  const hidden = (chips.join("").match(/class="chip overflow"/g) ?? []).length;
-  if (hidden) {
-    chips.push(`<button class="chip toggle" type="button">+${hidden} older</button>`);
-  }
+  const entries = [overviewEntry(sessions), ...sessions];
+  const heads = entries
+    .map((entry) => sessionHead(entry, names, entry.session === current))
+    .join("");
+  const options = entries.map((entry) => sessionOption(entry, names)).join("");
   return (
-    `<section class="sessions"><div class="chips">${chips.join("")}</div>` +
-    sessions.map((entry) => sessionBlock(entry, entry.session === current)).join("") +
+    `<section class="sessions"><details class="picker">` +
+    `<summary>${heads}<span class="caret">▾</span></summary>` +
+    `<ul class="options">${options}</ul></details>` +
+    entries.map((entry) => sessionBlock(entry)).join("") +
     `</section>`
   );
 }
@@ -899,13 +937,13 @@ function stretchesSection(events, sessionUrl, diligence) {
  * `events` carries the raw log for the parts folding drops — the seal
  * sequence the stretches section reads.
  */
-export function renderBody(threads, title, nowMsg = null, codes = {}, sessionUrl = null, events = [], diligence = []) {
+export function renderBody(threads, title, nowMsg = null, codes = {}, sessionUrl = null, events = [], diligence = [], names = {}) {
   const open = orderOpen(threads);
   const closed = orderClosed(threads);
   return (
     `<header><h1>${esc(title)}</h1>${summary(open, closed)}` +
     `</header>` +
-    stretchesSection(events, sessionUrl, diligence) +
+    stretchesSection(events, sessionUrl, diligence, names) +
     `<main><ol class="threads">` +
     open.map((thread) => openRow(thread, nowMsg, codes, sessionUrl)).join("") +
     `</ol><hr><ol class="threads done">` +

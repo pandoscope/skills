@@ -32,9 +32,10 @@ export function boot(root = document) {
     data.session_url ?? null,
     data.events,
     data.diligence ?? [],
+    data.names ?? {},
   );
   root.getElementById("crash")?.remove();
-  wireSessionChips(root);
+  wireSessionPicker(root);
   wire(root);
   fitAll(root);
   paint(root);
@@ -43,49 +44,47 @@ export function boot(root = document) {
 }
 
 /**
- * One selector, both roles: a chip shows its session's stretches and
- * filters the thread lists to that session.
+ * One selector, three roles: the head names the selected session and
+ * its totals, opens the dropdown, and the choice filters the thread
+ * lists to that session.
  *
  * Pure show/hide over data attributes — the fold, the ordering and the
- * summary stay those of the whole store, so what a chip changes is
- * visibility, never truth. Rows without data-sessions (threads whose
- * events carry no anchors) stay visible under every chip: absence of
- * provenance must not read as absence of work. The rendering session's
- * chip is pre-selected in the markup, so boot applies it once; without
- * the script every block stays readable, just unfiltered.
+ * summary stay those of the whole store, so what a pick changes is
+ * visibility, never truth. Every entry's head and block are in the
+ * markup already; the script only swaps which one shows. Rows without
+ * data-sessions (threads whose events carry no anchors) stay visible
+ * under every pick: absence of provenance must not read as absence of
+ * work. Without the script the dropdown still opens (it is a details)
+ * and every block is readable, just unfiltered.
  */
-function wireSessionChips(root) {
-  const chips = [...root.querySelectorAll(".chip")];
-  if (!chips.length) return;
+function wireSessionPicker(root) {
+  const picker = root.querySelector("details.picker");
+  if (!picker) return;
   const apply = (wanted) => {
-    for (const chip of chips) {
-      chip.classList.toggle("on", chip.getAttribute("data-session") === wanted);
+    for (const head of root.querySelectorAll(".sesshead")) {
+      head.classList.toggle("on", head.getAttribute("data-session") === wanted);
     }
     for (const block of root.querySelectorAll(".sess")) {
-      const mine = block.getAttribute("data-session") === wanted;
-      block.style.display = !wanted || mine ? "" : "none";
-      const rules = block.querySelector("details.rules");
-      if (rules) rules.open = Boolean(wanted && mine);
+      block.style.display = block.getAttribute("data-session") === wanted ? "" : "none";
     }
     for (const row of root.querySelectorAll(".thread")) {
       const from = row.getAttribute("data-sessions");
       row.style.display =
         !wanted || !from || from.split(" ").includes(wanted) ? "" : "none";
     }
+    picker.open = false;
   };
-  for (const chip of chips) {
-    if (chip.classList.contains("toggle")) {
-      chip.addEventListener("click", () => {
-        const open = chip.closest(".chips").classList.toggle("open");
-        chip.textContent = open ? "fewer" : chip.getAttribute("data-more");
-      });
-      chip.setAttribute("data-more", chip.textContent);
-      continue;
-    }
-    chip.addEventListener("click", () => apply(chip.getAttribute("data-session")));
+  for (const option of root.querySelectorAll(".opt")) {
+    option.addEventListener("click", (e) => {
+      e.preventDefault();
+      apply(option.getAttribute("data-session"));
+    });
   }
-  const selected = chips.find((chip) => chip.classList.contains("on"));
-  if (selected) apply(selected.getAttribute("data-session"));
+  addEventListener("click", (e) => {
+    if (picker.open && !picker.contains(e.target)) picker.open = false;
+  });
+  const selected = root.querySelector(".sesshead.on");
+  apply(selected ? selected.getAttribute("data-session") : "");
 }
 
 function readData(root) {

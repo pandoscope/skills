@@ -1849,14 +1849,17 @@ describe("StretchesSection", () => {
       }),
     ];
     const html = body(events, "https://x.test/code/s1");
-    const rows = html.match(/<li class="stretch[^"]*"/g);
+    // Scoped to the session's own block: the overview block renders the
+    // same stretches once more, deliberately.
+    const block = html.match(/<div class="sess" data-session="s1">[\s\S]*?<\/ol><\/div>/)[0];
+    const rows = block.match(/<li class="stretch[^"]*"/g);
     assert.deepEqual(rows, [
       '<li class="stretch"',
       '<li class="stretch st-remind"',
       '<li class="stretch st-gaveup"',
     ]);
-    assert.match(html, /2 reminders/);
-    assert.match(html, /gave up/);
+    assert.match(block, /2 reminders/);
+    assert.match(block, /gave up/);
   });
 
   it("a run of digest-less seals collapses to one legacy line", () => {
@@ -1868,8 +1871,9 @@ describe("StretchesSection", () => {
       sessEvent("s1", 4, { ev: "sealed", diligence: sealDigest() }),
     ];
     const html = body(events, "https://x.test/code/s1");
-    assert.match(html, /3 stretches · no digest/);
-    assert.equal(html.match(/<li class="stretch"/g).length, 1);
+    const block = html.match(/<div class="sess" data-session="s1">[\s\S]*?<\/ol><\/div>/)[0];
+    assert.match(block, /3 stretches · no digest/);
+    assert.equal(block.match(/<li class="stretch"/g).length, 1);
   });
 
   it("a reset digest renders as a gap, never as zero", () => {

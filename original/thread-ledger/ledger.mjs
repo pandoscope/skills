@@ -131,6 +131,24 @@ function ledgerDir(root) {
 }
 
 /**
+ * Human names for sessions, from `ledger/<session>.name` sidecars.
+ *
+ * A session's id identifies it; a name is what a reader recognises it
+ * by. The sidecar is written by whoever wants the name — principal or
+ * session — and absence simply renders the id.
+ */
+export function readNames(root) {
+  const dir = ledgerDir(root);
+  if (!fs.existsSync(dir)) return {};
+  const names = {};
+  for (const file of fs.readdirSync(dir).filter((name) => name.endsWith(".name"))) {
+    const text = fs.readFileSync(path.join(dir, file), "utf8").trim();
+    if (text) names[path.basename(file, ".name")] = text;
+  }
+  return names;
+}
+
+/**
  * Every raw diligence record in the store, oldest file order.
  *
  * These are the per-Stop records the heartbeat flushes beside each
@@ -469,7 +487,7 @@ function bundle() {
  * the file carries each fact once and filters or graphs added later work
  * on the data rather than on markup.
  */
-export function renderPage(events, title, nowMsg, codes, sessionUrl, diligence = []) {
+export function renderPage(events, title, nowMsg, codes, sessionUrl, diligence = [], names = {}) {
   // `</` inside the payload would close the script element early and let
   // a thread title inject markup. The escape is invisible to JSON.parse,
   // so the embedded data stays byte-faithful.
@@ -480,6 +498,7 @@ export function renderPage(events, title, nowMsg, codes, sessionUrl, diligence =
     now_msg: nowMsg ?? null,
     session_url: sessionUrl ?? null,
     diligence,
+    names,
   }).replace(/<\//g, "<\\/");
 
   // The crash banner is the DEFAULT content, removed on a successful
@@ -663,7 +682,7 @@ export function main(argv) {
     const generated = new Date().toISOString().slice(0, 16).replace("T", " ") + " UTC";
     page = renderMarkdown(folded, title, nowMsg, codes, generated, sessionUrl);
   } else {
-    page = renderPage(events, title, nowMsg, codes, sessionUrl, readDiligence(root));
+    page = renderPage(events, title, nowMsg, codes, sessionUrl, readDiligence(root), readNames(root));
   }
   fs.writeFileSync(opts.out, page, "utf8");
   process.stdout.write(`wrote ${opts.out}\n`);

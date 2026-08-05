@@ -118,10 +118,12 @@ const FIXTURE = [
 ].map((event, index) => ({ ...event, at: AT(index), anchor }));
 const OPEN_ROWS = 8;
 const CLOSED_ROWS = 2;
-// One chip per session plus the unfiltered overview.
-const CHIPS = 2;
-// A collapsed legacy line, a reminded stretch, a clean one.
-const STRETCH_ROWS = 3;
+// One head and one option per session, plus the overview of each.
+const HEADS = 2;
+const OPTIONS = 2;
+// A collapsed legacy line, a reminded stretch, a clean one — rendered
+// twice: once in the session's block, once in the overview's.
+const STRETCH_ROWS = 6;
 
 /** A throwaway store the CLI renders from. */
 function buildStore() {
@@ -182,15 +184,16 @@ const PROBE = `
         document.documentElement.scrollWidth >
         document.documentElement.clientWidth,
       pickerOptions: document.querySelectorAll(".pick option").length,
-      chips: document.querySelectorAll(".chip").length,
+      heads: document.querySelectorAll(".sesshead").length,
+      sessionOptions: document.querySelectorAll(".opt").length,
       stretchRows: document.querySelectorAll(".stretch").length,
       stretchCss: (function () {
         var row = document.querySelector(".stretch");
         return row !== null && getComputedStyle(row).display === "flex";
       })(),
-      rulesOpen: (function () {
-        var rules = document.querySelector("details.rules");
-        return Boolean(rules && rules.open);
+      headShown: (function () {
+        var head = document.querySelector(".sesshead.on");
+        return head !== null && getComputedStyle(head).display === "flex";
       })(),
       pillsClipped: Array.prototype.filter.call(
         document.querySelectorAll(".pill"),
@@ -283,10 +286,11 @@ function assertHealthy(results) {
   assert.equal(results.pageOverflow, false, "no horizontal scroll");
   // NO TICKET plus one option per repo in the code map.
   assert.equal(results.pickerOptions, 3, "the picker offers every repo");
-  assert.equal(results.chips, CHIPS, "one chip per session, plus all");
+  assert.equal(results.heads, HEADS, "one head per session, plus the overview");
+  assert.equal(results.sessionOptions, OPTIONS, "the picker offers every session");
   assert.equal(results.stretchRows, STRETCH_ROWS, "the stretch rules render");
   assert.equal(results.stretchCss, true, "the stretch styles parsed");
-  assert.equal(results.rulesOpen, true, "the rendering session's stretches unfold");
+  assert.equal(results.headShown, true, "the selected head is what a viewer sees");
   assert.equal(results.pillsClipped, 0, "no pill is clipped");
   assert.equal(results.popupsHidden, 0, "every opened popup is visible");
 }
