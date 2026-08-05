@@ -695,14 +695,22 @@ export function main(argv) {
 // builds rows itself.
 export { renderBody };
 
+// `exitCode` rather than `exit()`: stdout is ASYNCHRONOUS on a pipe, and
+// `process.exit()` discards whatever is still buffered — so `state`,
+// whose whole purpose is to be read by another program, lost everything
+// past the first 64 KiB the moment it was piped anywhere. To a file or a
+// terminal the write is synchronous, which is why every interactive use
+// looked fine. Setting the code and falling off the end lets node drain
+// first, and keeps the status a caller branches on.
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   try {
-    process.exit(main(process.argv.slice(2)));
+    process.exitCode = main(process.argv.slice(2));
   } catch (err) {
     if (err instanceof LedgerError) {
       process.stderr.write(`ledger: ${err.message}\n`);
-      process.exit(1);
+      process.exitCode = 1;
+    } else {
+      throw err;
     }
-    throw err;
   }
 }

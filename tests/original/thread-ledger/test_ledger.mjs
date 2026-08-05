@@ -1937,6 +1937,109 @@ describe("StretchesSection", () => {
   });
 });
 
+// -------------------------------------------------------- stdout drain
+
+describe("PipedOutput", () => {
+  /**
+   * Run the CLI with stdout on a SHELL pipe — the mode a consumer uses.
+   *
+   * Through a shell, deliberately. `spawnSync` alone does not reproduce
+   * this: its own read loop keeps the pipe drained, so the child's
+   * writes complete before it exits and the payload arrives whole. A
+   * test written the obvious way therefore passes against the broken
+   * code — measured, and the reason this helper exists.
+   */
+  function cli(root, ...args) {
+    const command = [
+      JSON.stringify(process.execPath),
+      JSON.stringify(path.join(SKILL, "ledger.mjs")),
+      "--root",
+      JSON.stringify(root),
+      ...args,
+    ].join(" ");
+    // pipefail, so the pipeline reports the CLI's exit code rather than
+    // `cat`'s — otherwise every failure would read as success here.
+    return spawnSync("bash", ["-c", `set -o pipefail; ${command} | cat`], {
+      encoding: "utf8",
+      // Bigger than any output here, so a truncation this test sees is
+      // the child's doing and never the parent's buffer.
+      maxBuffer: 64 * 1024 * 1024,
+      env: { PATH: process.env.PATH, HOME: fs.mkdtempSync(path.join(os.tmpdir(), "nohome-")) },
+    });
+  }
+
+  /** A store whose folded state comfortably exceeds one pipe buffer. */
+  function bigStore(threads = 60) {
+    const root = tempStore();
+    const note = "x".repeat(2000);
+    const events = [];
+    for (let index = 0; index < threads; index += 1) {
+      events.push({
+        ...opened(`t${index}`),
+        at: `2026-01-01T00:00:${String(index % 60).padStart(2, "0")}+00:00`,
+        anchor: { session: "s1", msg: 1 },
+      });
+      events.push({
+        ev: "progress",
+        thread: `t${index}`,
+        pct: 50,
+        note,
+        at: `2026-01-02T00:00:${String(index % 60).padStart(2, "0")}+00:00`,
+        anchor: { session: "s1", msg: 1 },
+      });
+    }
+    writeLog(root, "s1", events);
+    return root;
+  }
+
+  // `state` exists to be read by another program, and a pipe is how a
+  // program reads it. Node's stdout writes are async on a pipe, so an
+  // exit that does not drain them cuts the payload at one buffer — with
+  // no error, and at a byte offset that reads like a corrupt store.
+  it("state survives a pipe, whole", () => {
+    const root = bigStore();
+    const piped = cli(root, "state");
+    assert.equal(piped.status, 0, `state failed: ${piped.stderr}`);
+    assert.ok(
+      piped.stdout.length > 64 * 1024,
+      `the fixture must exceed one pipe buffer, got ${piped.stdout.length} bytes`,
+    );
+    const parsed = JSON.parse(piped.stdout);
+    assert.equal(parsed.length, 60);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  // The same bytes either way: a file redirect is synchronous, so it
+  // never lost anything and is the reference the pipe is measured to.
+  it("piped output is byte-identical to a redirect", () => {
+    const root = bigStore();
+    const out = path.join(root, "state.json");
+    const handle = fs.openSync(out, "w");
+    const redirected = spawnSync(
+      process.execPath,
+      [path.join(SKILL, "ledger.mjs"), "--root", root, "state"],
+      {
+        stdio: ["ignore", handle, "pipe"],
+        env: { PATH: process.env.PATH, HOME: fs.mkdtempSync(path.join(os.tmpdir(), "nohome-")) },
+      },
+    );
+    fs.closeSync(handle);
+    assert.equal(redirected.status, 0);
+    assert.equal(cli(root, "state").stdout, fs.readFileSync(out, "utf8"));
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  // Draining stdout must not cost the exit code — it is what a caller
+  // branches on, and a failure that exits 0 is worse than a truncation.
+  it("a failing command still exits non-zero, with its reason", () => {
+    const root = bigStore(1);
+    const result = cli(root, "nonsense");
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /unknown command/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+});
+
 // ----------------------------------------------------------- publishing
 
 describe("PushCarriesTheStretch", () => {

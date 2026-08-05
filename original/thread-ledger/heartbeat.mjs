@@ -915,8 +915,12 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
     // readable JSON or the same fault repeats visibly.
   }
 
+  // `exitCode` rather than `exit()` throughout, for the reason in
+  // ledger.mjs's wrapper: stderr is asynchronous on a pipe, and the
+  // block reason IS the mechanism here — a reason cut off mid-sentence
+  // would be a reminder the model cannot act on.
   try {
-    process.exit(run(input));
+    process.exitCode = run(input);
   } catch (err) {
     const detail = err instanceof LedgerError ? err.message : (err.stack ?? String(err));
     // The crash reaches the compliance log with no verdicts, because
@@ -947,11 +951,14 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
     // On the guarded fire the reason is withheld like any other: it was
     // already delivered in full, and stderr at exit 0 reaches only the
     // diagnostics log anyway.
-    if (input.stop_hook_active === true) process.exit(0);
-    process.stderr.write(
-      "The ledger heartbeat could not check this turn, so nothing verified " +
-        `its bookkeeping:\n\n${detail}\n`,
-    );
-    process.exit(2);
+    if (input.stop_hook_active === true) {
+      process.exitCode = 0;
+    } else {
+      process.stderr.write(
+        "The ledger heartbeat could not check this turn, so nothing verified " +
+          `its bookkeeping:\n\n${detail}\n`,
+      );
+      process.exitCode = 2;
+    }
   }
 }
