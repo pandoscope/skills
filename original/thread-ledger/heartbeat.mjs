@@ -446,13 +446,39 @@ function storeCheckout(url, clones) {
  * is right about things the turn cannot fix is a reminder nobody keeps.
  */
 function markersThisTurn(repo, turnStart) {
-  const diff = gitOrNull(
+  // Selected by AUTHOR date, which names the turn in which the
+  // reasoning was available to write down — the check's whole premise.
+  // `--since` filters the COMMITTER date, and a rebase mints a fresh
+  // one while preserving the author's: every marker in every merged
+  // branch then read as added this turn, and the block scaled with the
+  // size of the merge (#73).
+  //
+  // `--since` stays as the cheap pre-filter, because it cannot exclude
+  // anything wanted: a commit authored after the boundary cannot have
+  // been committed before it, so this set is a superset of the turn's
+  // own work.
+  const listed = gitOrNull(
     repo.path,
     "log",
     `--since=${turnStart.toISOString()}`,
+    "--format=%H %aI",
+  );
+  if (!listed) return [];
+  const mine = listed
+    .split("\n")
+    .filter((line) => line.trim())
+    .map((line) => line.split(" "))
+    .filter(([, authored]) => authored && new Date(authored) >= turnStart)
+    .map(([sha]) => sha);
+  if (!mine.length) return [];
+  const diff = gitOrNull(
+    repo.path,
+    "log",
+    "--no-walk",
     "--unified=0",
     "--format=",
     "-p",
+    ...mine,
   );
   if (!diff) return [];
   const found = [];
