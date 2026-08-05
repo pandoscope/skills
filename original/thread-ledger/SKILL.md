@@ -127,6 +127,18 @@ the hook offers is `merge --ff-only`: it succeeds for a plain rollback
 and fails loudly for a real divergence. Forcing the push instead is the
 step that turns a recoverable state into lost work.
 
+**A ledger conflict is resolved by union — `--ours`/`--theirs` are
+never valid.** The log is append-only and both sides are real events,
+so the only correct merge keeps every line in stamp order; the recorder
+does exactly that on a lost push. Picking a side deletes someone's
+published event, and `git checkout --theirs .` deletes them wholesale
+(measured: skills#79). The store's CI guard (`ledger guard`) rejects
+any push that removes a ledger or diligence line, and the recorder
+refuses a push whose merge would land a transition the union forbids —
+when that happens, the event is withdrawn and the message says what to
+re-append. Deleting a published line is never a legal edit;
+re-appending is the only legal repair.
+
 **A decision marked this turn is recorded this turn.** When a commit
 adds a `DECISION` marker, the decision store gets its record before the
 turn ends: the reasoning is free to write while you still hold it and
