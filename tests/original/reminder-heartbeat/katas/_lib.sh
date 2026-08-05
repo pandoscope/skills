@@ -6,6 +6,9 @@
 #   kata_repo <name> clean     committed and pushed — check 2 passes
 #   kata_repo <name> dirty     working tree has uncommitted changes
 #   kata_repo <name> unpushed  committed, ahead of its upstream
+#   kata_repo <name> marked-rebased <committed> <authored>
+#                              a marker whose two dates differ, as a
+#                              rebase leaves them
 #
 # Every repo gets a real upstream (a bare clone under .origins/), because
 # "pushed" is HEAD against origin and a repo without one cannot express
@@ -26,6 +29,10 @@ kata_repo() {
     # Third argument: when the "this turn" commit happened. Only the
     # states that model activity during the turn under test need it.
     when=${3:-$SEEDED}
+    # Fourth argument: when the work was AUTHORED, when that differs
+    # from when it was committed — which is what a rebase produces, and
+    # the only way to express "written earlier, landed now".
+    authored=${4:-$when}
     origin="$PWD/.origins/$name.git"
     work="$PWD/repos/$name"
 
@@ -78,6 +85,21 @@ kata_repo() {
             git -C "$work" add -A
             GIT_COMMITTER_DATE="${when:-$SEEDED}" git -C "$work" commit -q \
                 --date "${when:-$SEEDED}" -m "feat: the decision this turn made"
+            git -C "$work" push -q origin claude/kata
+            ;;
+        marked-rebased)
+            # A marker that reached the branch by rebase or rebase-merge:
+            # the commit is new to the history, so its COMMITTER date is
+            # the moment it landed, while the AUTHOR date the rewrite
+            # preserves says when the reasoning was actually available to
+            # write down. Which of the two the check reads is the whole
+            # question — pass `authored` before the turn boundary for an
+            # earlier turn's debt, after it for this turn's.
+            printf '%s\n' "// DECISION:ARCH — the seal sits outside the state machine" \
+                >> "$work/core.mjs"
+            git -C "$work" add -A
+            GIT_COMMITTER_DATE="$when" git -C "$work" commit -q \
+                --date "$authored" -m "feat: a decision that landed by rebase"
             git -C "$work" push -q origin claude/kata
             ;;
         marked-earlier)
