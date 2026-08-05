@@ -95,6 +95,11 @@ instead of surfacing as a wrong page later.
 - **`at` and `anchor` are recorder-owned.** Supply them and they are
   overwritten — code determines them more accurately than an agent
   estimating.
+- **The store is worked on its default branch.** An append pushes
+  `HEAD` there, so a clone left on any other branch would publish that
+  branch's commits unreviewed the moment a routine append ran
+  (measured: skills#76). The recorder refuses before writing anything;
+  reconcile the clone onto the default branch and re-run.
 
 ## The heartbeat
 
