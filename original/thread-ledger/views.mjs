@@ -890,7 +890,7 @@ function sessionBlock(entry) {
   );
 }
 
-/** The session this render belongs to, for the pre-selected chip. */
+/** The session this render belongs to, for the preselected chip. */
 function currentSession(sessions, sessionUrl) {
   if (sessionUrl) {
     try {
