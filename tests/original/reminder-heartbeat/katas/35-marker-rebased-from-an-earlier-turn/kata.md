@@ -3,7 +3,7 @@
 **Incident:** orchestrator session, 2026-08-04. The turn that merged a
 reviewed stack of four PRs was blocked on check 4:
 
-```
+```text
 Marked and unrecorded: 12 markers, first at
 skills/original/thread-ledger/heartbeat.mjs (SCOPE).
 ```
