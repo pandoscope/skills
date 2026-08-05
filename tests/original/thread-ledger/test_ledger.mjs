@@ -2213,6 +2213,127 @@ describe("PushRefusesWhatTheMergeInvalidates", () => {
   });
 });
 
+// ---------------------------------------------------------- store guard
+
+describe("LedgerGuard", () => {
+  function sh(dir, ...args) {
+    const result = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8" });
+    assert.equal(result.status, 0, `git ${args.join(" ")} failed:\n${result.stderr}`);
+    return result.stdout;
+  }
+
+  function commitAll(root, message) {
+    sh(root, "add", "-A");
+    sh(root, "-c", "user.email=t@example.test", "-c", "user.name=t", "commit", "-q", "-m", message);
+    return sh(root, "rev-parse", "HEAD").trim();
+  }
+
+  /** A store repo with one seeded commit: opened + progress on `t`. */
+  function guardStore() {
+    const root = tempStore();
+    sh(root, "init", "-q", "-b", "main");
+    writeLog(root, "s1", [
+      { ...opened("t"), at: "2026-01-01T00:00:00+00:00", anchor: { session: "s1", msg: 1 } },
+      { ev: "progress", thread: "t", pct: 40, at: "2026-01-01T00:01:00+00:00", anchor: { session: "s1", msg: 1 } },
+    ]);
+    const seed = commitAll(root, "seed");
+    return { root, seed };
+  }
+
+  function guard(root, range) {
+    return spawnSync(
+      process.execPath,
+      [path.join(SKILL, "ledger.mjs"), "--root", root, "guard", "--range", range],
+      { encoding: "utf8", env: { PATH: process.env.PATH, HOME: fs.mkdtempSync(path.join(os.tmpdir(), "nohome-")) } },
+    );
+  }
+
+  const logPath = (root) => path.join(root, "ledger", "s1.jsonl");
+
+  // The #79 incident: two routine git commands removed a published line
+  // and nothing anywhere objected. The guard is the thing that objects.
+  it("a push that removes a ledger line is rejected, naming it", () => {
+    const { root, seed } = guardStore();
+    const lines = fs.readFileSync(logPath(root), "utf8").split("\n").filter((l) => l.trim());
+    fs.writeFileSync(logPath(root), `${lines[0]}\n`, "utf8");
+    const bad = commitAll(root, "conflict resolution gone wrong");
+    const result = guard(root, `${seed}..${bad}`);
+    assert.equal(result.status, 1);
+    assert.match(result.stdout, /removed/i);
+    assert.match(result.stdout, /ledger\/s1\.jsonl/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("a removed diligence record is rejected too — raw records are retained data", () => {
+    const { root, seed } = guardStore();
+    fs.mkdirSync(path.join(root, "diligence"), { recursive: true });
+    fs.writeFileSync(path.join(root, "diligence", "s1.jsonl"), `${JSON.stringify({ cycle: 1 })}\n`);
+    const withRecords = commitAll(root, "flush");
+    fs.writeFileSync(path.join(root, "diligence", "s1.jsonl"), "", "utf8");
+    const bad = commitAll(root, "oops");
+    const result = guard(root, `${withRecords}..${bad}`);
+    assert.equal(result.status, 1);
+    assert.match(result.stdout, /diligence\/s1\.jsonl/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  // The #78 shape, after the fact: the union of two writers' files holds
+  // a transition nobody validated. CI folds what actually landed.
+  it("an added event that is illegal from its history is rejected", () => {
+    const { root, seed } = guardStore();
+    fs.appendFileSync(
+      logPath(root),
+      `${JSON.stringify({ ev: "completed", thread: "t", at: "2026-01-01T00:02:00+00:00", anchor: { session: "s1", msg: 2 } })}\n`,
+    );
+    const closed = commitAll(root, "close");
+    fs.appendFileSync(
+      logPath(root),
+      `${JSON.stringify({ ev: "progress", thread: "t", pct: 60, at: "2026-01-01T00:03:00+00:00", anchor: { session: "s1", msg: 3 } })}\n`,
+    );
+    const bad = commitAll(root, "stale interleave");
+    const result = guard(root, `${closed}..${bad}`);
+    assert.equal(result.status, 1);
+    assert.match(result.stdout, /completed/);
+    assert.match(result.stdout, /progress/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("an ordinary append passes, and says what it checked", () => {
+    const { root, seed } = guardStore();
+    fs.appendFileSync(
+      logPath(root),
+      `${JSON.stringify({ ev: "blocked", thread: "t", on: "internal", what: "waiting", at: "2026-01-01T00:02:00+00:00", anchor: { session: "s1", msg: 2 } })}\n`,
+    );
+    const good = commitAll(root, "append");
+    const result = guard(root, `${seed}..${good}`);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /1 added/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  // The corpus already holds one illegal interleave from before the
+  // guard existed. History is not this push's fault: only lines ADDED
+  // in the range are judged, so the guard can turn on without a
+  // history rewrite — which the deletion rule itself forbids.
+  it("an old illegal transition does not fail a clean push", () => {
+    const { root } = guardStore();
+    fs.appendFileSync(
+      logPath(root),
+      `${JSON.stringify({ ev: "completed", thread: "t", at: "2026-01-01T00:02:00+00:00", anchor: { session: "s1", msg: 2 } })}\n` +
+        `${JSON.stringify({ ev: "progress", thread: "t", pct: 70, at: "2026-01-01T00:03:00+00:00", anchor: { session: "s1", msg: 3 } })}\n`,
+    );
+    const historic = commitAll(root, "the pre-guard corpus, interleave and all");
+    fs.appendFileSync(
+      logPath(root),
+      `${JSON.stringify({ ev: "progress", thread: "t", pct: 80, at: "2026-01-01T00:04:00+00:00", anchor: { session: "s1", msg: 4 } })}\n`,
+    );
+    const clean = commitAll(root, "a legal append on top");
+    const result = guard(root, `${historic}..${clean}`);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+});
+
 // ----------------------------------------------------------- publishing
 
 describe("PushCarriesTheStretch", () => {
