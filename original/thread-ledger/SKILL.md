@@ -132,8 +132,10 @@ adds a `DECISION` marker, the decision store gets its record before the
 turn ends: the reasoning is free to write while you still hold it and
 cannot be reconstructed later, and a reconstructed prediction scores
 nothing. A marker already in the tree is an earlier turn's debt, not
-this one's. Only the *marked* half is mechanized — judging what deserves
-a marker stays with you.
+this one's — and *this turn* is measured by when a commit was AUTHORED,
+which survives rebase and merge, so landing an old branch never bills
+its markers to the turn that merged it. Only the *marked* half is
+mechanized — judging what deserves a marker stays with you.
 
 **Never re-open a recorder session that is already open.** `record.py
 open` mints a new session branch every time it runs, stranding the
