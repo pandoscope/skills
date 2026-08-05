@@ -1,0 +1,3 @@
+{"ev":"opened","thread":"reset-gap","title":"Carry compaction resets as explicit gaps","ticket":"pandoscope/skills#69","at":"2026-08-04T09:00:02+00:00","anchor":{"session":"session_kata_reset","msg":1,"url":"https://claude.test/code/session_kata_reset"}}
+{"ev":"sealed","at":"2026-08-04T09:00:12+00:00","anchor":{"session":"session_kata_reset","msg":1,"url":"https://claude.test/code/session_kata_reset"}}
+{"ev":"progress","thread":"reset-gap","pct":80,"note":"the gap rule landed","at":"2026-08-04T11:11:33+00:00","anchor":{"session":"session_kata_reset","msg":2,"url":"https://claude.test/code/session_kata_reset"}}

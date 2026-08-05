@@ -12,6 +12,8 @@ import {
   TICKET_RE,
   orderClosed,
   orderOpen,
+  sessionFromUrl,
+  stretchesOf,
 } from "./core.mjs";
 
 export const CSS = `
@@ -129,11 +131,64 @@ button.stat{font:inherit;font-family:ui-monospace,SFMono-Regular,Menlo,monospace
 .thread.t-important{border-color:var(--t-yellow);box-shadow:inset 3px 0 0 var(--t-yellow)}
 .t-blocking-urgent .pill{color:var(--t-red);border-color:currentColor;font-weight:600}
 .t-blocking-important .pill{color:var(--t-red-soft);border-color:currentColor}
-/* The filter control, header-right, invisible when the page has one
-   session to show. */
-.filter{font-size:.78rem;color:var(--dim);display:flex;gap:.4rem;align-items:center}
-.filter select{font:inherit;color:var(--fg);background:var(--panel);
-  border:1px solid var(--line);border-radius:6px;padding:.15rem .4rem}
+/* The sessions section: one head carries the selected session's
+   identity and totals and IS the picker; the dropdown lists every
+   session (and the overview) with names beside ids; beneath, only the
+   last seal shows, the whole run behind one expand. Stretch rules stay
+   quiet when clean — amber marks a reminded stretch, red a gave-up,
+   and everything else is dim monospace a reader scans, not reads. */
+.sessions{margin:0 0 1.5rem;display:flex;flex-direction:column;gap:.5rem}
+.picker{position:relative}
+.picker>summary{list-style:none;cursor:pointer;display:flex;align-items:center;
+  gap:.6rem;border:1px solid var(--line);background:var(--panel);
+  border-radius:7px;padding:.45rem .65rem}
+.picker>summary::-webkit-details-marker{display:none}
+.picker>summary:hover{border-color:var(--accent)}
+.sesshead{display:none;align-items:baseline;gap:.35rem .7rem;flex:1;min-width:0;
+  flex-wrap:wrap}
+.sesshead.on{display:flex}
+.sname{font-weight:600;white-space:nowrap}
+.sid{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.72rem;
+  color:var(--dim);white-space:nowrap}
+.stotals{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.74rem;
+  color:var(--dim)}
+.caret{color:var(--dim);flex:none;font-size:.7rem}
+.options{position:absolute;left:0;right:0;top:calc(100% + .3rem);z-index:40;
+  margin:0;padding:.25rem;list-style:none;border:1px solid var(--line);
+  border-radius:8px;background:var(--panel);
+  box-shadow:0 10px 30px rgb(0 0 0 / .18);display:flex;flex-direction:column;
+  max-height:60vh;overflow:auto}
+.opt{font:inherit;text-align:left;display:flex;align-items:baseline;
+  gap:.35rem .7rem;flex-wrap:wrap;width:100%;border:0;background:none;
+  color:var(--fg);border-radius:6px;padding:.4rem .5rem;cursor:pointer}
+.opt:hover{background:var(--fill)}
+.opt b{white-space:nowrap}
+.oid{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.72rem;
+  color:var(--dim)}
+.ototals{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.72rem;
+  color:var(--dim);margin-left:auto}
+.sess{border:1px solid var(--line);border-radius:7px;background:var(--panel);
+  padding:.35rem .55rem}
+.allseals>summary{font-size:.72rem;color:var(--dim);cursor:pointer;
+  padding:.1rem 0 .25rem}
+.stretchlist{list-style:none;margin:.35rem 0 0;padding:0;display:flex;
+  flex-direction:column;gap:.15rem}
+.stretch{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.72rem;
+  color:var(--dim);border-top:1px solid var(--line);padding:.2rem 0 0}
+.stretch .sthreads{flex:1;min-width:8rem;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;color:var(--fg)}
+.stretch.st-remind{border-top-color:var(--wait)}
+.stretch .remind{color:var(--wait)}
+.stretch.st-gaveup{border-top-color:var(--t-red)}
+.stretch .gaveup{color:var(--t-red);font-weight:600}
+.stretch.tail,.stretch.legacy{border-top-style:dashed;font-style:italic}
+.gap{border:1px dashed var(--wait);color:var(--wait);border-radius:4px;
+  padding:0 .3rem;cursor:help}
+.mult{color:var(--dim)}
+.mult.hot{color:var(--fg);font-weight:600}
+.older>summary{font-size:.7rem;color:var(--dim);cursor:pointer;padding:.15rem 0}
+.stretch .schecks{color:var(--dim)}
 .note{color:var(--dim);font-size:.84rem}
 hr{border:0;border-top:1px solid var(--line);margin:2.25rem 0 1rem}
 .done{gap:0}
@@ -587,39 +642,308 @@ function summary(open, closed) {
   return `<div class="summary">${cells}</div>`;
 }
 
+// ---------------------------------------------------------- stretches
+
+/** A compact count: 950, 12.6k, 3.4M. */
+export function fmtTokens(value) {
+  if (value < 1000) return String(value);
+  if (value < 1e6) return `${(value / 1000).toFixed(1).replace(/\.0$/, "")}k`;
+  return `${(value / 1e6).toFixed(1).replace(/\.0$/, "")}M`;
+}
+
+/** A compact wall-clock span: 45s, 12m, 1h05. */
+export function fmtSpan(ms) {
+  const minutes = Math.round(ms / 60000);
+  if (minutes < 1) return `${Math.round(ms / 1000)}s`;
+  if (minutes < 60) return `${minutes}m`;
+  return `${Math.floor(minutes / 60)}h${String(minutes % 60).padStart(2, "0")}`;
+}
+
+const sum = (values) => values.reduce((total, value) => total + value, 0);
+
+/** The digest's headline number — the four components together. */
+function totalTokens(digest) {
+  const tokens = digest?.tokens;
+  if (!tokens) return null;
+  return tokens.input + tokens.output + tokens.cacheRead + tokens.cacheCreation;
+}
+
+function median(values) {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+/**
+ * The ×-multiplier against the session's own median, or nothing.
+ *
+ * Same-session median rather than a global yardstick: it controls for
+ * model and task mix, and resists the outliers it exists to flag. Under
+ * three data points a median is mostly noise, so nothing renders.
+ */
+function multiplier(value, mid, count) {
+  if (mid === null || mid <= 0 || count < 3 || value === null) return "";
+  const factor = value / mid;
+  const hot = factor >= 1.5 ? " hot" : "";
+  return ` <span class="mult${hot}">×${factor.toFixed(1)}</span>`;
+}
+
+/** Reminder round-trips in a digest — blocked executions. */
+const remindersOf = (digest) => digest?.executions?.blocked ?? 0;
+/** Blocks the model saw and still did not finish after. */
+const gaveUpsOf = (digest) => digest?.executions?.unsealed ?? 0;
+
+function plural(count, noun) {
+  if (count === 1) return `${count} ${noun}`;
+  return `${count} ${noun.endsWith("h") ? `${noun}es` : `${noun}s`}`;
+}
+
+/** The fired checks, each marked when its reminder was ignored. */
+function checksHtml(digest) {
+  const parts = Object.entries(digest.checks ?? {}).map(([name, row]) => {
+    const ignored = row.ignored ? ` <span class="gaveup">ignored×${row.ignored}</span>` : "";
+    return `${esc(name)}${ignored}`;
+  });
+  if (!parts.length) return "";
+  return `<span class="schecks">${parts.join(", ")}</span>`;
+}
+
+/** One stretch as a thin rule: when, what, friction, cost. */
+function stretchRow(stretch, medians) {
+  const digest = stretch.digest;
+  const reminders = remindersOf(digest);
+  const gaveUps = gaveUpsOf(digest);
+  const cls = gaveUps ? " st-gaveup" : reminders ? " st-remind" : "";
+
+  const parts = [];
+  const clock = stretch.at ? stretch.at.slice(11, 16) : "";
+  const msg = stretch.seal.anchor?.msg;
+  const where = `${clock}${msg !== undefined ? ` #${msg}` : ""}`.trim();
+  const url = stretch.seal.anchor?.url;
+  parts.push(
+    url
+      ? `<a class="anchor" href="${esc(url)}" target="_blank" rel="noreferrer">${esc(where)}</a>`
+      : `<span class="anchor">${esc(where)}</span>`,
+  );
+  parts.push(`<span class="sthreads">${esc(stretch.threads.join(" · ")) || "—"}</span>`);
+  if (digest) {
+    parts.push(checksHtml(digest));
+    if (reminders) parts.push(`<span class="remind">${plural(reminders, "reminder")}</span>`);
+    if (gaveUps) parts.push(`<span class="gaveup">gave up ×${gaveUps}</span>`);
+    const tokens = totalTokens(digest);
+    if (tokens === null) {
+      parts.push(
+        `<span class="gap" title="a counter reset (compaction) inside this ` +
+          `stretch — its cost is unknown, not zero">gap</span>`,
+      );
+    } else {
+      parts.push(
+        `<span>${fmtTokens(tokens)} tok${multiplier(tokens, medians.tokens, medians.count)}</span>`,
+      );
+    }
+  }
+  if (stretch.spanMs !== null) {
+    parts.push(
+      `<span>${fmtSpan(stretch.spanMs)}${multiplier(stretch.spanMs, medians.span, medians.count)}</span>`,
+    );
+  }
+  return `<li class="stretch${cls}">${parts.filter(Boolean).join("")}</li>`;
+}
+
+/**
+ * The rows of one session's stretch list, oldest first.
+ *
+ * Digest-less seals predate the field; each run of them collapses to
+ * one line rather than a wall of empty rules — they stay countable
+ * without burying the stretches that carry data.
+ */
+function stretchItems(entry, medians) {
+  const items = [];
+  let legacy = 0;
+  const flush = () => {
+    if (!legacy) return;
+    items.push(
+      `<li class="stretch legacy">${plural(legacy, "stretch")} · no digest</li>`,
+    );
+    legacy = 0;
+  };
+  for (const stretch of entry.stretches) {
+    if (!stretch.digest) {
+      legacy += 1;
+      continue;
+    }
+    flush();
+    items.push(stretchRow(stretch, medians));
+  }
+  flush();
+  if (entry.tail) {
+    items.push(
+      `<li class="stretch tail">unsealed tail · ` +
+        `${esc(entry.tail.threads.join(" · ")) || plural(entry.tail.count, "event")}</li>`,
+    );
+  }
+  return items;
+}
+
+/** A stretch list's aggregate numbers, shared by every head. */
+function totalsText(stretches) {
+  const digests = stretches.map((stretch) => stretch.digest).filter(Boolean);
+  const parts = [];
+  if (digests.length) {
+    parts.push(plural(sum(digests.map((digest) => digest.turns)), "turn"));
+    const clean = digests.filter((digest) => !remindersOf(digest) && !gaveUpsOf(digest)).length;
+    parts.push(`${Math.round((clean / digests.length) * 100)}% clean`);
+    const reminders = sum(digests.map(remindersOf));
+    if (reminders) parts.push(plural(reminders, "reminder"));
+    const gaveUps = sum(digests.map(gaveUpsOf));
+    if (gaveUps) parts.push(`gave up ×${gaveUps}`);
+    const totals = digests.map(totalTokens).filter((value) => value !== null);
+    if (totals.length) parts.push(`${fmtTokens(sum(totals))} tok`);
+    const gaps = digests.length - totals.length;
+    if (gaps) parts.push(plural(gaps, "gap"));
+  }
+  const spans = stretches.map((stretch) => stretch.spanMs).filter((ms) => ms !== null);
+  if (spans.length) parts.push(fmtSpan(sum(spans)));
+  const legacy = stretches.length - digests.length;
+  if (legacy) parts.push(`${plural(legacy, "stretch")} · no digest`);
+  return parts.join(" · ");
+}
+
+/** The short form of a session id: its distinguishing tail. */
+function shortId(session) {
+  return session.length <= 14 ? session : `…${session.slice(-6)}`;
+}
+
+/** The overview pseudo-session: every stretch, in stamp order. */
+function overviewEntry(sessions) {
+  const stretches = sessions
+    .flatMap((entry) => entry.stretches)
+    .sort((a, b) => ((a.at ?? "") < (b.at ?? "") ? -1 : 1));
+  return { session: "", stretches, tail: null };
+}
+
+/** What an entry is called: its name sidecar, its id tail, or "all". */
+function labelOf(entry, names) {
+  if (entry.session === "") return "all sessions";
+  return names[entry.session] ?? shortId(entry.session);
+}
+
+/**
+ * One head: identity plus totals, shown only while selected.
+ *
+ * Every entry's head is in the markup and the script swaps which one
+ * shows, so picking a session never recomputes anything — the numbers
+ * a head carries were all rendered from the same fold.
+ */
+function sessionHead(entry, names, on) {
+  const named = entry.session !== "" && names[entry.session];
+  const id = named ? `<span class="sid">${esc(shortId(entry.session))}</span>` : "";
+  const title = entry.session === "" ? "every session" : entry.session;
+  return (
+    `<span class="sesshead${on ? " on" : ""}" data-session="${esc(entry.session)}"` +
+    ` title="${esc(title)}"><b class="sname">${esc(labelOf(entry, names))}</b>${id}` +
+    `<span class="stotals">${esc(totalsText(entry.stretches))}</span></span>`
+  );
+}
+
+/** One dropdown row: name, id, and the entry's totals at a glance. */
+function sessionOption(entry, names) {
+  const id = entry.session === "" ? "" : `<span class="oid">${esc(entry.session)}</span>`;
+  return (
+    `<li><button class="opt" data-session="${esc(entry.session)}" type="button">` +
+    `<b>${esc(labelOf(entry, names))}</b>${id}` +
+    `<span class="ototals">${esc(totalsText(entry.stretches))}</span></button></li>`
+  );
+}
+
+/**
+ * One entry's block: the last seal in the open, the run behind one
+ * expand. The tail — a turn whose bookkeeping never finished — stays
+ * beside the last seal, never folded: it is the row that most needs a
+ * reader.
+ */
+function sessionBlock(entry) {
+  const digested = entry.stretches.filter((stretch) => stretch.digest);
+  const medians = {
+    count: digested.length,
+    tokens: median(
+      digested.map((stretch) => totalTokens(stretch.digest)).filter((value) => value !== null),
+    ),
+    span: median(entry.stretches.map((stretch) => stretch.spanMs).filter((ms) => ms !== null)),
+  };
+  let rows = stretchItems(entry, medians);
+  let tailRow = "";
+  if (entry.tail) {
+    tailRow = rows[rows.length - 1];
+    rows = rows.slice(0, -1);
+  }
+  const visible = rows.slice(-1);
+  const folded = rows.slice(0, -1);
+  const expand = folded.length
+    ? `<details class="allseals"><summary>all ${entry.stretches.length} stretches</summary>` +
+      `<ol class="stretchlist">${folded.join("")}</ol></details>`
+    : "";
+  return (
+    `<div class="sess" data-session="${esc(entry.session)}">${expand}` +
+    `<ol class="stretchlist">${visible.join("")}${tailRow}</ol></div>`
+  );
+}
+
+/** The session this render belongs to, for the preselected chip. */
+function currentSession(sessions, sessionUrl) {
+  if (sessionUrl) {
+    try {
+      const name = sessionFromUrl(sessionUrl);
+      if (sessions.some((entry) => entry.session === name)) return name;
+    } catch {
+      // A URL that names no session falls through to the newest one.
+    }
+  }
+  return sessions[0]?.session ?? null;
+}
+
+/**
+ * The sessions section: chips to pick a session, stretches beneath.
+ *
+ * Replaces the old session dropdown — one selector, both roles: a chip
+ * shows its session's stretches AND filters the thread lists below
+ * (wired in page.mjs; the markup is inert without the script, and every
+ * block stays readable because visibility is the script's only job).
+ */
+function stretchesSection(events, sessionUrl, diligence, names) {
+  const sessions = stretchesOf(events, diligence);
+  if (!sessions.some((entry) => entry.stretches.length)) return "";
+  const current = currentSession(sessions, sessionUrl);
+  const entries = [overviewEntry(sessions), ...sessions];
+  const heads = entries
+    .map((entry) => sessionHead(entry, names, entry.session === current))
+    .join("");
+  const options = entries.map((entry) => sessionOption(entry, names)).join("");
+  return (
+    `<section class="sessions"><details class="picker">` +
+    `<summary>${heads}<span class="caret">▾</span></summary>` +
+    `<ul class="options">${options}</ul></details>` +
+    entries.map((entry) => sessionBlock(entry)).join("") +
+    `</section>`
+  );
+}
+
 /**
  * The page's body, built from folded state.
  *
  * Called in the browser, on data the page was handed or fetched. The
  * same function could run anywhere; nothing in it touches a document.
+ * `events` carries the raw log for the parts folding drops — the seal
+ * sequence the stretches section reads.
  */
-/**
- * The session filter, only where it can filter anything.
- *
- * Built from the anchors the events already carry — the log records
- * nothing new for this. ALL stays the default: the unfiltered page is
- * the overview, and a sticky filter would make it lie to its next
- * reader. The control is inert without the script, which is why it is
- * plain markup the script wires rather than script-created.
- */
-function sessionFilter(threads) {
-  const sessions = [...new Set(threads.flatMap((thread) => thread.sessions ?? []))];
-  if (sessions.length < 2) return "";
-  return (
-    `<label class="filter">session <select id="session-filter">` +
-    `<option value="" selected>all</option>` +
-    sessions.map((name) => `<option value="${esc(name)}">${esc(name)}</option>`).join("") +
-    `</select></label>`
-  );
-}
-
-export function renderBody(threads, title, nowMsg = null, codes = {}, sessionUrl = null) {
+export function renderBody(threads, title, nowMsg = null, codes = {}, sessionUrl = null, events = [], diligence = [], names = {}) {
   const open = orderOpen(threads);
   const closed = orderClosed(threads);
   return (
     `<header><h1>${esc(title)}</h1>${summary(open, closed)}` +
-    sessionFilter(threads) +
     `</header>` +
+    stretchesSection(events, sessionUrl, diligence, names) +
     `<main><ol class="threads">` +
     open.map((thread) => openRow(thread, nowMsg, codes, sessionUrl)).join("") +
     `</ol><hr><ol class="threads done">` +

@@ -1,0 +1,5 @@
+{"type":"user","timestamp":"2026-08-04T11:00:00.000Z","message":{"role":"user","content":"Continue from where you left off."}}
+{"type":"assistant","timestamp":"2026-08-04T11:00:05.000Z","message":{"role":"assistant","model":"claude-opus-5","usage":{"input_tokens":5,"output_tokens":15,"cache_read_input_tokens":2000,"cache_creation_input_tokens":100},"content":[{"type":"text","text":"Resuming."}]}}
+{"type":"user","timestamp":"2026-08-04T11:05:00.000Z","message":{"role":"user","content":"Finish the slice."}}
+{"type":"assistant","timestamp":"2026-08-04T11:11:30.000Z","message":{"role":"assistant","model":"claude-opus-5","usage":{"input_tokens":5,"output_tokens":25,"cache_read_input_tokens":3000,"cache_creation_input_tokens":0},"content":[{"type":"tool_use","id":"toolu_k34","name":"Bash","input":{"command":"node ledger.mjs append --ev progress --thread reset-gap"}}]}}
+{"type":"user","timestamp":"2026-08-04T11:11:36.000Z","message":{"role":"user","content":[{"type":"tool_result","content":"appended"}]}}

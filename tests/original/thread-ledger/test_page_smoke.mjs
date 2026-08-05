@@ -92,9 +92,38 @@ const FIXTURE = [
   { ev: "completed", thread: "t9", note: "done and shipped" },
   { ev: "opened", thread: "t10", title: "abandoned thread", ticket: "o/r#10" },
   { ev: "dropped", thread: "t10", note: "superseded" },
+  // The seal sequence the stretches section folds: one digest-less
+  // legacy seal, one reminded stretch, one clean one.
+  { ev: "sealed" },
+  {
+    ev: "sealed",
+    diligence: {
+      turns: 1,
+      executions: { sealed: 1, blocked: 2, unsealed: 0, observed: 0 },
+      checks: { "ledger-event": { fired: 2, cleared: 1, ignored: 1 } },
+      tokens: { input: 50, output: 4200, cacheRead: 90000, cacheCreation: 100 },
+      models: ["claude-smoke-1"],
+    },
+  },
+  {
+    ev: "sealed",
+    diligence: {
+      turns: 1,
+      executions: { sealed: 1, blocked: 0, unsealed: 0, observed: 0 },
+      checks: {},
+      tokens: { input: 10, output: 900, cacheRead: 40000, cacheCreation: 0 },
+      models: ["claude-smoke-1"],
+    },
+  },
 ].map((event, index) => ({ ...event, at: AT(index), anchor }));
 const OPEN_ROWS = 8;
 const CLOSED_ROWS = 2;
+// One head and one option per session, plus the overview of each.
+const HEADS = 2;
+const OPTIONS = 2;
+// A collapsed legacy line, a reminded stretch, a clean one — rendered
+// twice: once in the session's block, once in the overview's.
+const STRETCH_ROWS = 6;
 
 /** A throwaway store the CLI renders from. */
 function buildStore() {
@@ -155,6 +184,17 @@ const PROBE = `
         document.documentElement.scrollWidth >
         document.documentElement.clientWidth,
       pickerOptions: document.querySelectorAll(".pick option").length,
+      heads: document.querySelectorAll(".sesshead").length,
+      sessionOptions: document.querySelectorAll(".opt").length,
+      stretchRows: document.querySelectorAll(".stretch").length,
+      stretchCss: (function () {
+        var row = document.querySelector(".stretch");
+        return row !== null && getComputedStyle(row).display === "flex";
+      })(),
+      headShown: (function () {
+        var head = document.querySelector(".sesshead.on");
+        return head !== null && getComputedStyle(head).display === "flex";
+      })(),
       pillsClipped: Array.prototype.filter.call(
         document.querySelectorAll(".pill"),
         clippedByAncestor
@@ -246,6 +286,11 @@ function assertHealthy(results) {
   assert.equal(results.pageOverflow, false, "no horizontal scroll");
   // NO TICKET plus one option per repo in the code map.
   assert.equal(results.pickerOptions, 3, "the picker offers every repo");
+  assert.equal(results.heads, HEADS, "one head per session, plus the overview");
+  assert.equal(results.sessionOptions, OPTIONS, "the picker offers every session");
+  assert.equal(results.stretchRows, STRETCH_ROWS, "the stretch rules render");
+  assert.equal(results.stretchCss, true, "the stretch styles parsed");
+  assert.equal(results.headShown, true, "the selected head is what a viewer sees");
   assert.equal(results.pillsClipped, 0, "no pill is clipped");
   assert.equal(results.popupsHidden, 0, "every opened popup is visible");
 }

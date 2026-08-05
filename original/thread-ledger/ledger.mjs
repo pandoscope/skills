@@ -130,6 +130,48 @@ function ledgerDir(root) {
   return path.join(root, "ledger");
 }
 
+/**
+ * Human names for sessions, from `ledger/<session>.name` sidecars.
+ *
+ * A session's id identifies it; a name is what a reader recognises it
+ * by. The sidecar is written by whoever wants the name — principal or
+ * session — and absence simply renders the id.
+ */
+export function readNames(root) {
+  const dir = ledgerDir(root);
+  if (!fs.existsSync(dir)) return {};
+  const names = {};
+  for (const file of fs.readdirSync(dir).filter((name) => name.endsWith(".name"))) {
+    const text = fs.readFileSync(path.join(dir, file), "utf8").trim();
+    if (text) names[path.basename(file, ".name")] = text;
+  }
+  return names;
+}
+
+/**
+ * Every raw diligence record in the store, oldest file order.
+ *
+ * These are the per-Stop records the heartbeat flushes beside each
+ * seal. The page embeds them so digest-less seals can project their
+ * digest at render time; a torn line is skipped, not thrown on.
+ */
+export function readDiligence(root) {
+  const dir = path.join(root, "diligence");
+  if (!fs.existsSync(dir)) return [];
+  const records = [];
+  for (const name of fs.readdirSync(dir).filter((file) => file.endsWith(".jsonl")).sort()) {
+    for (const line of fs.readFileSync(path.join(dir, name), "utf8").split("\n")) {
+      if (!line.trim()) continue;
+      try {
+        records.push(JSON.parse(line));
+      } catch {
+        // A torn record must not deny the rest of the corpus a render.
+      }
+    }
+  }
+  return records;
+}
+
 function logFiles(root) {
   const dir = ledgerDir(root);
   if (!fs.existsSync(dir)) return [];
@@ -332,8 +374,15 @@ export function append(root, session, event, transcript, sessionUrl) {
 /** Commit the session's files and push straight to the default branch. */
 export function push(root, session, summary) {
   git(root, "add", `ledger/${session}.jsonl`);
-  if (fs.existsSync(path.join(ledgerDir(root), `${session}.url`))) {
-    git(root, "add", `ledger/${session}.url`);
+  for (const sidecar of ["url", "name"]) {
+    if (fs.existsSync(path.join(ledgerDir(root), `${session}.${sidecar}`))) {
+      git(root, "add", `ledger/${session}.${sidecar}`);
+    }
+  }
+  // The heartbeat's raw stretch records. It writes them beside the seal
+  // but never pushes, so this push is their only ride to the remote.
+  if (fs.existsSync(path.join(root, "diligence", `${session}.jsonl`))) {
+    git(root, "add", `diligence/${session}.jsonl`);
   }
   git(
     root,
@@ -440,7 +489,7 @@ function bundle() {
  * the file carries each fact once and filters or graphs added later work
  * on the data rather than on markup.
  */
-export function renderPage(events, title, nowMsg, codes, sessionUrl) {
+export function renderPage(events, title, nowMsg, codes, sessionUrl, diligence = [], names = {}) {
   // `</` inside the payload would close the script element early and let
   // a thread title inject markup. The escape is invisible to JSON.parse,
   // so the embedded data stays byte-faithful.
@@ -450,6 +499,8 @@ export function renderPage(events, title, nowMsg, codes, sessionUrl) {
     title,
     now_msg: nowMsg ?? null,
     session_url: sessionUrl ?? null,
+    diligence,
+    names,
   }).replace(/<\//g, "<\\/");
 
   // The crash banner is the DEFAULT content, removed on a successful
@@ -633,7 +684,7 @@ export function main(argv) {
     const generated = new Date().toISOString().slice(0, 16).replace("T", " ") + " UTC";
     page = renderMarkdown(folded, title, nowMsg, codes, generated, sessionUrl);
   } else {
-    page = renderPage(events, title, nowMsg, codes, sessionUrl);
+    page = renderPage(events, title, nowMsg, codes, sessionUrl, readDiligence(root), readNames(root));
   }
   fs.writeFileSync(opts.out, page, "utf8");
   process.stdout.write(`wrote ${opts.out}\n`);

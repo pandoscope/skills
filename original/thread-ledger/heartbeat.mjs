@@ -50,6 +50,7 @@ import {
   lastUserTurnAt,
   transcriptUsage,
 } from "./core.mjs";
+import { digestOf, readLog, stretchOf } from "./diligence.mjs";
 import { append, readAll, resolveRoot, resolveSession, tail } from "./ledger.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -707,7 +708,12 @@ function cycleOf(file, ctx) {
  */
 function logCompliance(ctx, verdicts, outcome, fired) {
   const file = localFile("reminder-compliance.jsonl");
-  const record = {
+  writeCompliance(file, complianceRecord(file, ctx, verdicts, outcome, fired));
+}
+
+/** The record `logCompliance` would write, built without writing it. */
+function complianceRecord(file, ctx, verdicts, outcome, fired) {
+  return {
     at: new Date().toISOString().replace(/\.\d+Z$/, "+00:00"),
     session: ctx.session,
     msg: ctx.msg,
@@ -729,8 +735,30 @@ function logCompliance(ctx, verdicts, outcome, fired) {
     fired,
     verdicts,
   };
+}
+
+function writeCompliance(file, record) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.appendFileSync(file, `${JSON.stringify(record)}\n`, "utf8");
+}
+
+/**
+ * Append the stretch's raw records to the store.
+ *
+ * Raw flushes, digest summarises (skills#69): the digest on the seal is
+ * a projection of these records, and a projection of retained data —
+ * per-check, per-cycle, per-model detail stays recoverable after the
+ * container and its compliance log are reclaimed. Each record belongs
+ * to exactly one stretch, so flushing per seal writes each line once.
+ */
+function flushDiligence(root, session, window) {
+  const dir = path.join(root, "diligence");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.appendFileSync(
+    path.join(dir, `${session}.jsonl`),
+    window.map((record) => JSON.stringify(record)).join("\n") + "\n",
+    "utf8",
+  );
 }
 
 // ----------------------------------------------------------------- run
@@ -812,8 +840,23 @@ export function run(input) {
   // — which is the predicate the renderer and the store's CI both read,
   // with no recency heuristic anywhere in it.
   if (!failed) {
-    append(ctx.root, ctx.session, { ev: "sealed" }, ctx.transcript, ctx.sessionUrl);
-    logCompliance(ctx, reported, "sealed", null);
+    // The digest is computed, never typed: the sealing execution's own
+    // record is built first, the stretch window is read off the same
+    // log `cycleOf` counts from, and the seal carries the projection.
+    // The window is everything since the previous seal in this
+    // session's log — not a parameter, so not choosable flatteringly.
+    const file = localFile("reminder-compliance.jsonl");
+    const record = complianceRecord(file, ctx, reported, "sealed", null);
+    const { window, baseline } = stretchOf([...readLog(file), record], ctx.session);
+    append(
+      ctx.root,
+      ctx.session,
+      { ev: "sealed", diligence: digestOf(window, baseline) },
+      ctx.transcript,
+      ctx.sessionUrl,
+    );
+    flushDiligence(ctx.root, ctx.session, window);
+    writeCompliance(file, record);
     return 0;
   }
 

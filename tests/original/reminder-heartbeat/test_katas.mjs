@@ -24,6 +24,9 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { validateDiligence } from "../../../original/thread-ledger/core.mjs";
+import { digestOf, stretchOf } from "../../../original/thread-ledger/diligence.mjs";
+
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SKILL = path.join(HERE, "../../../original/thread-ledger");
 const HEARTBEAT = path.join(SKILL, "heartbeat.mjs");
@@ -327,6 +330,37 @@ function assertKata(name, dir, spec, result) {
   if (spec.outcome) {
     assert.equal(record.outcome, spec.outcome, `${name}: the outcome the log records`);
   }
+  // The seal's digest and its raw records, asserted against the SAME
+  // functions the hook uses — one implementation of what a stretch is,
+  // so the runner and the hook cannot disagree about the window.
+  if (spec.sealed) {
+    const sealedEvents = ledgerEventsIn(dir, spec, log).filter((event) => event.ev === "sealed");
+    const mark = sealedEvents[sealedEvents.length - 1];
+    validateDiligence(mark.diligence);
+    const { window, baseline: sealBaseline } = stretchOf(written, record.session);
+    assert.deepEqual(
+      mark.diligence,
+      digestOf(window, sealBaseline),
+      `${name}: the seal's digest is the projection of its stretch, nothing else`,
+    );
+    if (spec.digest) {
+      for (const [key, value] of Object.entries(spec.digest)) {
+        assert.deepEqual(mark.diligence[key], value, `${name}: digest ${key}`);
+      }
+    }
+    // Raw flushes, digest summarises: the per-Stop records the digest
+    // projects are appended to the store, so the detail outlives the
+    // container the compliance log dies with.
+    const flushedFile = path.join(storeOf(dir, spec), "diligence", `${log}.jsonl`);
+    assert.ok(fs.existsSync(flushedFile), `${name}: the stretch's raw records reach the store`);
+    const flushed = fs
+      .readFileSync(flushedFile, "utf8")
+      .split("\n")
+      .filter((line) => line.trim())
+      .map((line) => JSON.parse(line));
+    assert.deepEqual(flushed, window, `${name}: the flush is the stretch, complete and raw`);
+  }
+
   if (spec.check2_verdict) {
     assert.equal(
       record.verdicts.find((verdict) => verdict.check === "pushed")?.verdict,
@@ -482,6 +516,30 @@ describe("KataRunnerRedGates", () => {
     assert.ok(
       gate(realThenBreak('fs.rmSync(home + "/reminder-compliance.jsonl");\n')),
       "a heartbeat with no compliance log passed the kata",
+    );
+  });
+
+  it("catches a seal whose digest was dropped", () => {
+    // A digest-less new seal still counts, still anchors, and quietly
+    // reopens the hole skills#69 closes: compliance data dying with the
+    // container.
+    assert.ok(
+      gate(
+        realThenBreak(
+          "for (const name of logs) {\n" +
+            '  const file = dir + "/" + name;\n' +
+            '  const kept = fs.readFileSync(file, "utf8").split("\\n").map((line) => {\n' +
+            "    if (!line.trim()) return line;\n" +
+            "    const event = JSON.parse(line);\n" +
+            '    if (event.ev === "sealed") delete event.diligence;\n' +
+            "    return JSON.stringify(event);\n" +
+            "  });\n" +
+            '  fs.writeFileSync(file, kept.join("\\n"));\n' +
+            "}\n",
+        ),
+        "02-question-only-turn",
+      ),
+      "a digest-less new seal passed the kata",
     );
   });
 

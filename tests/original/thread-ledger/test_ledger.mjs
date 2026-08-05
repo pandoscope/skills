@@ -24,6 +24,7 @@ import {
   orderOpen,
   sessionFromUrl,
   stamp,
+  stretchesOf,
   tierOf,
   validate,
 } from "../../../original/thread-ledger/core.mjs";
@@ -40,6 +41,7 @@ import {
   checkSessionFile,
   countUserMessages,
   parseArgs,
+  push,
   readAll,
   renderPage,
   resolveSession,
@@ -350,26 +352,13 @@ describe("SessionFilter", () => {
     { ev: "progress", thread: "a", pct: 5, anchor: { session: "s2", msg: 5, url: "https://claude.test/s2" } },
   ];
 
-  // The filter works on data the events already carry: every anchor
-  // names its session, so the row only has to say which sessions its
-  // events came from and the control only has to hide the rest.
+  // The session chips filter on data the events already carry: every
+  // anchor names its session, so the row only has to say which sessions
+  // its events came from and the chips only have to hide the rest.
   it("rows carry the sessions whose events built them", () => {
     const body = renderBody(fold(withAnchors), "t");
     assert.match(body, /data-sessions="[^"]*s1[^"]*s2|data-sessions="[^"]*s2[^"]*s1/);
     assert.match(body, /data-sessions="s2"/);
-  });
-
-  it("the page offers one filter option per session, ALL by default", () => {
-    const body = renderBody(fold(withAnchors), "t");
-    assert.match(body, /<select id="session-filter"/);
-    assert.match(body, /<option value=""[^>]*>/);
-    assert.match(body, /<option value="s1"/);
-    assert.match(body, /<option value="s2"/);
-  });
-
-  it("a store with one session gets no filter control", () => {
-    const events = [{ ...opened("a"), anchor: { session: "s1", msg: 1 } }];
-    assert.doesNotMatch(renderBody(fold(events), "t"), /session-filter/);
   });
 });
 
@@ -1195,6 +1184,75 @@ describe("Seals", () => {
   });
 });
 
+// ------------------------------------------------------ diligence digest
+
+/** A well-formed digest; tests below break one field at a time. */
+function digest(extra = {}) {
+  return {
+    turns: 2,
+    executions: { sealed: 1, blocked: 2, unsealed: 1, observed: 0 },
+    checks: { "turn-summary": { fired: 2, cleared: 1, ignored: 1 } },
+    tokens: { input: 10, output: 20, cacheRead: 30, cacheCreation: 40 },
+    models: ["claude-test-1"],
+    ...extra,
+  };
+}
+
+describe("DiligenceDigest", () => {
+  it("a seal without a digest stays valid", () => {
+    validate({ ev: "sealed" }, []);
+  });
+
+  it("a seal carries a well-formed digest", () => {
+    validate({ ev: "sealed", diligence: digest() }, []);
+  });
+
+  it("tokens may be null — a reset is a gap, not a number", () => {
+    validate({ ev: "sealed", diligence: digest({ tokens: null, reset: true }) }, []);
+  });
+
+  it("a digest that is not an object is rejected", () => {
+    throws(() => validate({ ev: "sealed", diligence: "looks fine" }, []), "diligence");
+  });
+
+  it("a digest without a turn count is rejected", () => {
+    throws(() => validate({ ev: "sealed", diligence: digest({ turns: undefined }) }, []), "turns");
+  });
+
+  it("a digest with a non-integer execution count is rejected", () => {
+    const bad = digest({ executions: { sealed: 1, blocked: "two", unsealed: 0, observed: 0 } });
+    throws(() => validate({ ev: "sealed", diligence: bad }, []), "executions");
+  });
+
+  it("a digest with an unknown outcome is rejected", () => {
+    const bad = digest({ executions: { sealed: 1, blocked: 0, unsealed: 0, observed: 0, crashed: 1 } });
+    throws(() => validate({ ev: "sealed", diligence: bad }, []), "executions");
+  });
+
+  it("a check row missing a counter is rejected", () => {
+    const bad = digest({ checks: { pushed: { fired: 1, cleared: 1 } } });
+    throws(() => validate({ ev: "sealed", diligence: bad }, []), "checks");
+  });
+
+  it("tokens missing a component is rejected — a partial sum reads as a total", () => {
+    const bad = digest({ tokens: { input: 1, output: 2, cacheRead: 3 } });
+    throws(() => validate({ ev: "sealed", diligence: bad }, []), "tokens");
+  });
+
+  it("models must be strings", () => {
+    throws(() => validate({ ev: "sealed", diligence: digest({ models: [42] }) }, []), "models");
+  });
+
+  it("a digest on a thread event is rejected — it describes a stretch, not a thread", () => {
+    const event = { ...opened("a"), diligence: digest() };
+    throws(() => validate(event, []), "diligence");
+  });
+
+  it("the CLI has no flag that reaches the digest", () => {
+    throws(() => parseArgs(["append", "--diligence", "{}"]), "unknown option");
+  });
+});
+
 // -------------------------------------------------------- markdown view
 
 describe("MarkdownView", () => {
@@ -1559,5 +1617,357 @@ describe("ReconcilingConcurrentAppends", () => {
     const merged = mergeLogLines(["{broken", line("2026-01-01T00:00:00+00:00", "a")], []);
     assert.equal(merged.length, 2);
     assert.equal(merged[0], "{broken");
+  });
+});
+
+// ------------------------------------------------------------ stretches
+
+/** An event stamped into session `s` at minute `min`. */
+function sessEvent(s, min, extra) {
+  return {
+    at: `2026-01-01T05:${String(min).padStart(2, "0")}:00+00:00`,
+    anchor: { session: s, msg: 1, url: `https://x.test/code/${s}` },
+    ...extra,
+  };
+}
+
+/** A digest whose only interesting numbers are the ones passed in. */
+function sealDigest(extra = {}) {
+  return {
+    turns: 1,
+    executions: { sealed: 1, blocked: 0, unsealed: 0, observed: 0 },
+    checks: {},
+    tokens: { input: 10, output: 100, cacheRead: 1000, cacheCreation: 0 },
+    models: ["claude-test-1"],
+    ...extra,
+  };
+}
+
+describe("StretchFold", () => {
+  it("groups stretches by session, bounded at each seal", () => {
+    const events = [
+      sessEvent("s1", 0, opened("a")),
+      sessEvent("s1", 1, { ev: "sealed", diligence: sealDigest() }),
+      sessEvent("s1", 2, { ev: "progress", thread: "a", pct: 10 }),
+      sessEvent("s1", 3, { ev: "sealed", diligence: sealDigest() }),
+      sessEvent("s2", 4, opened("b")),
+      sessEvent("s2", 5, { ev: "sealed", diligence: sealDigest() }),
+    ];
+    const sessions = stretchesOf(events);
+    assert.deepEqual(sessions.map((entry) => entry.session).sort(), ["s1", "s2"]);
+    const s1 = sessions.find((entry) => entry.session === "s1");
+    assert.equal(s1.stretches.length, 2);
+    assert.deepEqual(s1.stretches[0].threads, ["a"]);
+  });
+
+  it("a stretch's span runs from the previous seal to its own", () => {
+    const events = [
+      sessEvent("s1", 0, opened("a")),
+      sessEvent("s1", 2, { ev: "sealed", diligence: sealDigest() }),
+      sessEvent("s1", 14, { ev: "sealed", diligence: sealDigest() }),
+    ];
+    const [s1] = stretchesOf(events);
+    // First stretch: from the session's first event. Second: from the
+    // previous seal.
+    assert.equal(s1.stretches[0].spanMs, 2 * 60000);
+    assert.equal(s1.stretches[1].spanMs, 12 * 60000);
+  });
+
+  it("events after the last seal are the unsealed tail", () => {
+    const events = [
+      sessEvent("s1", 0, opened("a")),
+      sessEvent("s1", 1, { ev: "sealed", diligence: sealDigest() }),
+      sessEvent("s1", 2, { ev: "progress", thread: "a", pct: 30 }),
+    ];
+    const [s1] = stretchesOf(events);
+    assert.deepEqual(s1.tail.threads, ["a"]);
+  });
+
+  // The digest is a projection of retained data. When the seal itself
+  // carries none (it predates the field) but the raw per-Stop records
+  // reached the store, the projection is computed at render time — the
+  // same digestOf, joined by the msg both sides already carry.
+  it("raw records give a digest-less seal a render-time digest", () => {
+    const rec = (msg, outcome, output, cycle = 1) => ({
+      session: "s1",
+      msg,
+      cycle,
+      outcome,
+      fired: outcome === "blocked" ? "ledger-event" : null,
+      model: "model-a",
+      tokens: { input: 0, output, cacheRead: 0, cacheCreation: 0 },
+      verdicts: [],
+    });
+    const events = [
+      sessEvent("s1", 0, { ...opened("a"), anchor: { session: "s1", msg: 1 } }),
+      sessEvent("s1", 1, { ev: "sealed", anchor: { session: "s1", msg: 1 } }),
+      sessEvent("s1", 2, { ev: "progress", thread: "a", pct: 10, anchor: { session: "s1", msg: 2 } }),
+      sessEvent("s1", 3, { ev: "sealed", anchor: { session: "s1", msg: 2 } }),
+    ];
+    const records = [
+      rec(1, "sealed", 100),
+      rec(2, "blocked", 250),
+      rec(2, "sealed", 300, 2),
+    ];
+    const [s1] = stretchesOf(events, records);
+    assert.equal(s1.stretches[0].digest.executions.sealed, 1);
+    assert.equal(s1.stretches[1].digest.executions.blocked, 1);
+    // Token cost differences against the previous stretch's last record.
+    assert.equal(s1.stretches[1].digest.tokens.output, 200);
+  });
+
+  it("a seal with no matching records stays legacy", () => {
+    const events = [
+      sessEvent("s1", 0, { ...opened("a"), anchor: { session: "s1", msg: 1 } }),
+      sessEvent("s1", 1, { ev: "sealed", anchor: { session: "s1", msg: 1 } }),
+    ];
+    const other = [{ session: "s2", msg: 1, outcome: "sealed", tokens: null, verdicts: [] }];
+    const [s1] = stretchesOf(events, other);
+    assert.equal(s1.stretches[0].digest, null);
+  });
+
+  it("a legacy seal folds with no digest, and stays a stretch", () => {
+    const events = [
+      sessEvent("s1", 0, opened("a")),
+      sessEvent("s1", 1, { ev: "sealed" }),
+    ];
+    const [s1] = stretchesOf(events);
+    assert.equal(s1.stretches.length, 1);
+    assert.equal(s1.stretches[0].digest, null);
+  });
+
+  it("sessions come newest-last-event first, for the chip order", () => {
+    const events = [
+      sessEvent("old", 0, opened("a")),
+      sessEvent("old", 1, { ev: "sealed" }),
+      sessEvent("new", 2, opened("b")),
+      sessEvent("new", 3, { ev: "sealed" }),
+    ];
+    assert.deepEqual(stretchesOf(events).map((entry) => entry.session), ["new", "old"]);
+  });
+});
+
+describe("DiligenceOnThePage", () => {
+  it("the rendered page embeds the store's raw diligence records", () => {
+    const root = tempStore();
+    writeLog(root, "s1", [
+      { ...opened("a"), at: "2026-01-01T00:00:00+00:00", anchor: { session: "s1", msg: 1 } },
+      { ev: "sealed", at: "2026-01-01T00:01:00+00:00", anchor: { session: "s1", msg: 1 } },
+    ]);
+    fs.mkdirSync(path.join(root, "diligence"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, "diligence", "s1.jsonl"),
+      `${JSON.stringify({ session: "s1", msg: 1, outcome: "sealed", marker: "diligence-embed-proof" })}\n`,
+    );
+    const out = path.join(root, "page.html");
+    const result = spawnSync(
+      process.execPath,
+      [path.join(SKILL, "ledger.mjs"), "--root", root, "render", "--out", out],
+      { encoding: "utf8", env: { PATH: process.env.PATH, HOME: fs.mkdtempSync(path.join(os.tmpdir(), "nohome-")) } },
+    );
+    assert.equal(result.status, 0, `render failed: ${result.stderr}`);
+    assert.match(fs.readFileSync(out, "utf8"), /diligence-embed-proof/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("a session's name sidecar reaches the page", () => {
+    const root = tempStore();
+    writeLog(root, "s1", [
+      { ...opened("a"), at: "2026-01-01T00:00:00+00:00", anchor: { session: "s1", msg: 1 } },
+      { ev: "sealed", at: "2026-01-01T00:01:00+00:00", anchor: { session: "s1", msg: 1 } },
+    ]);
+    fs.writeFileSync(path.join(root, "ledger", "s1.name"), "the alpha build\n");
+    const out = path.join(root, "page.html");
+    const result = spawnSync(
+      process.execPath,
+      [path.join(SKILL, "ledger.mjs"), "--root", root, "render", "--out", out],
+      { encoding: "utf8", env: { PATH: process.env.PATH, HOME: fs.mkdtempSync(path.join(os.tmpdir(), "nohome-")) } },
+    );
+    assert.equal(result.status, 0, `render failed: ${result.stderr}`);
+    assert.match(fs.readFileSync(out, "utf8"), /the alpha build/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+});
+
+describe("StretchesSection", () => {
+  const twoSessions = [
+    sessEvent("s1", 0, opened("a")),
+    sessEvent("s1", 1, { ev: "sealed", diligence: sealDigest() }),
+    sessEvent("s2", 2, opened("b")),
+    sessEvent("s2", 3, { ev: "sealed", diligence: sealDigest() }),
+  ];
+  const body = (events, sessionUrl = "https://x.test/code/s2", names = {}) =>
+    renderBody(fold(events), "T", null, {}, sessionUrl, events, [], names);
+
+  it("the summary is the selected session's identity plus its totals", () => {
+    const html = body(twoSessions);
+    assert.match(html, /class="sesshead on" data-session="s2"/);
+    const head = html.match(/<span class="sesshead on"[\s\S]*?<\/span><\/span>/)[0];
+    assert.match(head, /s2/);
+    assert.match(head, /1 turn/);
+  });
+
+  it("the picker lists every session and the overview, names beside ids", () => {
+    const html = body(twoSessions, "https://x.test/code/s2", { s1: "alpha build" });
+    assert.match(html, /class="opt"[^>]*data-session=""/);
+    assert.match(html, /class="opt"[^>]*data-session="s1"[^>]*>[\s\S]*?alpha build/);
+    assert.match(html, /class="opt"[^>]*data-session="s2"/);
+  });
+
+  it("the overview head carries the totals across every session", () => {
+    const html = body(twoSessions);
+    const head = html.match(/<span class="sesshead" data-session=""[\s\S]*?<\/span><\/span>/)[0];
+    assert.match(head, /2 turns/);
+  });
+
+  it("there is no second selector — the head is the picker", () => {
+    assert.doesNotMatch(body(twoSessions), /id="session-filter"/);
+  });
+
+  it("no seals, no section", () => {
+    const html = body([sessEvent("s1", 0, opened("a"))]);
+    assert.doesNotMatch(html, /class="picker"/);
+  });
+
+  it("a clean stretch renders quiet, a reminded one amber, a gave-up red", () => {
+    const events = [
+      sessEvent("s1", 0, opened("a")),
+      sessEvent("s1", 1, { ev: "sealed", diligence: sealDigest() }),
+      sessEvent("s1", 2, {
+        ev: "sealed",
+        diligence: sealDigest({
+          executions: { sealed: 1, blocked: 2, unsealed: 0, observed: 0 },
+          checks: { "ledger-event": { fired: 2, cleared: 2, ignored: 0 } },
+        }),
+      }),
+      sessEvent("s1", 3, {
+        ev: "sealed",
+        diligence: sealDigest({
+          executions: { sealed: 1, blocked: 1, unsealed: 1, observed: 0 },
+          checks: { pushed: { fired: 2, cleared: 0, ignored: 1 } },
+        }),
+      }),
+    ];
+    const html = body(events, "https://x.test/code/s1");
+    // Scoped to the session's own block: the overview block renders the
+    // same stretches once more, deliberately.
+    const block = html.match(/<div class="sess" data-session="s1">[\s\S]*?<\/ol><\/div>/)[0];
+    const rows = block.match(/<li class="stretch[^"]*"/g);
+    assert.deepEqual(rows, [
+      '<li class="stretch"',
+      '<li class="stretch st-remind"',
+      '<li class="stretch st-gaveup"',
+    ]);
+    assert.match(block, /2 reminders/);
+    assert.match(block, /gave up/);
+  });
+
+  it("a run of digest-less seals collapses to one legacy line", () => {
+    const events = [
+      sessEvent("s1", 0, opened("a")),
+      sessEvent("s1", 1, { ev: "sealed" }),
+      sessEvent("s1", 2, { ev: "sealed" }),
+      sessEvent("s1", 3, { ev: "sealed" }),
+      sessEvent("s1", 4, { ev: "sealed", diligence: sealDigest() }),
+    ];
+    const html = body(events, "https://x.test/code/s1");
+    const block = html.match(/<div class="sess" data-session="s1">[\s\S]*?<\/ol><\/div>/)[0];
+    assert.match(block, /3 stretches · no digest/);
+    assert.equal(block.match(/<li class="stretch"/g).length, 1);
+  });
+
+  it("a reset digest renders as a gap, never as zero", () => {
+    const events = [
+      sessEvent("s1", 0, opened("a")),
+      sessEvent("s1", 1, {
+        ev: "sealed",
+        diligence: sealDigest({ tokens: null, reset: true }),
+      }),
+    ];
+    const html = body(events, "https://x.test/code/s1");
+    assert.match(html, /class="gap"/);
+    assert.doesNotMatch(html, /st-remind/);
+  });
+
+  it("an outlier stretch carries a hot multiplier against the session median", () => {
+    const mk = (min, output) =>
+      sessEvent("s1", min, {
+        ev: "sealed",
+        diligence: sealDigest({ tokens: { input: 0, output, cacheRead: 0, cacheCreation: 0 } }),
+      });
+    const events = [sessEvent("s1", 0, opened("a")), mk(1, 100), mk(2, 100), mk(3, 400)];
+    const html = body(events, "https://x.test/code/s1");
+    assert.match(html, /class="mult hot"[^>]*>×4\.0/);
+  });
+
+  it("a long session id renders as its tail, with the full id in the tooltip", () => {
+    const name = "session_01KBsy9XFFuRepNnPNc6VqYb";
+    const events = [
+      sessEvent(name, 0, opened("a")),
+      sessEvent(name, 1, { ev: "sealed", diligence: sealDigest() }),
+    ];
+    const html = body(events, `https://x.test/code/${name}`);
+    assert.match(html, /class="sesshead on"[^>]*title="session_01KBsy9XFFuRepNnPNc6VqYb"/);
+    assert.match(html, /…c6VqYb/);
+  });
+
+  it("only the last seal shows; the rest wait behind one expand", () => {
+    const events = [sessEvent("s1", 0, opened("a"))];
+    for (let index = 1; index <= 5; index += 1) {
+      events.push(sessEvent("s1", index, { ev: "sealed", diligence: sealDigest() }));
+    }
+    const html = body(events, "https://x.test/code/s1");
+    const block = html.match(/<div class="sess" data-session="s1">[\s\S]*?<\/ol><\/div>/)[0];
+    assert.match(block, /<details class="allseals"><summary>all 5 stretches<\/summary>/);
+    // Four folded inside the details, the newest one outside it.
+    const [folded] = block.match(/<details class="allseals">[\s\S]*?<\/details>/);
+    assert.equal((folded.match(/<li class="stretch"/g) ?? []).length, 4);
+    assert.equal((block.match(/<li class="stretch"/g) ?? []).length, 5);
+  });
+
+  it("the tail after the last seal shows as unsealed, with its threads", () => {
+    const events = [
+      sessEvent("s1", 0, opened("a")),
+      sessEvent("s1", 1, { ev: "sealed", diligence: sealDigest() }),
+      sessEvent("s1", 2, { ev: "progress", thread: "a", pct: 30 }),
+    ];
+    const html = body(events, "https://x.test/code/s1");
+    assert.match(html, /class="stretch tail"/);
+    assert.match(html, /unsealed/);
+  });
+});
+
+// ----------------------------------------------------------- publishing
+
+describe("PushCarriesTheStretch", () => {
+  it("the session's diligence file rides the same push as its log", () => {
+    // The hook writes diligence/<session>.jsonl but never pushes; the
+    // recorder's push is the only ride to the remote, and a push that
+    // left the file behind would strand the raw records the seal's
+    // digest claims are retained.
+    const root = tempStore();
+    const sh = (...args) => spawnSync("git", ["-C", root, ...args], { encoding: "utf8" });
+    sh("init", "-q", "-b", "main");
+    sh("config", "user.email", "t@example.test");
+    sh("config", "user.name", "t");
+    const origin = fs.mkdtempSync(path.join(os.tmpdir(), "ledger-origin-"));
+    spawnSync("git", ["init", "-q", "--bare", origin], { encoding: "utf8" });
+    sh("remote", "add", "origin", origin);
+    fs.writeFileSync(path.join(root, "ledger", "s.jsonl"), `${JSON.stringify({ ev: "sealed" })}\n`);
+    fs.writeFileSync(path.join(root, "ledger", "s.name"), "the alpha build\n");
+    fs.mkdirSync(path.join(root, "diligence"), { recursive: true });
+    fs.writeFileSync(path.join(root, "diligence", "s.jsonl"), `${JSON.stringify({ cycle: 1 })}\n`);
+
+    push(root, "s", "sealed");
+
+    const shipped = spawnSync(
+      "git",
+      ["-C", origin, "ls-tree", "-r", "--name-only", "main"],
+      { encoding: "utf8" },
+    ).stdout;
+    assert.match(shipped, /diligence\/s\.jsonl/);
+    assert.match(shipped, /ledger\/s\.name/);
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(origin, { recursive: true, force: true });
   });
 });

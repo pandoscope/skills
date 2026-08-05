@@ -30,9 +30,12 @@ export function boot(root = document) {
     data.now_msg ?? null,
     data.codes ?? {},
     data.session_url ?? null,
+    data.events,
+    data.diligence ?? [],
+    data.names ?? {},
   );
   root.getElementById("crash")?.remove();
-  wireSessionFilter(root);
+  wireSessionPicker(root);
   wire(root);
   fitAll(root);
   paint(root);
@@ -41,25 +44,47 @@ export function boot(root = document) {
 }
 
 /**
- * Hide rows the chosen session never touched.
+ * One selector, three roles: the head names the selected session and
+ * its totals, opens the dropdown, and the choice filters the thread
+ * lists to that session.
  *
- * Pure show/hide over data-sessions — the fold, the ordering and the
- * summary stay those of the whole store, so what the filter changes is
- * visibility, never truth. Rows without the attribute (threads whose
- * events carry no anchors) stay visible under every filter: absence of
- * provenance must not read as absence of work.
+ * Pure show/hide over data attributes — the fold, the ordering and the
+ * summary stay those of the whole store, so what a pick changes is
+ * visibility, never truth. Every entry's head and block are in the
+ * markup already; the script only swaps which one shows. Rows without
+ * data-sessions (threads whose events carry no anchors) stay visible
+ * under every pick: absence of provenance must not read as absence of
+ * work. Without the script the dropdown still opens (it is a details)
+ * and every block is readable, just unfiltered.
  */
-function wireSessionFilter(root) {
-  const control = root.getElementById("session-filter");
-  if (!control) return;
-  control.addEventListener("change", () => {
-    const wanted = control.value;
+function wireSessionPicker(root) {
+  const picker = root.querySelector("details.picker");
+  if (!picker) return;
+  const apply = (wanted) => {
+    for (const head of root.querySelectorAll(".sesshead")) {
+      head.classList.toggle("on", head.getAttribute("data-session") === wanted);
+    }
+    for (const block of root.querySelectorAll(".sess")) {
+      block.style.display = block.getAttribute("data-session") === wanted ? "" : "none";
+    }
     for (const row of root.querySelectorAll(".thread")) {
       const from = row.getAttribute("data-sessions");
       row.style.display =
         !wanted || !from || from.split(" ").includes(wanted) ? "" : "none";
     }
+    picker.open = false;
+  };
+  for (const option of root.querySelectorAll(".opt")) {
+    option.addEventListener("click", (e) => {
+      e.preventDefault();
+      apply(option.getAttribute("data-session"));
+    });
+  }
+  addEventListener("click", (e) => {
+    if (picker.open && !picker.contains(e.target)) picker.open = false;
   });
+  const selected = root.querySelector(".sesshead.on");
+  apply(selected ? selected.getAttribute("data-session") : "");
 }
 
 function readData(root) {
