@@ -2029,6 +2029,34 @@ describe("PipedOutput", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  // The other half of the drain contract (#87): a consumer that stops
+  // reading early — head, a pager quit half-way — closes the pipe, and
+  // an unhandled EPIPE then stack-traces where every other CLI ends
+  // quietly. The drain fix exposed this; before it, process.exit() died
+  // ahead of the error one defect was masking with the other.
+  it("a consumer that closes the pipe early ends the run quietly", () => {
+    const root = bigStore();
+    const command = [
+      JSON.stringify(process.execPath),
+      JSON.stringify(path.join(SKILL, "ledger.mjs")),
+      "--root",
+      JSON.stringify(root),
+      "state",
+    ].join(" ");
+    const result = spawnSync("bash", ["-c", `${command} 2>stderr.txt | head -c 100 >/dev/null`], {
+      cwd: root,
+      encoding: "utf8",
+      env: { PATH: process.env.PATH, HOME: fs.mkdtempSync(path.join(os.tmpdir(), "nohome-")) },
+    });
+    assert.equal(result.status, 0);
+    assert.equal(
+      fs.readFileSync(path.join(root, "stderr.txt"), "utf8"),
+      "",
+      "a closed pipe is how reading ends, not an error to report",
+    );
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
   // Draining stdout must not cost the exit code — it is what a caller
   // branches on, and a failure that exits 0 is worse than a truncation.
   it("a failing command still exits non-zero, with its reason", () => {
