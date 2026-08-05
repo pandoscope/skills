@@ -703,6 +703,18 @@ export { renderBody };
 // looked fine. Setting the code and falling off the end lets node drain
 // first, and keeps the status a caller branches on.
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+  // A consumer that stops reading early — head, a pager quit half-way —
+  // closes the pipe, and node surfaces that as an EPIPE error on
+  // stdout. That is how reading ends, not a fault: every other CLI
+  // exits quietly there. `process.exit()` is legitimate in this one
+  // place, because the reader is gone and there is nothing left to
+  // drain for. Anything that is not EPIPE still fails loudly — and the
+  // handler is registered only on the CLI path, so importing this
+  // module never rewires the host process's stdout.
+  process.stdout.on("error", (err) => {
+    if (err?.code === "EPIPE") process.exit(0);
+    throw err;
+  });
   try {
     process.exitCode = main(process.argv.slice(2));
   } catch (err) {

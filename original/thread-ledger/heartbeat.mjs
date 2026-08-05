@@ -945,6 +945,12 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   // ledger.mjs's wrapper: stderr is asynchronous on a pipe, and the
   // block reason IS the mechanism here — a reason cut off mid-sentence
   // would be a reminder the model cannot act on.
+  // A reader that closes early is the end of reading, not a fault —
+  // same rule as ledger.mjs, on the channel this hook writes to.
+  process.stderr.on("error", (err) => {
+    if (err?.code === "EPIPE") process.exit(process.exitCode ?? 0);
+    throw err;
+  });
   try {
     process.exitCode = run(input);
   } catch (err) {
