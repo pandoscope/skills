@@ -127,6 +127,23 @@ export function readCodes(root) {
   return Object.fromEntries(Object.entries(data).filter(([key]) => !key.startsWith("_")));
 }
 
+/**
+ * The store's forge config, shared with the response-hygiene check.
+ *
+ * `config/shortcodes.json`: a flat shortcode → repo map (GitHub
+ * assumed) or `{forge, patterns, repos}` naming the org's own base and
+ * URL patterns. Views take it as data — a missing or unreadable file
+ * degrades to the GitHub defaults, exactly like an absent map.
+ */
+export function readForge(root) {
+  const file = path.join(root, "config", "shortcodes.json");
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
 function ledgerDir(root) {
   return path.join(root, "ledger");
 }
@@ -879,7 +896,7 @@ function bundle() {
  * the file carries each fact once and filters or graphs added later work
  * on the data rather than on markup.
  */
-export function renderPage(events, title, nowMsg, codes, sessionUrl, diligence = [], names = {}) {
+export function renderPage(events, title, nowMsg, codes, sessionUrl, diligence = [], names = {}, forge = {}) {
   // `</` inside the payload would close the script element early and let
   // a thread title inject markup. The escape is invisible to JSON.parse,
   // so the embedded data stays byte-faithful.
@@ -891,6 +908,7 @@ export function renderPage(events, title, nowMsg, codes, sessionUrl, diligence =
     session_url: sessionUrl ?? null,
     diligence,
     names,
+    forge: forge ?? {},
   }).replace(/<\//g, "<\\/");
 
   // The crash banner is the DEFAULT content, removed on a successful
@@ -1100,13 +1118,14 @@ export function main(argv) {
   const sessionUrl = storeUrl(root, opts["session-url"]);
   const nowMsg = countUserMessages(transcript);
   const codes = readCodes(root);
+  const forge = readForge(root);
   const title = opts.title ?? "Thread ledger";
   let page;
   if (opts.format === "md") {
     const generated = new Date().toISOString().slice(0, 16).replace("T", " ") + " UTC";
-    page = renderMarkdown(folded, title, nowMsg, codes, generated, sessionUrl);
+    page = renderMarkdown(folded, title, nowMsg, codes, generated, sessionUrl, forge);
   } else {
-    page = renderPage(events, title, nowMsg, codes, sessionUrl, readDiligence(root), readNames(root));
+    page = renderPage(events, title, nowMsg, codes, sessionUrl, readDiligence(root), readNames(root), forge);
   }
   fs.writeFileSync(opts.out, page, "utf8");
   process.stdout.write(`wrote ${opts.out}\n`);

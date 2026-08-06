@@ -997,6 +997,54 @@ describe("ShortCodes", () => {
   });
 });
 
+// ------------------------------------------------------- forge config
+
+// The render path reads the same store config the response-hygiene
+// check reads (skills#102): flat map = GitHub defaults, structured =
+// the org's own base and patterns. Views take it as data.
+describe("ForgeConfig", () => {
+  const lab = {
+    forge: "https://git.example.org",
+    patterns: {
+      ticket: "{base}/{repo}/-/issues/{n}",
+      pr: "{base}/{repo}/-/merge_requests/{n}",
+    },
+    repos: { SK: "group/skills" },
+  };
+  const body = (events, forge) =>
+    renderBody(fold(events), "t", null, {}, null, [], [], {}, forge);
+
+  it("a structured config renders its own ticket pattern on the page", () => {
+    const events = [opened("a", { ticket: "group/skills#5" })];
+    assert.match(body(events, lab), /https:\/\/git\.example\.org\/group\/skills\/-\/issues\/5/);
+    assert.doesNotMatch(body(events, lab), /github\.com/);
+  });
+
+  it("a structured config reaches notes and the markdown view", () => {
+    const events = [
+      opened("a", { ticket: "group/skills#5" }),
+      { ev: "blocked", thread: "a", on: "internal", what: "see group/skills#9" },
+    ];
+    const md = renderMarkdown(fold(events), "t", null, {}, "", null, lab);
+    assert.match(md, /git\.example\.org\/group\/skills\/-\/issues\/5/);
+    assert.match(md, /git\.example\.org\/group\/skills\/-\/issues\/9/);
+    assert.doesNotMatch(md, /github\.com/);
+  });
+
+  it("an absent config keeps the GitHub defaults byte-for-byte", () => {
+    const events = [opened("a", { ticket: "o/r#1" })];
+    assert.equal(body(events, {}), body(events, undefined));
+    assert.match(body(events, {}), /https:\/\/github\.com\/o\/r\/issues\/1/);
+  });
+
+  it("linkify accepts the config too", () => {
+    assert.match(
+      linkify("see group/skills#3", lab),
+      /git\.example\.org\/group\/skills\/-\/issues\/3/,
+    );
+  });
+});
+
 // -------------------------------------------------------- state pills
 
 describe("StateEncoding", () => {
