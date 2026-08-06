@@ -1,0 +1,13 @@
+{
+  "status": "active",
+  "stop_hook_active": false,
+  "summary_written_at": "2026-08-03T15:19:25.000Z",
+  "exit": 2,
+  "check": "ledger-event",
+  "sealed": false,
+  "reason": [
+    "The turn is not complete until the ledger has an event for every thread it changed. ledger-post-merge-fixes is already completed and nothing has touched it since the turn began — if this turn did not change it, the declaration is what is wrong.",
+    "",
+    "  Remove ledger-post-merge-fixes from {{home}}/.claude/turn-summary.txt and end the turn. Append --ev reopened only if the work genuinely resumed; never append it to satisfy this check."
+  ]
+}
