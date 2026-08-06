@@ -282,7 +282,7 @@ export function storeUrl(root, explicit) {
  * The URL is the identity when one is known, and the log's filename is
  * derived from it. Everything else is a fallback that says so.
  */
-export function resolveSession(root, givenUrl, givenId, transcript) {
+export function resolveSession(root, givenUrl, givenId, transcript, { write = false } = {}) {
   const dir = ledgerDir(root);
   if (givenUrl) {
     const url = givenUrl.trim();
@@ -290,6 +290,31 @@ export function resolveSession(root, givenUrl, givenId, transcript) {
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, `${session}.url`), `${url}\n`, "utf8");
     return [session, url];
+  }
+
+  // A WRITE proves its identity or refuses (skills#51). The fallbacks
+  // below exist for reads — CI rendering a store it cannot know the
+  // session of — but an append that guesses publishes the guess: the
+  // append, the identity choice and the push are one action, so by the
+  // time a warning prints, the store has already recorded events under
+  // an identity that exists nowhere. Measured twice: once adopting the
+  // store's recorded URL from a different conversation, once falling
+  // back to the transcript filename. DECISION:IFACE — the refusal is
+  // scoped to writes, not to resolution: the sealing hook keeps the
+  // recorded-URL fallback because its only alternative identity is a
+  // platform-local id that matches no log, and a single-conversation
+  // store makes that fallback exact, while the CLI append always has a
+  // caller who can say who they are.
+  if (write) {
+    if (givenId) return [givenId, urlFor(root, givenId)];
+    throw new LedgerError(
+      "refusing to append without an explicit identity: pass --session-url " +
+        "(or set LEDGER_SESSION_URL), or --session when the log is named " +
+        "outright. Guessing has been measured to misfile events — adopting " +
+        "the store's recorded URL or the transcript filename — and the " +
+        "append pushes immediately, so the wrong identity is published " +
+        "before any warning can be acted on. Nothing was written.",
+    );
   }
 
   const known = fs.existsSync(dir)
@@ -868,7 +893,9 @@ const USAGE = `ledger — a session's open-work record
   ledger guard --range <before>..<after>   # append-only + fold guard, for store CI
 
 Global: --root <dir> --session <name> --session-url <url> --transcript <file>
-Store: SESSION_MEMORY_URL (required; unset fails)`;
+Store: SESSION_MEMORY_URL (required; unset fails)
+Identity: append requires --session-url (or LEDGER_SESSION_URL) or --session;
+          reads may fall back to the store's recorded URL`;
 
 export function main(argv) {
   const [cmd, opts] = parseArgs(argv);
@@ -896,7 +923,13 @@ export function main(argv) {
     // URL and its events would read as that session's own work.
     const [session, sessionUrl] = opts.by
       ? [opts.by, null]
-      : resolveSession(root, opts["session-url"], opts.session, transcript);
+      : resolveSession(
+          root,
+          opts["session-url"] || process.env.LEDGER_SESSION_URL || null,
+          opts.session,
+          transcript,
+          { write: true },
+        );
     const stamped = append(root, session, eventFrom(opts), transcript, sessionUrl);
     // Printed before the push, because the write already happened: a
     // push that fails must not make a recorded event look unrecorded.

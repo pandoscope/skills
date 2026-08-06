@@ -708,7 +708,7 @@ describe("MultiSessionRender", () => {
     const root = twoSessionStore();
     const result = cli(root, "append", "--ev", "progress", "--thread", "x", "--pct", "1");
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /cannot tell which conversation this is/);
+    assert.match(result.stderr, /refusing to append without an explicit identity/);
     fs.rmSync(root, { recursive: true, force: true });
   });
 });
@@ -2211,6 +2211,108 @@ describe("PushRefusesWhatTheMergeInvalidates", () => {
     fs.rmSync(root, { recursive: true, force: true });
     fs.rmSync(origin, { recursive: true, force: true });
     fs.rmSync(bot, { recursive: true, force: true });
+  });
+});
+
+// ----------------------------------------------------- write identity
+
+describe("AppendProvesItsIdentity", () => {
+  /** A store already holding another conversation's log and its URL. */
+  function adoptableStore() {
+    const root = tempStore();
+    writeLog(root, "session_other", [
+      { ...opened("t"), at: "2026-01-01T00:00:00+00:00", anchor: { session: "session_other", msg: 1 } },
+    ]);
+    fs.writeFileSync(
+      path.join(root, "ledger", "session_other.url"),
+      "https://x.test/code/session_other\n",
+    );
+    return root;
+  }
+
+  function cli(root, env, ...args) {
+    return spawnSync(
+      process.execPath,
+      [path.join(SKILL, "ledger.mjs"), "--root", root, ...args],
+      {
+        encoding: "utf8",
+        env: { PATH: process.env.PATH, HOME: fs.mkdtempSync(path.join(os.tmpdir(), "nohome-")), ...env },
+      },
+    );
+  }
+
+  const files = (root) => fs.readdirSync(path.join(root, "ledger")).sort();
+
+  // The measured incidents (skills#51): with no explicit identity the
+  // append adopted the store's recorded URL once and the transcript
+  // filename once — and pushed both before the warning could be read.
+  it("an append with no identity refuses instead of adopting the recorded URL", () => {
+    const root = adoptableStore();
+    const before = files(root);
+    const result = cli(root, {}, "append", "--ev", "progress", "--thread", "t", "--pct", "10", "--no-push");
+    assert.notEqual(result.status, 0, "the append must refuse");
+    assert.match(result.stderr, /--session-url/);
+    assert.match(result.stderr, /LEDGER_SESSION_URL/);
+    assert.match(result.stderr, /nothing was written/i);
+    assert.deepEqual(files(root), before, "no file may be created or grown");
+    assert.equal(
+      fs.readFileSync(path.join(root, "ledger", "session_other.jsonl"), "utf8").split("\n").filter(Boolean).length,
+      1,
+      "the other conversation's log is untouched",
+    );
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("a transcript is not an identity for a write", () => {
+    const root = adoptableStore();
+    const transcript = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "ledger-tr-")), "abc123.jsonl");
+    fs.writeFileSync(transcript, `${JSON.stringify({ type: "user", timestamp: "2026-01-01T00:00:00Z" })}\n`);
+    const result = cli(
+      root, {}, "append", "--ev", "progress", "--thread", "t", "--pct", "10",
+      "--transcript", transcript, "--no-push",
+    );
+    assert.notEqual(result.status, 0, "the transcript stem must not name a write");
+    assert.ok(!files(root).includes("abc123.jsonl"), "no log under the transcript stem");
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("a render with no identity still succeeds — the fallback belongs to reads", () => {
+    const root = adoptableStore();
+    const out = path.join(root, "page.html");
+    const result = cli(root, {}, "render", "--out", out);
+    assert.equal(result.status, 0, `render refused: ${result.stderr}`);
+    assert.ok(fs.existsSync(out));
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("LEDGER_SESSION_URL names the write like --session-url does", () => {
+    // A fresh store, so the one-log-per-conversation guard (its own
+    // describe) stays out of what this test measures.
+    const root = tempStore();
+    const result = cli(
+      root, { LEDGER_SESSION_URL: "https://x.test/code/session_mine" },
+      "append", "--ev", "opened", "--thread", "u", "--title", "U", "--conversation-only", "--no-push",
+    );
+    assert.equal(result.status, 0, `append refused: ${result.stderr}`);
+    assert.match(
+      fs.readFileSync(path.join(root, "ledger", "session_mine.jsonl"), "utf8"),
+      /"session":"session_mine"/,
+    );
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("--session is explicit enough for a store naming its logs outright", () => {
+    const root = adoptableStore();
+    const result = cli(
+      root, {}, "--session", "session_other",
+      "append", "--ev", "progress", "--thread", "t", "--pct", "30", "--no-push",
+    );
+    assert.equal(result.status, 0, `append refused: ${result.stderr}`);
+    assert.match(
+      fs.readFileSync(path.join(root, "ledger", "session_other.jsonl"), "utf8"),
+      /"pct":30/,
+    );
+    fs.rmSync(root, { recursive: true, force: true });
   });
 });
 
