@@ -40,6 +40,7 @@ import {
 import {
   append,
   checkSessionFile,
+  mergedReport,
   countUserMessages,
   parseArgs,
   push,
@@ -2211,6 +2212,182 @@ describe("PushRefusesWhatTheMergeInvalidates", () => {
     fs.rmSync(root, { recursive: true, force: true });
     fs.rmSync(origin, { recursive: true, force: true });
     fs.rmSync(bot, { recursive: true, force: true });
+  });
+});
+
+// -------------------------------------------------------- work location
+
+describe("WorkLocation", () => {
+  // skills#70: whether a branch merged is a pure git question, but only
+  // if the log says which branch to ask about.
+  it("branch and pr fold forward, latest wins", () => {
+    const events = [
+      { ...opened("t"), branch: "claude/1-first", at: "2026-01-01T00:00:00+00:00" },
+      { ev: "progress", thread: "t", pct: 40, pr: "o/r#5", branch: "claude/1-redo", at: "2026-01-01T00:01:00+00:00" },
+    ];
+    const [thread] = fold(events);
+    assert.equal(thread.branch, "claude/1-redo");
+    assert.equal(thread.pr, "o/r#5");
+  });
+
+  it("a malformed pr is rejected at write time", () => {
+    throws(() => validate({ ...opened("t"), pr: "not-a-ref" }, []), "owner\\/repo#123");
+    throws(() => validate({ ...opened("t"), branch: "  " }, []), "non-empty");
+    validate({ ...opened("t"), branch: "claude/1-x", pr: "o/r#9" }, []);
+  });
+});
+
+// ------------------------------------------------------ merged reporter
+
+describe("MergedWorkReporter", () => {
+  function sh(dir, ...args) {
+    const result = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8" });
+    assert.equal(result.status, 0, `git ${args.join(" ")} failed:\n${result.stderr}`);
+    return result.stdout;
+  }
+
+  /**
+   * A clones dir holding one clone of "o/r" with a merged and an
+   * unmerged branch, plus the store recording threads on each.
+   */
+  function world() {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), "ledger-mr-"));
+    const origin = path.join(base, "o", "r.git"); // tail = "o/r", matching the tickets
+    fs.mkdirSync(path.dirname(origin), { recursive: true });
+    spawnSync("git", ["init", "-q", "--bare", "-b", "main", origin], { encoding: "utf8" });
+    const seed = path.join(base, "seed");
+    spawnSync("git", ["clone", "-q", origin, seed], { encoding: "utf8" });
+    sh(seed, "checkout", "-q", "-b", "main");
+    sh(seed, "config", "user.email", "t@example.test");
+    sh(seed, "config", "user.name", "t");
+    fs.writeFileSync(path.join(seed, "README.md"), "seed\n");
+    sh(seed, "add", "-A");
+    sh(seed, "commit", "-q", "-m", "seed");
+    sh(seed, "push", "-q", "-u", "origin", "main");
+    // A branch merged into main, and one that is not.
+    sh(seed, "checkout", "-q", "-b", "claude/1-done");
+    fs.writeFileSync(path.join(seed, "done.txt"), "done\n");
+    sh(seed, "add", "-A");
+    sh(seed, "commit", "-q", "-m", "feat: done");
+    sh(seed, "push", "-q", "-u", "origin", "claude/1-done");
+    sh(seed, "checkout", "-q", "main");
+    sh(seed, "merge", "-q", "--no-ff", "-m", "merge", "claude/1-done");
+    sh(seed, "push", "-q", "origin", "main");
+    sh(seed, "checkout", "-q", "-b", "claude/2-open");
+    fs.writeFileSync(path.join(seed, "open.txt"), "open\n");
+    sh(seed, "add", "-A");
+    sh(seed, "commit", "-q", "-m", "feat: open");
+    sh(seed, "push", "-q", "-u", "origin", "claude/2-open");
+
+    const repos = path.join(base, "repos");
+    fs.mkdirSync(repos);
+    spawnSync("git", ["clone", "-q", "-b", "main", origin, path.join(repos, "r")], { encoding: "utf8" });
+
+    const root = tempStore();
+    writeLog(root, "s1", [
+      { ...opened("done-thread", { ticket: "o/r#1" }), branch: "claude/1-done", at: "2026-01-01T00:00:00+00:00", anchor: { session: "s1", msg: 1 } },
+      { ...opened("open-thread", { ev: "opened", ticket: "o/r#2" }), thread: "open-thread", branch: "claude/2-open", at: "2026-01-01T00:01:00+00:00", anchor: { session: "s1", msg: 1 } },
+      { ...opened("no-branch", { ev: "opened", ticket: "o/r#3" }), thread: "no-branch", at: "2026-01-01T00:02:00+00:00", anchor: { session: "s1", msg: 1 } },
+    ]);
+    return { base, root, repos };
+  }
+
+  it("names the live thread whose branch merged, and only that one", () => {
+    const { base, root, repos } = world();
+    const text = mergedReport(root, repos);
+    assert.match(text, /done-thread/);
+    assert.match(text, /claude\/1-done/);
+    assert.doesNotMatch(text, /open-thread/);
+    assert.doesNotMatch(text, /no-branch/);
+    fs.rmSync(base, { recursive: true, force: true });
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("a completed thread is not reported, and absence is silence", () => {
+    const { base, root, repos } = world();
+    fs.appendFileSync(
+      path.join(root, "ledger", "s1.jsonl"),
+      `${JSON.stringify({ ev: "completed", thread: "done-thread", at: "2026-01-01T01:00:00+00:00", anchor: { session: "s1", msg: 2 } })}\n`,
+    );
+    assert.equal(mergedReport(root, repos), "");
+    // A missing clones dir reports nothing rather than failing: the
+    // reporter must never become a gate.
+    assert.equal(mergedReport(root, path.join(base, "nowhere")), "");
+    fs.rmSync(base, { recursive: true, force: true });
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("a deleted branch ref is silence, not a claim", () => {
+    const { base, root, repos } = world();
+    const clone = path.join(repos, "r");
+    sh(clone, "update-ref", "-d", "refs/remotes/origin/claude/1-done");
+    assert.equal(mergedReport(root, repos), "");
+    fs.rmSync(base, { recursive: true, force: true });
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+});
+
+// ------------------------------------------------------------ reconcile
+
+describe("Reconcile", () => {
+  function ghStub(dir, script) {
+    fs.mkdirSync(dir, { recursive: true });
+    const stub = path.join(dir, "gh");
+    fs.writeFileSync(stub, `#!/bin/sh\n${script}`);
+    fs.chmodSync(stub, 0o755);
+    return dir;
+  }
+
+  function cli(root, bindir, ...args) {
+    return spawnSync(
+      process.execPath,
+      [path.join(SKILL, "ledger.mjs"), "--root", root, ...args],
+      {
+        encoding: "utf8",
+        env: { PATH: bindir ? `${bindir}:${process.env.PATH}` : "/nonexistent-bin", HOME: fs.mkdtempSync(path.join(os.tmpdir(), "nohome-")) },
+      },
+    );
+  }
+
+  function storeWith(events) {
+    const root = tempStore();
+    writeLog(root, "s1", events);
+    return root;
+  }
+
+  it("a live thread with a closed ticket is a divergence", () => {
+    const root = storeWith([
+      { ...opened("t", { ticket: "o/r#7" }), at: "2026-01-01T00:00:00+00:00", anchor: { session: "s1", msg: 1 } },
+    ]);
+    const bin = ghStub(fs.mkdtempSync(path.join(os.tmpdir(), "ghstub-")),
+      'case "$*" in *--version*) exit 0 ;; *"issue view"*) echo \'{"state":"CLOSED"}\' ;; esac');
+    const result = cli(root, bin, "reconcile");
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /! t is opened, but its ticket o\/r#7 is closed/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("a completed thread whose PR never merged is the other direction", () => {
+    const root = storeWith([
+      { ...opened("t", { ticket: "o/r#7" }), pr: "o/r#8", at: "2026-01-01T00:00:00+00:00", anchor: { session: "s1", msg: 1 } },
+      { ev: "completed", thread: "t", at: "2026-01-01T00:10:00+00:00", anchor: { session: "s1", msg: 2 } },
+    ]);
+    const bin = ghStub(fs.mkdtempSync(path.join(os.tmpdir(), "ghstub-")),
+      'case "$*" in *--version*) exit 0 ;; *"pr view"*) echo \'{"state":"OPEN"}\' ;; esac');
+    const result = cli(root, bin, "reconcile");
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /! t is completed, but its PR o\/r#8 is open/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("without gh it refuses and says why — it never guesses", () => {
+    const root = storeWith([
+      { ...opened("t", { ticket: "o/r#7" }), at: "2026-01-01T00:00:00+00:00", anchor: { session: "s1", msg: 1 } },
+    ]);
+    const result = cli(root, null, "reconcile");
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /gh CLI/);
+    fs.rmSync(root, { recursive: true, force: true });
   });
 });
 
