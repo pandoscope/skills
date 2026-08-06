@@ -38,6 +38,7 @@ import {
   stalePrompt,
 } from "../../../original/thread-ledger/views.mjs";
 import {
+  append,
   checkSessionFile,
   countUserMessages,
   parseArgs,
@@ -2210,6 +2211,111 @@ describe("PushRefusesWhatTheMergeInvalidates", () => {
     fs.rmSync(root, { recursive: true, force: true });
     fs.rmSync(origin, { recursive: true, force: true });
     fs.rmSync(bot, { recursive: true, force: true });
+  });
+});
+
+// -------------------------------------------------------- branch guard
+
+describe("AppendRefusesOffTheDefaultBranch", () => {
+  function sh(dir, ...args) {
+    const result = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8" });
+    assert.equal(result.status, 0, `git ${args.join(" ")} failed:\n${result.stderr}`);
+    return result.stdout;
+  }
+
+  /** A store clone with a bare origin, seeded and pushed on main. */
+  function clonedStore() {
+    const root = tempStore();
+    sh(root, "init", "-q", "-b", "main");
+    sh(root, "config", "user.email", "t@example.test");
+    sh(root, "config", "user.name", "t");
+    const origin = fs.mkdtempSync(path.join(os.tmpdir(), "ledger-origin-"));
+    spawnSync("git", ["init", "-q", "--bare", "-b", "main", origin], { encoding: "utf8" });
+    sh(root, "remote", "add", "origin", origin);
+    writeLog(root, "s1", [
+      { ...opened("t"), at: "2026-01-01T00:00:00+00:00", anchor: { session: "s1", msg: 1 } },
+    ]);
+    fs.writeFileSync(path.join(root, "ledger", "s1.url"), "https://x.test/code/s1\n");
+    sh(root, "add", "-A");
+    sh(root, "commit", "-q", "-m", "seed");
+    sh(root, "push", "-q", "-u", "origin", "main");
+    return { root, origin };
+  }
+
+  function cliAppend(root, ...args) {
+    return spawnSync(
+      process.execPath,
+      [path.join(SKILL, "ledger.mjs"), "--root", root, "--session", "s1", "append", ...args],
+      { encoding: "utf8", env: { PATH: process.env.PATH, HOME: fs.mkdtempSync(path.join(os.tmpdir(), "nohome-")) } },
+    );
+  }
+
+  // The measured incident (skills#76): the clone sat on a feature
+  // branch carrying an unmerged commit, a routine append ran, and
+  // `HEAD:main` published the commit — an unreviewed automation went
+  // live on the store's default branch.
+  it("a store clone on a feature branch refuses the append before writing", () => {
+    const { root, origin } = clonedStore();
+    sh(root, "checkout", "-q", "-b", "feature/unreviewed");
+    fs.writeFileSync(path.join(root, "workflow.yml"), "on: schedule\n");
+    sh(root, "add", "-A");
+    sh(root, "commit", "-q", "-m", "feat: an automation awaiting review");
+    const before = fs.readFileSync(path.join(root, "ledger", "s1.jsonl"), "utf8");
+
+    const result = cliAppend(root, "--ev", "progress", "--thread", "t", "--pct", "10");
+    assert.notEqual(result.status, 0, "the append must refuse");
+    assert.match(result.stderr, /feature\/unreviewed/);
+    assert.match(result.stderr, /default branch/i);
+    // The refusal happens before the write: nothing half-recorded.
+    assert.equal(fs.readFileSync(path.join(root, "ledger", "s1.jsonl"), "utf8"), before);
+    // And the feature commit never reached main.
+    const remoteTip = sh(root, "ls-remote", "origin", "main").split("\t")[0];
+    assert.throws(() => sh(root, "show", `${remoteTip}:workflow.yml`));
+    // The message names no store location.
+    assert.ok(!result.stderr.includes(origin), "the refusal must not leak the store URL");
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(origin, { recursive: true, force: true });
+  });
+
+  it("a detached HEAD refuses too, named as such", () => {
+    const { root, origin } = clonedStore();
+    sh(root, "checkout", "-q", "--detach", "HEAD");
+    throws(
+      () => append(root, "s1", { ev: "progress", thread: "t", pct: 10 }, null, "https://x.test/code/s1"),
+      "detached HEAD",
+    );
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(origin, { recursive: true, force: true });
+  });
+
+  it("the ordinary append on main still lands", () => {
+    const { root, origin } = clonedStore();
+    const result = cliAppend(root, "--ev", "progress", "--thread", "t", "--pct", "20");
+    assert.equal(result.status, 0, `append on main refused: ${result.stderr}`);
+    const remoteTip = sh(root, "ls-remote", "origin", "main").split("\t")[0];
+    assert.match(sh(root, "show", `${remoteTip}:ledger/s1.jsonl`), /"pct":20/);
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(origin, { recursive: true, force: true });
+  });
+
+  // The kata fixtures' shape: a store that is a plain directory inside
+  // some other repository. `git -C` resolves the ENCLOSING repo there,
+  // and a guard that judged its branch would refuse every append made
+  // from a feature-branch checkout of the repo that happens to hold the
+  // store. Only a store that is its own repository has a push to guard.
+  it("a store that is not its own repository is not judged", () => {
+    const enclosing = fs.mkdtempSync(path.join(os.tmpdir(), "ledger-encl-"));
+    sh(enclosing, "init", "-q", "-b", "main");
+    sh(enclosing, "checkout", "-q", "-b", "feature/elsewhere");
+    const root = path.join(enclosing, "store");
+    fs.mkdirSync(path.join(root, "ledger"), { recursive: true });
+    fs.writeFileSync(path.join(root, "ledger", "s1.url"), "https://x.test/code/s1\n");
+    const stamped = append(
+      root, "s1", { ev: "opened", thread: "t", title: "T", conversation_only: true },
+      null, "https://x.test/code/s1",
+    );
+    assert.equal(stamped.ev, "opened");
+    fs.rmSync(enclosing, { recursive: true, force: true });
   });
 });
 

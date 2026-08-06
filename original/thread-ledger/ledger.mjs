@@ -350,10 +350,60 @@ function findTranscript(explicit) {
 // ------------------------------------------------------------- writes
 
 /**
+ * Refuse the write when the store clone is not on its default branch
+ * (skills#76).
+ *
+ * The push is `HEAD:main` by design — one branch, no PR gate, every
+ * append lands immediately — but that shape was assumed, never
+ * verified. Measured: a clone left on a feature branch ran a routine
+ * append and the push published the branch's unreviewed commit to
+ * main. An append is a one-line write; that made it a code deploy.
+ * DECISION:IFACE — the guard lives here in the library, not in the
+ * CLI, so every writer (CLI, sealing hook, bot) refuses before
+ * anything is written; and it applies only when the store is its own
+ * repository, because a bare log directory has no push to protect and
+ * `git -C` would otherwise judge whatever repo happens to enclose it.
+ */
+function requireDefaultBranch(root) {
+  let top;
+  try {
+    top = git(root, "rev-parse", "--show-toplevel").trim();
+  } catch {
+    return; // not a repository — there is no push for the guard to gate
+  }
+  if (fs.realpathSync(top) !== fs.realpathSync(root)) return;
+  // What the push targets: the remote's default branch when the clone
+  // recorded one, else the `main` that pushWithRebase is written against.
+  let target = "main";
+  try {
+    const ref = git(root, "symbolic-ref", "-q", "refs/remotes/origin/HEAD").trim();
+    if (ref) target = ref.replace("refs/remotes/origin/", "");
+  } catch {
+    // No origin/HEAD recorded; the hardcoded push target stands.
+  }
+  let head = null;
+  try {
+    head = git(root, "symbolic-ref", "--short", "-q", "HEAD").trim() || null;
+  } catch {
+    // Detached HEAD: no branch name at all.
+  }
+  if (head === target) return;
+  throw new LedgerError(
+    `the store clone is on ${head ? JSON.stringify(head) : "a detached HEAD"}, ` +
+      `not its default branch ${JSON.stringify(target)}. The store is worked on ` +
+      `its default branch: an append pushes HEAD there, so whatever this branch ` +
+      `carries would be published to ${JSON.stringify(target)} unreviewed. ` +
+      `Nothing was written. Reconcile the clone (git checkout ${target}) and ` +
+      `re-run the append.`,
+  );
+}
+
+/**
  * Validate, stamp, append one event. Returns the stamped event; throws
  * without writing when validation fails.
  */
 export function append(root, session, event, transcript, sessionUrl) {
+  requireDefaultBranch(root);
   // The one-log guard asks whether a conversation is splitting its log
   // in two. A writer that is not a conversation has no such log to
   // split, and its own is expected to sit beside the sessions'.
