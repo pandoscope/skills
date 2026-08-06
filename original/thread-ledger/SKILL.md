@@ -174,6 +174,15 @@ in round-trips. The report prints its own limits beside its numbers.
 surfacing nothing: the unobserved arm, for measuring what the reminder
 itself changes.
 
+A check defect that fires wrongly still lands in the corpus as model
+non-compliance. The correction is a **dispute**: a line in the store's
+`diligence/disputes.jsonl` naming the check, the window, and the
+ticket that filed the defect, written at diagnosis time. The report
+counts matching failures apart — billed to neither side — while the
+records themselves stay immutable; a dispute without a filed ticket is
+rejected, because an eraser the recorder could reach for is exactly
+what the corpus must not have.
+
 The rendered page makes the same numbers legible per stretch:
 a sessions section leads the page — one chip per session, and the chip
 both unfolds that session's stretches and filters the thread lists.

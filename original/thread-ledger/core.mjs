@@ -616,6 +616,7 @@ export function turnsOf(records) {
     return {
       session: first.session,
       msg: first.msg,
+      at: first.at ?? null,
       model: last.model ?? first.model ?? null,
       cycles: ordered.length,
       // The reminder's price in round-trips. Cycles above the first
@@ -671,7 +672,7 @@ function verdictMap(record) {
  * at anything must not dilute a pass rate; that is the whole reason the
  * hook records the third value.
  */
-export function perCheck(records, turns) {
+export function perCheck(records, turns, disputes = []) {
   const checks = new Map();
   const of = (name) => {
     if (!checks.has(name)) {
@@ -683,6 +684,7 @@ export function perCheck(records, turns) {
         fired: 0,
         cleared: 0,
         ignored: 0,
+        disputed: 0,
       });
     }
     return checks.get(name);
@@ -690,6 +692,16 @@ export function perCheck(records, turns) {
   for (const turn of turns) {
     for (const [name, verdict] of Object.entries(turn.unprompted)) {
       const row = of(name);
+      // A failure inside a disputed window may be the CHECK's defect
+      // rather than the model's conduct, so it is counted apart and
+      // billed to neither side — including its turn, so the rate's
+      // denominator is not quietly diluted. Passes stay: the disputed
+      // classes are false POSITIVES, and a defective check's pass says
+      // nothing was flagged, wrongly or otherwise.
+      if (verdict === "fail" && disputed(name, turn.at, disputes)) {
+        row.disputed += 1;
+        continue;
+      }
       row.turns += 1;
       if (verdict === "fail") row.unpromptedFail += 1;
       if (verdict === "unconfigured") row.unconfigured += 1;
@@ -710,6 +722,10 @@ export function perCheck(records, turns) {
       const fired = ordered[index].fired;
       if (!fired) continue;
       const row = of(fired);
+      if (disputed(fired, ordered[index].at, disputes)) {
+        row.disputed += 1;
+        continue;
+      }
       row.fired += 1;
       // The complement of cleared is split, because it mixes two very
       // different things. IGNORED means the reminder was delivered and
@@ -725,6 +741,54 @@ export function perCheck(records, turns) {
     }
   }
   return [...checks.values()].sort((a, b) => b.fired - a.fired || (a.check < b.check ? -1 : 1));
+}
+
+// ------------------------------------------------------------ disputes
+
+/**
+ * A dispute names a window in which one CHECK's verdicts are known
+ * defective — a filed false-positive class — so the diligence measure
+ * stops billing them to the model (skills#66). Written at diagnosis
+ * time into the store (`diligence/disputes.jsonl`), BESIDE the corpus
+ * it corrects, never into it: compliance records are immutable, and a
+ * flag the recorder could reach would be a flag worth reaching for.
+ *
+ * A dispute requires the ticket that names the defect. A dispute
+ * without a filed cause is a self-serving eraser, and validation
+ * rejects it.
+ */
+export function validDisputes(items) {
+  const disputes = [];
+  let invalid = 0;
+  const stamp = (value) => typeof value === "string" && !Number.isNaN(Date.parse(value));
+  for (const item of items) {
+    const ok =
+      item &&
+      typeof item.check === "string" &&
+      item.check &&
+      typeof item.ticket === "string" &&
+      /#\d+$/.test(item.ticket) &&
+      typeof item.reason === "string" &&
+      item.reason &&
+      stamp(item.from) &&
+      (item.until === null || stamp(item.until));
+    if (ok) disputes.push(item);
+    else invalid += 1;
+  }
+  return { disputes, invalid };
+}
+
+/** Whether a verdict of `check` stamped `at` falls in a disputed window. */
+export function disputed(check, at, disputes) {
+  if (!at || !disputes.length) return false;
+  const when = Date.parse(at);
+  if (Number.isNaN(when)) return false;
+  return disputes.some(
+    (item) =>
+      item.check === check &&
+      when >= Date.parse(item.from) &&
+      (item.until === null || when <= Date.parse(item.until)),
+  );
 }
 
 /** Per model: unprompted pass rate, and what correcting it cost. */
