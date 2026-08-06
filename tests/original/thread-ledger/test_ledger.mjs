@@ -16,8 +16,13 @@ import {
   LedgerError,
   currentStates,
   fold,
+  forgeOf,
   isUserTurn,
+  knownPrs,
+  lastAssistantText,
   lastUserTurnAt,
+  refViolations,
+  stripCode,
   transcriptUsage,
   mergeLogLines,
   orderClosed,
@@ -2751,5 +2756,114 @@ describe("PushCarriesTheStretch", () => {
     assert.match(shipped, /ledger\/s\.name/);
     fs.rmSync(root, { recursive: true, force: true });
     fs.rmSync(origin, { recursive: true, force: true });
+  });
+});
+
+describe("ResponseHygiene", () => {
+  const MAP = { skills: "pandoscope/skills", AET: "pandoscope/agentic-engineering-template" };
+
+  it("a linked shortcode ref with the right URL is clean", () => {
+    const prose = "Merged [skills#97](https://github.com/pandoscope/skills/issues/97) today.";
+    assert.deepEqual(refViolations(prose, MAP), []);
+  });
+
+  it("an unlinked shortcode ref names its canonical form", () => {
+    const [v] = refViolations("see skills#97 for details", MAP);
+    assert.equal(v.token, "skills#97");
+    assert.equal(v.canonical, "[skills#97](https://github.com/pandoscope/skills/issues/97)");
+  });
+
+  it("a full owner/repo ref in prose asks for the shortcode", () => {
+    const [v] = refViolations("pandoscope/skills#97 landed", MAP);
+    assert.equal(v.canonical, "[skills#97](https://github.com/pandoscope/skills/issues/97)");
+  });
+
+  it("a number the ledger knows as a PR corrects the sigil to !", () => {
+    const prs = new Set(["pandoscope/skills#97"]);
+    const [v] = refViolations(
+      "see [skills#97](https://github.com/pandoscope/skills/issues/97)",
+      MAP,
+      prs,
+    );
+    assert.equal(v.canonical, "[skills!97](https://github.com/pandoscope/skills/pull/97)");
+  });
+
+  it("a PR sigil links to /pull/ or is named", () => {
+    const clean = "see [skills!98](https://github.com/pandoscope/skills/pull/98)";
+    assert.deepEqual(refViolations(clean, MAP), []);
+    const [v] = refViolations("see [skills!98](https://github.com/pandoscope/skills/issues/98)", MAP);
+    assert.equal(v.canonical, "[skills!98](https://github.com/pandoscope/skills/pull/98)");
+  });
+
+  it("an unknown shortcode is a violation with no canonical form", () => {
+    const [v] = refViolations("see xyz#4", { ...MAP }, new Set());
+    assert.equal(v, undefined);
+    const [linked] = refViolations("see [xyz#4](https://github.com/x/y/issues/4)", MAP);
+    assert.equal(linked.canonical, null);
+  });
+
+  it("a bare repo-less number is a violation", () => {
+    const [v] = refViolations("fixed in #137", MAP);
+    assert.equal(v.token, "#137");
+    assert.equal(v.canonical, null);
+  });
+
+  it("code spans are quoted material, not prose", () => {
+    const text = "run `git log pandoscope/skills#97` and\n```\nskills#97 in a fence\n```\ndone";
+    assert.deepEqual(refViolations(stripCode(text), MAP), []);
+  });
+
+  it("the last assistant text supersedes earlier messages", () => {
+    const lines = [
+      { type: "assistant", message: { content: [{ type: "text", text: "bad skills#97" }] } },
+      { type: "assistant", message: { content: [{ type: "tool_use", id: "x" }] } },
+      {
+        type: "assistant",
+        message: {
+          content: [
+            { type: "text", text: "good [skills#97](https://github.com/pandoscope/skills/issues/97)" },
+          ],
+        },
+      },
+    ]
+      .map((r) => JSON.stringify(r))
+      .join("\n");
+    assert.match(lastAssistantText(lines), /^good/);
+  });
+
+  it("knownPrs reads pr fields off events", () => {
+    const events = [{ ev: "opened", thread: "t", pr: "pandoscope/skills#98" }, { ev: "progress", thread: "t" }];
+    assert.deepEqual([...knownPrs(events)], ["pandoscope/skills#98"]);
+  });
+});
+
+describe("ForgeIndependence", () => {
+  const MAP = { skills: "pandoscope/skills" };
+
+  it("a structured config carries the forge, so nothing here names one", () => {
+    const cfg = {
+      forge: "https://git.example.org",
+      patterns: {
+        ticket: "{base}/{repo}/-/issues/{n}",
+        pr: "{base}/{repo}/-/merge_requests/{n}",
+      },
+      repos: MAP,
+    };
+    const [v] = refViolations("see skills#97", cfg);
+    assert.equal(v.canonical, "[skills#97](https://git.example.org/pandoscope/skills/-/issues/97)");
+    const clean = "see [skills!98](https://git.example.org/pandoscope/skills/-/merge_requests/98)";
+    assert.deepEqual(refViolations(clean, cfg), []);
+    const [wrong] = refViolations(
+      "see [skills#97](https://github.com/pandoscope/skills/issues/97)",
+      cfg,
+    );
+    assert.equal(wrong.canonical, "[skills#97](https://git.example.org/pandoscope/skills/-/issues/97)");
+  });
+
+  it("a flat map keeps the GitHub defaults", () => {
+    assert.deepEqual(
+      refViolations("see [skills#97](https://github.com/pandoscope/skills/issues/97)", MAP),
+      [],
+    );
   });
 });

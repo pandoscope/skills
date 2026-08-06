@@ -1,0 +1,2 @@
+{"type":"user","timestamp":"2026-08-03T15:10:00.000Z","message":{"role":"user","content":"Merge it once the checks are green."}}
+{"type":"assistant","timestamp":"2026-08-03T15:19:30.114Z","message":{"role":"assistant","content":[{"type":"text","text":"Merged skills#97 and pushed the follow-up."}]}}

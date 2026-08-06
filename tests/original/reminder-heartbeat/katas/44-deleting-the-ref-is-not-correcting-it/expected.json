@@ -1,0 +1,12 @@
+{
+  "status": "active",
+  "stop_hook_active": true,
+  "summary_written_at": "2026-08-03T15:19:25.000Z",
+  "exit": 0,
+  "check": "response-hygiene",
+  "sealed": false,
+  "outcome": "unsealed",
+  "cycle": 2,
+  "records_before": 1,
+  "reason": []
+}
