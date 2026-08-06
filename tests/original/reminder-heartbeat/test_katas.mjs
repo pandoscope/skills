@@ -180,6 +180,9 @@ function fire(dir, spec, script = HEARTBEAT) {
       // blocking path.
       ...(spec.observe ? { HEARTBEAT_OBSERVE: "1" } : {}),
       ...(spec.render_path ? { LEDGER_RENDER_PATH: path.join(dir, spec.render_path) } : {}),
+      // Only set when the kata names it, so every other kata keeps
+      // exercising the built-in-only scan an ordinary session runs.
+      ...(spec.push_blocklist ? { PUSH_BLOCKLIST: spec.push_blocklist } : {}),
     },
   });
   assert.equal(result.error, undefined, `the hook did not run: ${result.error}`);
@@ -329,7 +332,7 @@ function assertKata(name, dir, spec, result) {
   // an empty verdict list is the honest shape of "nothing was checked".
   assert.deepEqual(
     record.verdicts.map((verdict) => verdict.check),
-    spec.verdicts ?? ["turn-summary", "pushed", "ledger-event", "decision-record", "response-hygiene", "artifact-fresh"],
+    spec.verdicts ?? ["turn-summary", "push-blocklist", "pushed", "ledger-event", "decision-record", "response-hygiene", "artifact-fresh"],
     `${name}: every check reports, pass or fail`,
   );
   assert.equal(record.fired, spec.check, `${name}: the check the log says fired`);

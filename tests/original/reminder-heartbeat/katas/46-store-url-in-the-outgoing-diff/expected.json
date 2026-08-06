@@ -1,0 +1,17 @@
+{
+  "status": "active",
+  "stop_hook_active": false,
+  "summary_written_at": "2026-08-03T15:19:25.000Z",
+  "decision_url": "decision-memory",
+  "exit": 2,
+  "check": "push-blocklist",
+  "sealed": false,
+  "reason": [
+    "The turn is not complete while outgoing content carries a blocked term. Hits, by source — values are never printed:",
+    "",
+    "  the outgoing diff in skills carries the value of DECISION_MEMORY_URL",
+    "    confirm (match counts only): git -C {{repos}}/skills log -p HEAD --not --remotes | grep -cF \"$DECISION_MEMORY_URL\" && git -C {{repos}}/skills diff HEAD | grep -cF \"$DECISION_MEMORY_URL\"",
+    "",
+    "Remove the term from what would leave — amend or drop the commits, or re-render the page from a clean source — before anything is pushed or published. Untracked files and the environment are not scanned: a term may live there, it must only never leave."
+  ]
+}

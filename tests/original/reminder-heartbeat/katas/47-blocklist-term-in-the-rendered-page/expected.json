@@ -1,0 +1,18 @@
+{
+  "status": "active",
+  "stop_hook_active": false,
+  "summary_written_at": "2026-08-03T15:19:25.000Z",
+  "push_blocklist": "hunter2|the-codename",
+  "render_path": "page.html",
+  "exit": 2,
+  "check": "push-blocklist",
+  "sealed": false,
+  "reason": [
+    "The turn is not complete while outgoing content carries a blocked term. Hits, by source — values are never printed:",
+    "",
+    "  the rendered page at {{render}} carries the value of PUSH_BLOCKLIST term 2",
+    "    confirm (match counts only): grep -cF \"$(printf %s \"$PUSH_BLOCKLIST\" | cut -d'|' -f2)\" {{render}}",
+    "",
+    "Remove the term from what would leave — amend or drop the commits, or re-render the page from a clean source — before anything is pushed or published. Untracked files and the environment are not scanned: a term may live there, it must only never leave."
+  ]
+}
