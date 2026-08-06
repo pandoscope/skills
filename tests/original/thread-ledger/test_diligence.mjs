@@ -8,11 +8,13 @@ import { describe, it } from "node:test";
 
 import {
   digestOf,
+  disputed,
   perCheck,
   perModel,
   report,
   stretchOf,
   turnsOf,
+  validDisputes,
 } from "../../../original/thread-ledger/diligence.mjs";
 import { validateDiligence } from "../../../original/thread-ledger/core.mjs";
 
@@ -279,5 +281,82 @@ describe("Digest", () => {
     ];
     const { window, baseline } = stretchOf(records, "s1");
     assert.deepEqual(digestOf(window, baseline).models, ["model-b"]);
+  });
+});
+
+// -------------------------------------------------------------- disputes
+
+// A dispute corrects the ACCOUNTING for a filed check defect (#66):
+// three false-positive classes were measured this leg (#73, #86, #89),
+// and each booked its firings as model non-compliance. The records are
+// immutable, so the correction lives beside the corpus, is bounded by
+// timestamps, and must cite the ticket that names the defect.
+describe("Disputes", () => {
+  const window = {
+    check: "decision-record",
+    ticket: "o/skills#86",
+    reason: "kata fixture literals counted as markers",
+    from: "2026-08-03T00:00:00Z",
+    until: "2026-08-06T09:26:00Z",
+  };
+
+  it("a dispute needs check, ticket, reason and from — or it is dropped", () => {
+    const { disputes, invalid } = validDisputes([
+      window,
+      { ...window, ticket: "no number" },
+      { ...window, reason: "" },
+      { ...window, from: "not a date" },
+      "garbage",
+    ]);
+    assert.equal(disputes.length, 1);
+    assert.equal(invalid, 4);
+  });
+
+  it("matches by check and window; an open dispute has no end", () => {
+    assert.ok(disputed("decision-record", "2026-08-05T12:00:00Z", [window]));
+    assert.ok(!disputed("ledger-event", "2026-08-05T12:00:00Z", [window]));
+    assert.ok(!disputed("decision-record", "2026-08-07T00:00:00Z", [window]));
+    assert.ok(disputed("decision-record", "2026-08-07T00:00:00Z", [{ ...window, until: null }]));
+    assert.ok(!disputed("decision-record", null, [window]));
+  });
+
+  it("a disputed failure is billed to neither side of the rate", () => {
+    const at = "2026-08-05T12:00:00Z";
+    const failed = [{ check: "decision-record", verdict: "fail" }];
+    const records = [
+      { ...stamp(1, 1, { outcome: "blocked", fired: "decision-record", verdicts: failed }), at },
+      { ...stamp(2, 1, { verdicts: [{ check: "decision-record", verdict: "pass" }] }), at },
+    ];
+    const turns = turnsOf(records);
+    const clean = perCheck(records, turns).find((r) => r.check === "decision-record");
+    assert.equal(clean.unpromptedFail, 1);
+    assert.equal(clean.fired, 1);
+    const row = perCheck(records, turns, [window]).find((r) => r.check === "decision-record");
+    assert.equal(row.disputed, 2, "the failing verdict and the firing, apart");
+    assert.equal(row.unpromptedFail, 0);
+    assert.equal(row.fired, 0);
+    // The denominator shrinks with the numerator: only the undisputed
+    // turn is counted, so the rate is not quietly diluted.
+    assert.equal(row.turns, 1);
+  });
+
+  it("a pass inside the window still counts — the defect class is false positives", () => {
+    const at = "2026-08-05T12:00:00Z";
+    const records = [
+      { ...stamp(3, 1, { verdicts: [{ check: "decision-record", verdict: "pass" }] }), at },
+    ];
+    const turns = turnsOf(records);
+    const row = perCheck(records, turns, [window]).find((r) => r.check === "decision-record");
+    assert.equal(row.turns, 1);
+    assert.equal(row.disputed, 0);
+  });
+
+  it("the report names the applied disputes and their tickets", () => {
+    const at = "2026-08-05T12:00:00Z";
+    const records = [{ ...stamp(4, 1), at }];
+    const text = report(records, [window]);
+    assert.match(text, /Disputes applied/);
+    assert.match(text, /o\/skills#86/);
+    assert.match(text, /disputed/);
   });
 });

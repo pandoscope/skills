@@ -24,12 +24,20 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-import { digestOf, perCheck, perModel, stretchOf, turnsOf } from "./core.mjs";
+import {
+  digestOf,
+  disputed,
+  perCheck,
+  perModel,
+  stretchOf,
+  turnsOf,
+  validDisputes,
+} from "./core.mjs";
 
 // The pure record analysis (turnsOf, perCheck, the stretch digest)
 // lives in core.mjs so the rendered page can project digests in the
 // browser; this module re-exports it so its callers keep one import.
-export { digestOf, perCheck, perModel, stretchOf, turnsOf };
+export { digestOf, disputed, perCheck, perModel, stretchOf, turnsOf, validDisputes };
 
 /** Records in the compliance log, oldest first. */
 export function readLog(file) {
@@ -50,12 +58,24 @@ export function readLog(file) {
     });
 }
 
+/**
+ * Disputes from the store's `diligence/disputes.jsonl`, validated.
+ *
+ * Kept beside the corpus, not in it: a dispute corrects the ACCOUNTING
+ * for a filed check defect (skills#66), while the records themselves
+ * stay immutable. Invalid lines are dropped and counted, so a typo
+ * cannot silently erase real verdicts.
+ */
+export function readDisputes(file) {
+  return validDisputes(readLog(file));
+}
+
 function pct(part, whole) {
   return whole ? `${Math.round((part / whole) * 100)}%` : "—";
 }
 
 /** The whole report as text. */
-export function report(records) {
+export function report(records, disputes = []) {
   const turns = turnsOf(records);
   if (!turns.length) return "No compliance records yet — nothing to measure.\n";
   const lines = [];
@@ -72,13 +92,27 @@ export function report(records) {
 
   lines.push("");
   lines.push("Per check");
-  lines.push("  check            unprompted fail   unconfigured   fired   cleared   ignored");
-  for (const row of perCheck(records, turns)) {
+  lines.push(
+    "  check            unprompted fail   unconfigured   fired   cleared   ignored   disputed",
+  );
+  for (const row of perCheck(records, turns, disputes)) {
     lines.push(
       `  ${row.check.padEnd(16)} ${pct(row.unpromptedFail, row.turns).padStart(15)}   ` +
         `${pct(row.unconfigured, row.turns).padStart(12)}   ${String(row.fired).padStart(5)}   ` +
-        `${pct(row.cleared, row.fired).padStart(7)}   ${String(row.ignored).padStart(7)}`,
+        `${pct(row.cleared, row.fired).padStart(7)}   ${String(row.ignored).padStart(7)}   ` +
+        `${String(row.disputed).padStart(8)}`,
     );
+  }
+
+  if (disputes.length) {
+    lines.push("");
+    lines.push("Disputes applied — filed check defects, not model conduct");
+    for (const item of disputes) {
+      lines.push(
+        `  ${item.check.padEnd(16)} ${item.ticket.padEnd(24)} ` +
+          `${item.from} → ${item.until ?? "open"}`,
+      );
+    }
   }
 
   lines.push("");
@@ -105,6 +139,10 @@ export function report(records) {
   lines.push("  - Cycle 1 is unprompted THIS TURN, not unmonitored: the model has been");
   lines.push("    blocked on earlier turns and knows the hook exists. The clean baseline");
   lines.push("    needs sessions run under HEARTBEAT_OBSERVE, where nothing is surfaced.");
+  lines.push("  - A disputed count is a failure inside a filed check-defect window,");
+  lines.push("    excluded from both sides of the rates. It may still contain real");
+  lines.push("    non-compliance the defect happened to overlap; the tickets above say");
+  lines.push("    what the defect was, and the raw records keep every verdict.");
   return `${lines.join("\n")}\n`;
 }
 
@@ -116,12 +154,36 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
       ? argv[at + 1]
       : path.join(process.env.HOME ?? "", ".claude", "reminder-compliance.jsonl");
   const records = readLog(file);
+  // Disputes live in the store beside the diligence corpus; the
+  // heartbeat's own env names the store, so a session that has one
+  // gets its accounting corrected without remembering a flag.
+  const dat = argv.indexOf("--disputes");
+  const disputesFile =
+    dat >= 0 && argv[dat + 1]
+      ? argv[dat + 1]
+      : process.env.SESSION_MEMORY_ROOT
+        ? path.join(process.env.SESSION_MEMORY_ROOT, "diligence", "disputes.jsonl")
+        : null;
+  const { disputes, invalid } =
+    disputesFile && fs.existsSync(disputesFile)
+      ? readDisputes(disputesFile)
+      : { disputes: [], invalid: 0 };
+  if (invalid) {
+    process.stderr.write(
+      `diligence: ${invalid} invalid dispute line${invalid === 1 ? "" : "s"} in ` +
+        `${disputesFile} ignored — a dispute needs check, ticket, reason and from.\n`,
+    );
+  }
   if (argv.includes("--json")) {
     const turns = turnsOf(records);
     process.stdout.write(
-      `${JSON.stringify({ turns, checks: perCheck(records, turns), models: perModel(turns) }, null, 2)}\n`,
+      `${JSON.stringify(
+        { turns, checks: perCheck(records, turns, disputes), models: perModel(turns), disputes },
+        null,
+        2,
+      )}\n`,
     );
   } else {
-    process.stdout.write(report(records));
+    process.stdout.write(report(records, disputes));
   }
 }
