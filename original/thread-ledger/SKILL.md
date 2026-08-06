@@ -185,6 +185,26 @@ reminded and still did not finish goes red.
 A compaction reset renders as an explicit gap, never as zero, and
 seals from before the digest existed collapse to one counted line.
 
+## Reconciling against the world
+
+The checks are turn-local by design; nothing in the hook queries the
+tracker, and a merge usually happens outside any turn. Reconciliation
+therefore lives in two report-only tools, and neither can write:
+
+- **`merged-report --repos <dir>`** — the SessionStart twin of the
+  clone report. A thread that records its `--branch` beside its ticket
+  makes "is this work merged" a pure git question; live threads whose
+  branch is an ancestor of the default branch are named on stdout.
+  Reports, never gates: a missing clone, an unknown ref or a network
+  failure is silence, and the exit is always 0.
+- **`reconcile`** — the API-priced half, on demand where `gh` is
+  authenticated. Prints both directions of divergence: a live thread
+  whose ticket is closed, and a completed thread whose `--pr` never
+  merged.
+
+Deciding what event to append stays with the reader — a reconciler
+that wrote events would be a second author of the log it audits.
+
 ## Ordering
 
 Rendering order is computed from the events, so nothing here needs

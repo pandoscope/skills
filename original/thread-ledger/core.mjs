@@ -264,6 +264,17 @@ export function validate(event, history) {
   const thread = event.thread;
   if (!thread) throw new LedgerError("event is missing 'thread'");
 
+  // Where the thread's WORK lives, beside the ticket that tracks it —
+  // the field a git-only reconciler needs (skills#70): whether a branch
+  // is an ancestor of the default branch is answerable without
+  // credentials, but only if the log says which branch to ask about.
+  if (event.branch !== undefined && (typeof event.branch !== "string" || !event.branch.trim())) {
+    throw new LedgerError("branch must be a non-empty string naming the work's branch");
+  }
+  if (event.pr !== undefined && !/^[\w.-]+\/[\w.-]+#\d+$/.test(String(event.pr))) {
+    throw new LedgerError(`pr must look like owner/repo#123, got ${JSON.stringify(event.pr)}`);
+  }
+
   const state = currentStates(history)[thread] ?? "";
   if (METADATA_EVENTS.includes(kind)) {
     if (!state) {
@@ -548,6 +559,10 @@ export function fold(events) {
     // happened to render.
     const url = event.anchor?.url;
     if (url) thread.url = url;
+    // Where the work lives, carried forward like the URL: latest wins,
+    // because work moves to follow-up branches and PRs mid-thread.
+    if (event.branch) thread.branch = event.branch;
+    if (event.pr) thread.pr = event.pr;
 
     if (OPENING.includes(kind)) {
       thread.title = event.title ?? thread.title ?? name;
