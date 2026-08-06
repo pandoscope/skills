@@ -232,9 +232,15 @@ two valid logs that folded in beside each other and looked entirely
 healthy. Deriving the name from the URL removes that, rather than
 guarding against it.
 
-Without a URL the tool falls back to the transcript stem **and says
-so**, or refuses when there is nothing at all to go on. `--session`
-remains for a store holding several conversations.
+The fallbacks — the store's single recorded URL, then the transcript
+stem — belong to **reads only**: CI renders with no transcript and no
+way to know the session, and a read folds every log anyway. An
+`append` without `--session-url` (or `LEDGER_SESSION_URL`) or
+`--session` refuses outright: an append pushes immediately, so a
+guessed identity is published before any warning can be acted on —
+measured twice (skills#51), both times filing events under an identity
+that exists nowhere. `--session` remains for a store holding several
+conversations.
 
 ## One implementation
 
