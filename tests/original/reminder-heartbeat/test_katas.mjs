@@ -128,6 +128,7 @@ function expand(text, dir, spec) {
     .replaceAll("{{home}}", path.join(dir, "home"))
     .replaceAll("{{store}}", storeOf(dir, spec))
     .replaceAll("{{repos}}", path.join(dir, "repos"))
+    .replaceAll("{{workspace}}", path.join(dir, "workspace"))
     .replaceAll("{{decisions}}", decisionCheckout(dir, spec) ?? "")
     .replaceAll("{{render}}", spec?.render_path ? path.join(dir, spec.render_path) : "")
     .replaceAll("{{transcript}}", path.join(dir, "transcript.jsonl"));
@@ -162,6 +163,10 @@ function fire(dir, spec, script = HEARTBEAT) {
       PATH: process.env.PATH,
       HOME: path.join(dir, "home"),
       SESSION_MEMORY_ROOT: storeOf(dir, spec),
+      // Always kata-local, never the host's real /workspace: store
+      // discovery scans this directory (#72), and a hermetic kata
+      // cannot depend on what the machine running it has lying around.
+      WORKSPACE_ROOT: path.join(dir, "workspace"),
       // `repo_root` lets a kata point the hook at a path of its own —
       // a wrong one, say, which is what a config edit produces and what
       // an unset variable cannot express.

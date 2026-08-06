@@ -34,9 +34,12 @@ kata_repo() {
     # the only way to express "written earlier, landed now".
     authored=${4:-$when}
     origin="$PWD/.origins/$name.git"
-    work="$PWD/repos/$name"
+    # KATA_CLONE_DIR moves the checkout out of repos/ — workspace models
+    # ensure-stores.sh, which clones stores under the workspace root
+    # rather than the repo root (#72).
+    work="$PWD/${KATA_CLONE_DIR:-repos}/$name"
 
-    mkdir -p "$PWD/.origins" "$PWD/repos"
+    mkdir -p "$PWD/.origins" "$(dirname "$work")"
     git init -q --bare "$origin"
     git init -q -b claude/kata "$work"
     git -C "$work" config user.email kata@example.test
@@ -152,11 +155,16 @@ kata_repo() {
 #
 #   kata_decisions empty              no record landed this turn
 #   kata_decisions recorded <when>    a record landed at <when>
+#
+# Third argument: the directory the checkout lives under (default
+# repos). `workspace` models ensure-stores.sh, whose store clones sit
+# under ${WORKSPACE_ROOT:-/workspace}, not under the repo root (#72).
 kata_decisions() {
     dstate=$1
     dwhen=${2:-$SEEDED}
-    kata_repo decision-memory clean
-    store="$PWD/repos/decision-memory"
+    dwhere=${3:-repos}
+    KATA_CLONE_DIR=$dwhere kata_repo decision-memory clean
+    store="$PWD/$dwhere/decision-memory"
 
     mkdir -p "$store/decisions"
     printf '%s\n' '{"id":"20200101T000000Z-seed","type":"decision"}' \
@@ -173,5 +181,36 @@ kata_decisions() {
         GIT_COMMITTER_DATE="$dwhen" git -C "$store" commit -q \
             --date "$dwhen" -m "record: the seal sits outside the state machine"
         git -C "$store" push -q origin claude/kata
+    fi
+}
+
+# A second checkout of the decision store, cloned from the origin
+# kata_decisions already built — the duplicate the platform resurrects
+# from snapshots on any resume (#72), so discovery has to be correct
+# with both present.
+#
+#   kata_decisions_twin <dir>                  bare duplicate
+#   kata_decisions_twin <dir> open             recorder session open here
+#   kata_decisions_twin <dir> open-recorded    ...and a record landed here
+kata_decisions_twin() {
+    twhere=$1
+    tstate=${2:-}
+    twin="$PWD/$twhere/decision-memory"
+    mkdir -p "$PWD/$twhere"
+    # `-b`, because the bare origin's HEAD still points at a branch
+    # nothing ever pushed — without it the clone checks out nothing and
+    # the twin has no working tree to stage state in.
+    git clone -q -b claude/kata "$PWD/.origins/decision-memory.git" "$twin"
+    case "$tstate" in
+        open|open-recorded)
+            printf '%s\n' '{"session":"20260803T210000Z","branch":"session/20260803T210000Z"}' \
+                > "$twin/.recorder-session.json"
+            ;;
+    esac
+    if [ "$tstate" = open-recorded ]; then
+        # Untracked, exactly as the recorder leaves a record before its
+        # commit lands — check 4 counts it either way.
+        printf '%s\n' '{"id":"20260803T210600Z-seal-outside-machine","type":"decision"}' \
+            > "$twin/decisions/20260803T210600Z-seal-outside-machine.json"
     fi
 }
