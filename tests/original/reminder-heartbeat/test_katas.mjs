@@ -329,7 +329,7 @@ function assertKata(name, dir, spec, result) {
   // an empty verdict list is the honest shape of "nothing was checked".
   assert.deepEqual(
     record.verdicts.map((verdict) => verdict.check),
-    spec.verdicts ?? ["turn-summary", "pushed", "ledger-event", "decision-record", "artifact-fresh"],
+    spec.verdicts ?? ["turn-summary", "pushed", "ledger-event", "decision-record", "response-hygiene", "artifact-fresh"],
     `${name}: every check reports, pass or fail`,
   );
   assert.equal(record.fired, spec.check, `${name}: the check the log says fired`);

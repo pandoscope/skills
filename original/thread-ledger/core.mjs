@@ -187,6 +187,160 @@ export function transcriptUsage(text) {
 }
 
 /**
+ * The final assistant message's text in `text`, the transcript JSONL.
+ *
+ * The LAST message with a text block, not everything since the turn
+ * began: the hygiene check reads what the principal will actually read,
+ * and a correction written after a block has to be able to supersede
+ * the message it corrects — scanning the whole turn would keep every
+ * fixed mistake in view forever and the exercise could never pass.
+ */
+export function lastAssistantText(text) {
+  let last = null;
+  for (const line of String(text).split("\n")) {
+    if (!line.trim()) continue;
+    let record;
+    try {
+      record = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (record?.type !== "assistant") continue;
+    const content = record.message?.content;
+    if (!Array.isArray(content)) continue;
+    const blocks = content.filter((b) => b?.type === "text" && b.text?.trim());
+    if (blocks.length) last = blocks.map((b) => b.text).join("\n");
+  }
+  return last;
+}
+
+/**
+ * `text` with fenced blocks and inline code removed.
+ *
+ * Code is quoted material, not prose: commit messages, ledger events
+ * and command lines legitimately carry `owner/repo#n` and bare `#n`,
+ * and a style check that reached into them would demand rewrites of
+ * strings whose format is owned elsewhere.
+ */
+export function stripCode(text) {
+  return String(text)
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`[^`\n]*`/g, " ");
+}
+
+/** Refs the ledger knows to be PRs: every `pr` a thread event carried. */
+export function knownPrs(events) {
+  const known = new Set();
+  for (const event of events) if (event.pr) known.add(event.pr);
+  return known;
+}
+
+/**
+ * Style violations in `prose` under the response-hygiene rules (#99).
+ *
+ * The style: tickets and PRs appear as shortcode refs — `XXX#n` for
+ * tickets, `XXX!n` for PRs — each a markdown link to the GitHub page
+ * its sigil implies. Returned violations carry the offending token, the
+ * canonical form when one is derivable, and why. Pure text in, plain
+ * data out; the heartbeat owns blocking and the correction exercise.
+ */
+export function refViolations(prose, shortcodes, prs = new Set()) {
+  const found = [];
+  const repoOf = new Map(Object.entries(shortcodes).map(([short, repo]) => [repo, short]));
+  const canonical = (short, sigil, num) => {
+    const repo = shortcodes[short];
+    const kind = sigil === "!" ? "pull" : "issues";
+    return `[${short}${sigil}${num}](https://github.com/${repo}/${kind}/${num})`;
+  };
+  // The sigil a ref should carry: `!` when the ledger knows the number
+  // as a PR, otherwise whatever was written — the hook has no API, and
+  // guessing kinds it cannot verify would block on truths.
+  const rightSigil = (short, sigil, num) =>
+    prs.has(`${shortcodes[short]}#${num}`) ? "!" : sigil;
+
+  // Links first, validated and then blanked so the bare-token scan
+  // cannot re-flag their labels.
+  let rest = prose.replace(/\[([^\]\n]*)\]\(([^()\s]+)\)/g, (whole, label, url) => {
+    const ref = /^([A-Za-z][\w-]*)([#!])(\d+)$/.exec(label);
+    if (!ref) {
+      const long = /^([\w.-]+\/[\w.-]+)[#!](\d+)$/.exec(label);
+      if (long && repoOf.has(long[1])) {
+        const short = repoOf.get(long[1]);
+        const sigil = whole.includes("!") && !whole.includes("#") ? "!" : label.includes("!") ? "!" : "#";
+        found.push({
+          token: label,
+          canonical: canonical(short, rightSigil(short, sigil, long[2]), long[2]),
+          why: "prose uses the shortcode, not the full repository path",
+        });
+      }
+      return " ";
+    }
+    const [, short, sigil, num] = ref;
+    if (!shortcodes[short]) {
+      found.push({
+        token: label,
+        canonical: null,
+        why: `unknown shortcode — the map defines: ${Object.keys(shortcodes).join(", ")}`,
+      });
+      return " ";
+    }
+    const wanted = rightSigil(short, sigil, num);
+    if (wanted !== sigil) {
+      found.push({
+        token: label,
+        canonical: canonical(short, wanted, num),
+        why: "the ledger records this number as a pull request — the sigil is !",
+      });
+      return " ";
+    }
+    const kind = sigil === "!" ? "pull" : "issues";
+    if (url !== `https://github.com/${shortcodes[short]}/${kind}/${num}`) {
+      found.push({
+        token: `[${label}](${url})`,
+        canonical: canonical(short, sigil, num),
+        why: `the link does not point at the ${kind === "pull" ? "pull request" : "issue"} the label names`,
+      });
+    }
+    return " ";
+  });
+
+  // Bare full-path refs: the form PR bodies and ledger events use,
+  // where GitHub autolinks it. Prose gets the shortcode.
+  rest = rest.replace(/\b([\w.-]+\/[\w.-]+)([#!])(\d+)\b/g, (token, repo, sigil, num) => {
+    const short = repoOf.get(repo);
+    found.push({
+      token,
+      canonical: short ? canonical(short, rightSigil(short, sigil, num), num) : null,
+      why: short
+        ? "prose uses the linked shortcode form"
+        : `no shortcode maps to ${repo} — add one to the map or leave the ref out`,
+    });
+    return " ";
+  });
+
+  // Bare shortcode refs — right vocabulary, missing the link.
+  rest = rest.replace(/(?<![\w/[])([A-Za-z][A-Za-z-]*)([#!])(\d+)\b/g, (token, short, sigil, num) => {
+    if (!shortcodes[short]) return token;
+    found.push({
+      token,
+      canonical: canonical(short, rightSigil(short, sigil, num), num),
+      why: "shortcode refs are markdown links",
+    });
+    return " ";
+  });
+
+  // Repo-less refs. `#n` names nothing across eight repositories.
+  for (const bare of rest.matchAll(/(?<![\w#!/])#(\d+)\b/g)) {
+    found.push({
+      token: bare[0],
+      canonical: null,
+      why: "a bare number names no repository — use a shortcode ref",
+    });
+  }
+  return found;
+}
+
+/**
  * Latest work-state event kind per thread.
  *
  * Metadata events are skipped: promoting a thread tells you nothing

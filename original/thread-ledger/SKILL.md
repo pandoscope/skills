@@ -164,6 +164,20 @@ against the newest event, so a stale artifact blocks the turn. Render
 with `--session-url`: a store holding several conversations refuses
 without one.
 
+**Responses follow the reference style, and mistakes are corrected as
+an exercise.** In prose, tickets and PRs are linked shortcode refs —
+`XXX#n` for tickets, `XXX!n` for PRs, each a markdown link to the page
+its sigil implies — with the shortcodes defined once, in the store's
+`config/shortcodes.json`. A thread opened this turn is announced as
+`new thread: <slug>`, and every thread the turn summary declares is
+named in the prose that discusses it. Code spans are quoted material
+and exempt; a bare `owner/repo#n` belongs in PR bodies and ledger
+events, where the forge autolinks it, never in prose. When the check
+fires, it names the canonical forms and the rewrite must contain them
+**verbatim** — deleting the offending refs is not correcting them, and
+the re-fire grades exactly that. No map in the store means the check
+reports `unconfigured` and declines, like every other check.
+
 ## Diligence
 
 `diligence.mjs` reads the compliance log and reports what the reminders
