@@ -227,7 +227,10 @@ therefore lives in two report-only tools, and neither can write:
 - **`reconcile`** — the API-priced half, on demand where `gh` is
   authenticated. Prints both directions of divergence: a live thread
   whose ticket is closed, and a completed thread whose `--pr` never
-  merged.
+  merged. Deliberately forge-specific: it is `gh`-bound by declaration
+  and refuses without it, unlike the render path, which builds every
+  ticket link through the store's `config/shortcodes.json` forge
+  config and names no vendor (skills#102).
 
 Deciding what event to append stays with the reader — a reconciler
 that wrote events would be a second author of the log it audits.

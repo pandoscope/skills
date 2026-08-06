@@ -33,6 +33,7 @@ export function boot(root = document) {
     data.events,
     data.diligence ?? [],
     data.names ?? {},
+    data.forge ?? {},
   );
   root.getElementById("crash")?.remove();
   wireSessionPicker(root);
