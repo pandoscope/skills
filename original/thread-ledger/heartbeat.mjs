@@ -463,14 +463,43 @@ const RECORDER_STATE = ".recorder-session.json";
  * store. Matching is on the trailing owner/repo pair, because managed
  * environments rewrite remotes through local proxies; that is the same
  * comparison the recorder itself makes before it will write.
+ *
+ * Discovery scans the session's clones AND the workspace stores
+ * directory (#72): ensure-stores.sh clones stores under
+ * `${WORKSPACE_ROOT:-/workspace}`, which is not under the repo root,
+ * so a store visible only there used to read as "no checkout" — check
+ * 4 logging unconfigured while marker turns passed unchecked, in
+ * exactly the session shape the install builds toward.
+ *
+ * Duplicates are permanent, not a mess to clean: the platform
+ * resurrects deleted clones from snapshots on any resume, so discovery
+ * has to be correct in their presence. The tie-break is the open
+ * recorder session — that is where records land this turn, by
+ * construction. No open session anywhere → the first match serves,
+ * since the check only needs to see records once one is written. More
+ * than one open session is a real ambiguity, returned for the check to
+ * report rather than guessed at.
  */
 function storeCheckout(url, clones) {
   const wanted = tail(url);
-  for (const repo of clones) {
+  const workspace = clonesUnder(process.env.WORKSPACE_ROOT || "/workspace");
+  const matches = [];
+  const seen = new Set();
+  for (const repo of [...clones, ...workspace]) {
+    let real;
+    try {
+      real = fs.realpathSync(repo.path);
+    } catch {
+      continue;
+    }
+    if (seen.has(real)) continue;
+    seen.add(real);
     const origin = gitOrNull(repo.path, "remote", "get-url", "origin");
-    if (origin && tail(origin) === wanted) return repo.path;
+    if (origin && tail(origin) === wanted) matches.push(repo.path);
   }
-  return null;
+  const open = matches.filter((p) => fs.existsSync(path.join(p, RECORDER_STATE)));
+  if (open.length > 1) return { store: null, open };
+  return { store: open[0] ?? matches[0] ?? null, open };
 }
 
 /**
@@ -598,7 +627,19 @@ function checkDecisionRecord(ctx) {
   // Never the value. The store URLs are secrets, and the compliance log
   // is a file this hook appends to on every single turn — naming the
   // variable is what a misconfiguration needs to be fixed anyway.
-  const store = storeCheckout(ctx.decisionUrl, ctx.clones);
+  const { store, open } = storeCheckout(ctx.decisionUrl, ctx.clones);
+  // Two checkouts both claiming an open recorder session cannot be
+  // guessed between: records could land in either, and reading the
+  // wrong one books a recorded decision as missing. Named as its own
+  // condition — paths, never the URL — so the fix is visible.
+  if (open.length > 1) {
+    return {
+      verdict: "unconfigured",
+      detail:
+        "DECISION_MEMORY_URL matches several checkouts with open recorder " +
+        `sessions (${open.join(", ")}) — ambiguous, no decision store was examined`,
+    };
+  }
   if (!store) {
     return {
       verdict: "unconfigured",
