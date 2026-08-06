@@ -56,7 +56,7 @@ import {
   transcriptUsage,
 } from "./core.mjs";
 import { digestOf, readLog, stretchOf } from "./diligence.mjs";
-import { append, readAll, resolveRoot, resolveSession, tail } from "./ledger.mjs";
+import { append, push, readAll, resolveRoot, resolveSession, tail } from "./ledger.mjs";
 import { blocklistTerms, scanText, shellRef } from "./scan.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -271,7 +271,7 @@ function checkPushed(ctx) {
     // The store is the hook's own output, not the session's work: the
     // seal dirties it, so reporting it would be the hook observing
     // itself and blocking every turn on a commit nobody can make.
-    // Pushing it belongs to the seal protocol's third phase, unbuilt.
+    // The seal protocol's third phase pushes it once the turn is green.
     if (ctx.root && path.resolve(repo.path) === path.resolve(ctx.root)) continue;
     const branch = gitOrNull(repo.path, "rev-parse", "--abbrev-ref", "HEAD") ?? "HEAD";
     // Uncommitted before unpushed: a change that is not committed cannot
@@ -1177,6 +1177,22 @@ export function run(input) {
       ctx.sessionUrl,
     );
     flushDiligence(ctx.root, ctx.session, window);
+    // The seal protocol's third phase (skills#46): the checks gated the
+    // seal — the render among them — and the seal gates this push, so
+    // what reaches the remote is a turn whose bookkeeping is complete.
+    // The recorder's own push carries the union-merge protection, and
+    // this is the only ride the seal line and the flushed diligence
+    // records get: the CLI pushes per append, but nothing else pushes
+    // what the hook itself wrote. A store that is not a git clone (or a
+    // push the network refuses) is left for the next seal's push to
+    // sweep — the turn sealed, and blocking it again over transport
+    // would double-seal on the re-fire; the SessionStart clone report
+    // and the store's CI tail guard are the observers for that gap.
+    try {
+      push(ctx.root, ctx.session, "sealed");
+    } catch {
+      // Local seal stands; the next push carries it.
+    }
     writeCompliance(file, record);
     return 0;
   }

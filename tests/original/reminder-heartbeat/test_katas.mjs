@@ -389,6 +389,23 @@ function assertKata(name, dir, spec, result) {
     );
   }
   assert.equal(record.guarded, spec.stop_hook_active ?? false);
+
+  // Seal phase 3: the checks gated the seal, the seal gates the push.
+  // Proven on the store's own git state — a clean tree with nothing
+  // ahead of upstream is "committed and pushed" with no API in sight.
+  if (spec.store_pushed) {
+    const store = storeOf(dir, spec);
+    const dirty = spawnSync("git", ["-C", store, "status", "--porcelain"], {
+      encoding: "utf8",
+    }).stdout;
+    assert.equal(dirty, "", `${name}: the seal push leaves the store clean`);
+    const ahead = spawnSync(
+      "git",
+      ["-C", store, "rev-list", "--count", "@{upstream}..HEAD"],
+      { encoding: "utf8" },
+    ).stdout.trim();
+    assert.equal(ahead, "0", `${name}: the store holds no unpushed commits after the seal`);
+  }
 }
 
 // ---------------------------------------------------------------- katas

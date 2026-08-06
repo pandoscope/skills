@@ -60,6 +60,12 @@ anyone chooses — and the stretch's raw per-Stop records flush to
 The digest is computed, never typed:
 a seal composed by hand about the turn's own conduct would be
 self-report, and the recorder has no flag that reaches the field.
+The hook then pushes the store itself (seal phase 3): the checks gated
+the seal — the rendered page among them — and the seal gates the push,
+so no manual store push belongs in any turn. A store that is not a git
+clone, or a push the network refuses, is left for the next seal's push
+to sweep; the SessionStart clone report and the store's CI tail guard
+observe that gap.
 
 Splitting a thread: `opened` the children with `parent` set to the
 original's slug. The parent keeps its own lifecycle.
