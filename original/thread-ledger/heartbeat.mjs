@@ -412,6 +412,17 @@ function checkLedgerEvent(ctx) {
 /** The marker documenting-decisions places, added by a commit. */
 const MARKER = /^\+.*DECISION:(ARCH|SCOPE|IFACE|SEC|IRREV|NOVEL)\b/;
 
+/**
+ * Everything under a kata fixture tree is data staged for a test —
+ * including the shell that stages it, whose string literals write
+ * markers into throwaway repos precisely so the check can find them
+ * THERE (#86). A marker in such a file is nobody's decision, and the
+ * only record that would clear it describes reasoning nobody had. The
+ * harness running the katas sits outside this path, so a genuine
+ * decision about how katas run is still markable and still owed.
+ */
+export const FIXTURE_PATH = /(^|\/)tests\/(.*\/)?katas\//;
+
 /** The file the recorder writes when a session is open in a checkout. */
 const RECORDER_STATE = ".recorder-session.json";
 
@@ -488,6 +499,7 @@ function markersThisTurn(repo, turnStart) {
       file = line.slice(6);
       continue;
     }
+    if (file && FIXTURE_PATH.test(file)) continue;
     const hit = MARKER.exec(line);
     if (hit) found.push({ at: `${repo.name}/${file}`, tag: hit[1] });
   }

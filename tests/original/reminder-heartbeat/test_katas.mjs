@@ -26,6 +26,7 @@ import { fileURLToPath } from "node:url";
 
 import { validateDiligence } from "../../../original/thread-ledger/core.mjs";
 import { digestOf, stretchOf } from "../../../original/thread-ledger/diligence.mjs";
+import { FIXTURE_PATH } from "../../../original/thread-ledger/heartbeat.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SKILL = path.join(HERE, "../../../original/thread-ledger");
@@ -565,5 +566,24 @@ describe("KataRunnerRedGates", () => {
       ),
       "an anchorless seal passed the kata",
     );
+  });
+});
+
+// The boundary of the fixture skip (#86): everything under a kata tree
+// is staged data, and nothing else is. Test code outside `katas/`
+// makes real decisions, so its markers stay this turn's debt.
+describe("FixtureBoundary", () => {
+  it("kata trees are fixture paths, wherever they nest", () => {
+    assert.ok(FIXTURE_PATH.test("tests/katas/_lib.sh"));
+    assert.ok(FIXTURE_PATH.test("tests/original/reminder-heartbeat/katas/_lib.sh"));
+    assert.ok(FIXTURE_PATH.test("tests/original/reminder-heartbeat/katas/24-marked/setup.sh"));
+  });
+
+  it("everything else keeps its markers billable", () => {
+    assert.ok(!FIXTURE_PATH.test("tests/original/reminder-heartbeat/test_katas.mjs"));
+    assert.ok(!FIXTURE_PATH.test("tests/original/thread-ledger/test_ledger.mjs"));
+    assert.ok(!FIXTURE_PATH.test("original/thread-ledger/core.mjs"));
+    assert.ok(!FIXTURE_PATH.test("tests/mykatas/file.sh"), "a directory merely named like katas is not one");
+    assert.ok(!FIXTURE_PATH.test("contests/katas-notes.md"));
   });
 });
