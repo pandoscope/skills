@@ -102,6 +102,20 @@ kata_repo() {
                 --date "$authored" -m "feat: a decision that landed by rebase"
             git -C "$work" push -q origin claude/kata
             ;;
+        marked-fixture)
+            # The marker text lands inside a kata fixture tree — a
+            # string staged as test data so check 4 can find it in the
+            # THROWAWAY repo the fixture builds, not a decision about
+            # the fixture file itself (#86). Check 4 must not bill it
+            # to the turn that staged it.
+            mkdir -p "$work/tests/original/some-check/katas"
+            printf '%s\n' 'printf "// DECISION:ARCH — staged for the check to find" >> "$target/core.mjs"' \
+                >> "$work/tests/original/some-check/katas/_lib.sh"
+            git -C "$work" add -A
+            GIT_COMMITTER_DATE="${when:-$SEEDED}" git -C "$work" commit -q \
+                --date "${when:-$SEEDED}" -m "test: stage a marker fixture for the check"
+            git -C "$work" push -q origin claude/kata
+            ;;
         marked-earlier)
             # The same marker, committed before the turn began. The turn
             # that wrote it is the turn that owed the record, and a
