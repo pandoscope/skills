@@ -358,14 +358,18 @@ function checkLedgerEvent(ctx) {
     return { verdict: "pass", detail: "no threads declared — nothing to record" };
   }
   const start = ctx.turnStart.getTime();
-  // Narrowed by session as well as by time. The fold reads every log in
-  // the store, which is right for rendering and wrong for this
-  // question: an event another conversation wrote records what that
-  // conversation did, and two sessions on one thread would otherwise
-  // excuse each other's bookkeeping.
+  // Narrowed by time, and by writer — but the writer set includes the
+  // NAMED ones. The check's question is "is the ledger current about
+  // what this turn touched", not "did this session hold the pen": the
+  // close-loop's bot completes a declared thread mid-turn, and the
+  // ledger is then already exactly what the turn produced — blocking
+  // there punishes the mechanism for working (#89). An event from
+  // another conversation still does not count, because two sessions on
+  // one thread would otherwise excuse each other's bookkeeping; a `by`
+  // writer is not a conversation and has no bookkeeping to excuse.
   const touched = new Set(
     ctx.events
-      .filter((event) => event.anchor?.session === ctx.session)
+      .filter((event) => event.anchor?.session === ctx.session || event.by)
       .filter((event) => event.at && new Date(event.at).getTime() >= start)
       .map((event) => event.thread),
   );
@@ -381,6 +385,29 @@ function checkLedgerEvent(ctx) {
   // improvising inside the single turn the hook allows it.
   const [first] = missing;
   const state = currentStates(ctx.events)[first] ?? "";
+  // From a terminal state the only legal append is `reopened`, and a
+  // `reopened` that no resumed work caused is a false event written to
+  // clear a check — the lie this whole system exists to prevent. A
+  // block reason must never propose an event that is false, so here
+  // the remedy is the DECLARATION: a finished thread nothing touched
+  // since the boundary means the summary names a thread this turn did
+  // not actually change.
+  if (state === "completed" || state === "dropped") {
+    return {
+      verdict: "fail",
+      detail: `no event this turn for ${missing.join(", ")}`,
+      reason: [
+        "The turn is not complete until the ledger has an event for every " +
+          `thread it changed. ${first} is already ${state} and nothing has ` +
+          `touched it since the turn began — if this turn did not change ` +
+          `it, the declaration is what is wrong.`,
+        "",
+        `  Remove ${first} from ${ctx.summary.path} and end the turn. ` +
+          `Append --ev reopened only if the work genuinely resumed; never ` +
+          `append it to satisfy this check.`,
+      ].join("\n"),
+    };
+  }
   const args = appendArgs(first, state);
   // The state is named only where it changes the answer. For a thread
   // that can simply take `progress` it is noise; for one that cannot,
