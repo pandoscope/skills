@@ -168,7 +168,11 @@ without one.
 an exercise.** In prose, tickets and PRs are linked shortcode refs —
 `XXX#n` for tickets, `XXX!n` for PRs, each a markdown link to the page
 its sigil implies — with the shortcodes defined once, in the store's
-`config/shortcodes.json`. A thread opened this turn is announced as
+`config/shortcodes.json`. That file is either a flat shortcode →
+`owner/repo` map (GitHub assumed) or structured —
+`{forge, patterns: {ticket, pr}, repos}`, patterns interpolating
+`{base}`/`{repo}`/`{n}` — so the forge is org configuration in the
+store, and no vendor is named in code. A thread opened this turn is announced as
 `new thread: <slug>`, and every thread the turn summary declares is
 named in the prose that discusses it. Code spans are quoted material
 and exempt; a bare `owner/repo#n` belongs in PR bodies and ledger

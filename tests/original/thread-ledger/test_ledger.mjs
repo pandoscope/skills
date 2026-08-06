@@ -16,6 +16,7 @@ import {
   LedgerError,
   currentStates,
   fold,
+  forgeOf,
   isUserTurn,
   knownPrs,
   lastAssistantText,
@@ -2656,5 +2657,36 @@ describe("ResponseHygiene", () => {
   it("knownPrs reads pr fields off events", () => {
     const events = [{ ev: "opened", thread: "t", pr: "pandoscope/skills#98" }, { ev: "progress", thread: "t" }];
     assert.deepEqual([...knownPrs(events)], ["pandoscope/skills#98"]);
+  });
+});
+
+describe("ForgeIndependence", () => {
+  const MAP = { skills: "pandoscope/skills" };
+
+  it("a structured config carries the forge, so nothing here names one", () => {
+    const cfg = {
+      forge: "https://git.example.org",
+      patterns: {
+        ticket: "{base}/{repo}/-/issues/{n}",
+        pr: "{base}/{repo}/-/merge_requests/{n}",
+      },
+      repos: MAP,
+    };
+    const [v] = refViolations("see skills#97", cfg);
+    assert.equal(v.canonical, "[skills#97](https://git.example.org/pandoscope/skills/-/issues/97)");
+    const clean = "see [skills!98](https://git.example.org/pandoscope/skills/-/merge_requests/98)";
+    assert.deepEqual(refViolations(clean, cfg), []);
+    const [wrong] = refViolations(
+      "see [skills#97](https://github.com/pandoscope/skills/issues/97)",
+      cfg,
+    );
+    assert.equal(wrong.canonical, "[skills#97](https://git.example.org/pandoscope/skills/-/issues/97)");
+  });
+
+  it("a flat map keeps the GitHub defaults", () => {
+    assert.deepEqual(
+      refViolations("see [skills#97](https://github.com/pandoscope/skills/issues/97)", MAP),
+      [],
+    );
   });
 });

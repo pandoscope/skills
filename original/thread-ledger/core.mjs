@@ -236,22 +236,47 @@ export function knownPrs(events) {
 }
 
 /**
+ * The forge a shortcode config names, with GitHub defaults.
+ *
+ * The config file is either flat — shortcode → owner/repo, GitHub
+ * assumed — or structured: `{forge, patterns: {ticket, pr}, repos}`,
+ * where patterns interpolate `{base}`, `{repo}` and `{n}`. The forge is
+ * org configuration and lives in the store beside the map, never in
+ * this code: a GitLab org writes its own base and patterns and every
+ * canonical form follows — tickets at `/-/issues`, merge requests at
+ * `/-/merge_requests` — with nothing here naming a vendor.
+ */
+export function forgeOf(config) {
+  const repos = config.repos ?? config;
+  const base = config.forge ?? "https://github.com";
+  const patterns = {
+    ticket: config.patterns?.ticket ?? "{base}/{repo}/issues/{n}",
+    pr: config.patterns?.pr ?? "{base}/{repo}/pull/{n}",
+  };
+  const url = (sigil, repo, num) =>
+    patterns[sigil === "!" ? "pr" : "ticket"]
+      .replaceAll("{base}", base)
+      .replaceAll("{repo}", repo)
+      .replaceAll("{n}", String(num));
+  return { repos, url };
+}
+
+/**
  * Style violations in `prose` under the response-hygiene rules (#99).
  *
  * The style: tickets and PRs appear as shortcode refs — `XXX#n` for
- * tickets, `XXX!n` for PRs — each a markdown link to the GitHub page
- * its sigil implies. Returned violations carry the offending token, the
- * canonical form when one is derivable, and why. Pure text in, plain
- * data out; the heartbeat owns blocking and the correction exercise.
+ * tickets, `XXX!n` for PRs — each a markdown link to the forge page
+ * its sigil implies, built by `forgeOf` from the same config that
+ * defines the shortcodes. Returned violations carry the offending
+ * token, the canonical form when one is derivable, and why. Pure text
+ * in, plain data out; the heartbeat owns blocking and the exercise.
  */
-export function refViolations(prose, shortcodes, prs = new Set()) {
+export function refViolations(prose, config, prs = new Set()) {
   const found = [];
+  const { repos: shortcodes, url: forgeUrl } = forgeOf(config);
   const repoOf = new Map(Object.entries(shortcodes).map(([short, repo]) => [repo, short]));
-  const canonical = (short, sigil, num) => {
-    const repo = shortcodes[short];
-    const kind = sigil === "!" ? "pull" : "issues";
-    return `[${short}${sigil}${num}](https://github.com/${repo}/${kind}/${num})`;
-  };
+  const canonical = (short, sigil, num) =>
+    `[${short}${sigil}${num}](${forgeUrl(sigil, shortcodes[short], num)})`;
   // The sigil a ref should carry: `!` when the ledger knows the number
   // as a PR, otherwise whatever was written — the hook has no API, and
   // guessing kinds it cannot verify would block on truths.
@@ -293,12 +318,11 @@ export function refViolations(prose, shortcodes, prs = new Set()) {
       });
       return " ";
     }
-    const kind = sigil === "!" ? "pull" : "issues";
-    if (url !== `https://github.com/${shortcodes[short]}/${kind}/${num}`) {
+    if (url !== forgeUrl(sigil, shortcodes[short], num)) {
       found.push({
         token: `[${label}](${url})`,
         canonical: canonical(short, sigil, num),
-        why: `the link does not point at the ${kind === "pull" ? "pull request" : "issue"} the label names`,
+        why: `the link does not point at the ${sigil === "!" ? "pull request" : "ticket"} the label names`,
       });
     }
     return " ";
