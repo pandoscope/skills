@@ -132,6 +132,18 @@ the hook offers is `merge --ff-only`: it succeeds for a plain rollback
 and fails loudly for a real divergence. Forcing the push instead is the
 step that turns a recoverable state into lost work.
 
+**Nothing outgoing carries a blocked term.** `scan.mjs` is the shared
+scanner (skills#46, check 7): built-in terms are the store URL values,
+taken from the environment automatically; user terms come from
+`PUSH_BLOCKLIST`, `|`-separated and optional by design (a literal `|`
+in a term is not expressible — reserved). The scan covers what would
+LEAVE — commits on no remote, tracked changes a commit would sweep up,
+the rendered page — never untracked files or the environment: a term
+may live there, it must only never leave. It runs before the pushed
+check so a hit blocks before any push instruction, and every report
+names the term's SOURCE, never its value — the confirm commands count
+matches rather than printing them.
+
 **A ledger conflict is resolved by union — `--ours`/`--theirs` are
 never valid.** The log is append-only and both sides are real events,
 so the only correct merge keeps every line in stamp order; the recorder

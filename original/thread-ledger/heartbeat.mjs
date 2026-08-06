@@ -57,6 +57,7 @@ import {
 } from "./core.mjs";
 import { digestOf, readLog, stretchOf } from "./diligence.mjs";
 import { append, readAll, resolveRoot, resolveSession, tail } from "./ledger.mjs";
+import { blocklistTerms, scanText, shellRef } from "./scan.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const LEDGER = path.join(HERE, "ledger.mjs");
@@ -342,6 +343,77 @@ function checkPushed(ctx) {
     };
   }
   return { verdict: "pass", detail: `${ctx.clones.length} clones committed and pushed` };
+}
+
+/**
+ * Check 7 — nothing outgoing carries a blocked term (skills#46).
+ *
+ * Scans what is about to LEAVE — commits on no remote, tracked changes
+ * a commit would sweep up, and the rendered page — never untracked
+ * files or the environment: a term may legitimately live in env or
+ * scratchpad and must only never leave. Runs before the pushed check so
+ * this block precedes that check's push instruction; a term caught here
+ * is still local. Reasons name the SOURCE of a hit, never its value,
+ * and the confirm command counts matches rather than printing them —
+ * echoing either would put the secret in the very channel this check
+ * guards.
+ */
+function checkPushBlocklist(ctx) {
+  const terms = blocklistTerms(process.env);
+  // Unset store URLs and no PUSH_BLOCKLIST is a deployment with nothing
+  // to guard, and "nothing was scanned for" is what the verdict says.
+  if (!terms.length) {
+    return {
+      verdict: "unconfigured",
+      detail: "no store URL variables and no PUSH_BLOCKLIST — nothing to scan for",
+    };
+  }
+  const hits = [];
+  for (const repo of ctx.clones) {
+    const outgoing = [
+      gitOrNull(repo.path, "log", "-p", "HEAD", "--not", "--remotes") ?? "",
+      gitOrNull(repo.path, "diff", "HEAD") ?? "",
+    ].join("\n");
+    for (const label of scanText(outgoing, terms)) {
+      hits.push({
+        source: label,
+        where: `the outgoing diff in ${repo.name}`,
+        confirm:
+          `git -C ${repo.path} log -p HEAD --not --remotes | grep -cF ${shellRef(label)} && ` +
+          `git -C ${repo.path} diff HEAD | grep -cF ${shellRef(label)}`,
+      });
+    }
+  }
+  if (ctx.renderPath && fs.existsSync(ctx.renderPath)) {
+    for (const label of scanText(fs.readFileSync(ctx.renderPath, "utf8"), terms)) {
+      hits.push({
+        source: label,
+        where: `the rendered page at ${ctx.renderPath}`,
+        confirm: `grep -cF ${shellRef(label)} ${ctx.renderPath}`,
+      });
+    }
+  }
+  if (!hits.length) {
+    return { verdict: "pass", detail: `${terms.length} terms scanned, nothing outgoing carries one` };
+  }
+  return {
+    verdict: "fail",
+    detail: hits.map((hit) => `${hit.where} carries the value of ${hit.source}`).join("; "),
+    reason: [
+      "The turn is not complete while outgoing content carries a blocked " +
+        "term. Hits, by source — values are never printed:",
+      "",
+      ...hits.flatMap((hit) => [
+        `  ${hit.where} carries the value of ${hit.source}`,
+        `    confirm (match counts only): ${hit.confirm}`,
+      ]),
+      "",
+      "Remove the term from what would leave — amend or drop the commits, " +
+        "or re-render the page from a clean source — before anything is " +
+        "pushed or published. Untracked files and the environment are not " +
+        "scanned: a term may live there, it must only never leave.",
+    ].join("\n"),
+  };
 }
 
 /**
@@ -906,8 +978,11 @@ function appendArgs(thread, state) {
 }
 
 // Priority order. First failure wins; the rest wait for the next turn.
+// push-blocklist sits ahead of pushed deliberately: a hit must block
+// BEFORE the turn is told to push, or the reminder itself publishes it.
 const CHECKS = [
   { check: "turn-summary", run: checkTurnSummary },
+  { check: "push-blocklist", run: checkPushBlocklist },
   { check: "pushed", run: checkPushed },
   { check: "ledger-event", run: checkLedgerEvent },
   { check: "decision-record", run: checkDecisionRecord },

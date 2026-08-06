@@ -53,6 +53,11 @@ import {
   renderPage,
   resolveSession,
 } from "../../../original/thread-ledger/ledger.mjs";
+import {
+  blocklistTerms,
+  scanText,
+  shellRef,
+} from "../../../original/thread-ledger/scan.mjs";
 
 const SKILL = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -2912,6 +2917,48 @@ describe("ForgeIndependence", () => {
     assert.deepEqual(
       refViolations("see [skills#97](https://github.com/pandoscope/skills/issues/97)", MAP),
       [],
+    );
+  });
+});
+
+// ------------------------------------------------- outgoing-content scan
+
+// Check 7's shared scanner (skills#46): built-in terms are the store
+// URL values, user terms come |-separated from PUSH_BLOCKLIST, and
+// nothing here ever returns a value — labels only.
+describe("OutgoingScan", () => {
+  it("builds terms from the store variables and PUSH_BLOCKLIST", () => {
+    const env = {
+      SESSION_MEMORY_URL: "https://x@example.test/sm.git",
+      PUSH_BLOCKLIST: "hunter2|the-codename",
+    };
+    assert.deepEqual(
+      blocklistTerms(env).map((term) => term.label),
+      ["SESSION_MEMORY_URL", "PUSH_BLOCKLIST term 1", "PUSH_BLOCKLIST term 2"],
+    );
+  });
+
+  it("an unset blocklist means built-in scan only, and empty terms drop", () => {
+    assert.deepEqual(blocklistTerms({}), []);
+    assert.deepEqual(
+      blocklistTerms({ PUSH_BLOCKLIST: "|a||" }).map((term) => term.label),
+      ["PUSH_BLOCKLIST term 2"],
+    );
+  });
+
+  it("reports labels, never values", () => {
+    const terms = blocklistTerms({ PUSH_BLOCKLIST: "hunter2" });
+    const hits = scanText("the diff says hunter2 somewhere", terms);
+    assert.deepEqual(hits, ["PUSH_BLOCKLIST term 1"]);
+    assert.ok(!JSON.stringify(hits).includes("hunter2"));
+    assert.deepEqual(scanText("a clean diff", terms), []);
+  });
+
+  it("shell references expand without printing", () => {
+    assert.equal(shellRef("SESSION_MEMORY_URL"), '"$SESSION_MEMORY_URL"');
+    assert.equal(
+      shellRef("PUSH_BLOCKLIST term 2"),
+      "\"$(printf %s \"$PUSH_BLOCKLIST\" | cut -d'|' -f2)\"",
     );
   });
 });
