@@ -194,6 +194,9 @@ function fire(dir, spec, script = HEARTBEAT) {
       // Only set when the kata names it, so every other kata keeps
       // exercising the built-in-only scan an ordinary session runs.
       ...(spec.push_blocklist ? { PUSH_BLOCKLIST: spec.push_blocklist } : {}),
+      // Only set when the kata names it, so every other kata keeps
+      // exercising the footer-only reading an account-less session has.
+      ...(spec.agent_accounts ? { AGENT_ACCOUNTS: spec.agent_accounts } : {}),
     },
   });
   assert.equal(result.error, undefined, `the hook did not run: ${result.error}`);

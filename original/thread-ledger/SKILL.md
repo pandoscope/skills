@@ -172,6 +172,13 @@ heuristic alone only observes; what blocks is the mechanical side —
 the `reviews:` declaration against the stores, or a declaration the
 transcript contradicts.
 
+With `AGENT_ACCOUNTS` set (comma-separated forge logins the agent
+posts as), authorship beats the footer as the discriminator, and the
+contract itself is guarded: a footer on a foreign account, or an
+agent account posting bare, fails loudly — every footer-based reading
+is suspect while either holds. Opt-in by construction: no variable,
+no account check.
+
 **A ledger conflict is resolved by union — `--ours`/`--theirs` are
 never valid.** The log is append-only and both sides are real events,
 so the only correct merge keeps every line in stamp order; the recorder

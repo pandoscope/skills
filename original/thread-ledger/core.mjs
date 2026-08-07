@@ -243,20 +243,63 @@ const REVIEW_METHODS = new Set(["get_review_comments", "get_reviews", "get_comme
 const BODY_FIELD = /"body"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
 
 /**
+ * Comment `{ body, author }` pairs in one chunk of fetched text.
+ *
+ * Parsed as JSON where the chunk is JSON — tool results are — so the
+ * author stands next to its own body rather than being regex-guessed
+ * across a flat string. Chunks that do not parse fall back to the
+ * body-field regex with the author unknown.
+ */
+function commentsIn(chunk) {
+  let parsed;
+  try {
+    parsed = JSON.parse(chunk);
+  } catch {
+    return [...chunk.matchAll(BODY_FIELD)].map(([, body]) => ({ body, author: null }));
+  }
+  const found = [];
+  const walk = (node) => {
+    if (Array.isArray(node)) {
+      for (const item of node) walk(item);
+      return;
+    }
+    if (!node || typeof node !== "object") return;
+    if (typeof node.body === "string") {
+      const author = node.user?.login ?? node.author?.login ?? null;
+      found.push({ body: node.body, author: typeof author === "string" ? author : null });
+    }
+    for (const value of Object.values(node)) walk(value);
+  };
+  walk(parsed);
+  return found;
+}
+
+/**
  * Review-comment activity in the transcript since `since`.
  *
- * Returns `{ fetched, human }`: whether any comment content arrived
- * this turn (a comment-fetching tool result, or a webhook activity
- * block carrying comment bodies), and whether any of those bodies
- * lacks the attribution footer — a comment a human wrote.
+ * Returns `{ fetched, human, anomalies }`: whether any comment content
+ * arrived this turn (a comment-fetching tool result, or a webhook
+ * activity block carrying comment bodies), whether any of it was
+ * written by a human, and where the footer contract itself looks
+ * broken.
+ *
+ * Who is a human: with `agents` configured — the forge accounts the
+ * agent posts as — the ACCOUNT decides, and the footer only covers
+ * comments whose author is unknown. Account identity is the stronger
+ * signal exactly when principal and agent are distinct accounts; the
+ * footer alone would misread a footer change or a wrong-account post.
+ * Both of those are returned as anomalies (`footer-drift`: an agent
+ * account posting without the footer; `foreign-footer`: any other
+ * account carrying it), for the caller to fail loudly on when the
+ * accounts are configured.
  *
  * Deliberately a heuristic, and a conservative one: bodies are found
  * by their JSON field, so comment text a wrapper reformats into prose
  * is missed rather than guessed at. The observer runs this
  * observe-first; only a contradiction with what the turn itself
- * declared is allowed to block on it.
+ * declared — or a configured account anomaly — is allowed to block.
  */
-export function reviewSignals(text, since) {
+export function reviewSignals(text, since, agents = []) {
   const boundary = since ? new Date(since).getTime() : null;
   const wanted = new Set();
   const carried = [];
@@ -301,15 +344,25 @@ export function reviewSignals(text, since) {
       }
     }
   }
+  const known = new Set(agents.map((name) => String(name).toLowerCase()));
   let fetched = false;
   let human = false;
+  const anomalies = [];
   for (const chunk of carried) {
-    for (const [, body] of chunk.matchAll(BODY_FIELD)) {
+    for (const { body, author } of commentsIn(chunk)) {
       fetched = true;
-      if (!body.includes(ATTRIBUTION_FOOTER)) human = true;
+      const footered = body.includes(ATTRIBUTION_FOOTER);
+      const agent = author && known.has(author.toLowerCase());
+      if (known.size && author) {
+        if (!agent) human = true;
+        if (agent && !footered) anomalies.push({ kind: "footer-drift", author });
+        if (!agent && footered) anomalies.push({ kind: "foreign-footer", author });
+        continue;
+      }
+      if (!footered) human = true;
     }
   }
-  return { fetched, human };
+  return { fetched, human, anomalies };
 }
 
 /** Refs the ledger knows to be PRs: every `pr` a thread event carried. */

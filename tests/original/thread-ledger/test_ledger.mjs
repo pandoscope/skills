@@ -2966,7 +2966,7 @@ describe("OutgoingScan", () => {
 });
 
 describe("ReviewSignals", () => {
-  const fetchLines = (body, at = "2026-08-03T15:12:00.000Z") =>
+  const fetchPayload = (payload, at = "2026-08-03T15:12:00.000Z") =>
     [
       {
         type: "assistant",
@@ -2992,7 +2992,7 @@ describe("ReviewSignals", () => {
             {
               type: "tool_result",
               tool_use_id: "toolu_1",
-              content: [{ type: "text", text: JSON.stringify({ comments: [{ body }] }) }],
+              content: [{ type: "text", text: JSON.stringify(payload) }],
             },
           ],
         },
@@ -3001,14 +3001,19 @@ describe("ReviewSignals", () => {
       .map((line) => JSON.stringify(line))
       .join("\n");
 
+  const fetchLines = (body, at = "2026-08-03T15:12:00.000Z") =>
+    fetchPayload({ comments: [{ body }] }, at);
+
+  const authored = (body, login) => fetchPayload({ comments: [{ body, user: { login } }] });
+
   it("a fetched body without the footer is a human comment", () => {
     const signals = reviewSignals(fetchLines("Rename the flag — double negative."));
-    assert.deepEqual(signals, { fetched: true, human: true });
+    assert.deepEqual(signals, { fetched: true, human: true, anomalies: [] });
   });
 
   it("a body carrying the footer is Claude's own post coming back", () => {
     const signals = reviewSignals(fetchLines(`Applied.\n\n---\n${ATTRIBUTION_FOOTER}`));
-    assert.deepEqual(signals, { fetched: true, human: false });
+    assert.deepEqual(signals, { fetched: true, human: false, anomalies: [] });
   });
 
   it("no comment fetch means no signal at all", () => {
@@ -3017,7 +3022,7 @@ describe("ReviewSignals", () => {
       timestamp: "2026-08-03T15:10:00.000Z",
       message: { role: "user", content: "Finish the slice." },
     });
-    assert.deepEqual(reviewSignals(plain), { fetched: false, human: false });
+    assert.deepEqual(reviewSignals(plain), { fetched: false, human: false, anomalies: [] });
   });
 
   it("activity before the boundary is another turn's business", () => {
@@ -3025,6 +3030,7 @@ describe("ReviewSignals", () => {
     assert.deepEqual(reviewSignals(early, "2026-08-03T15:10:00.000Z"), {
       fetched: false,
       human: false,
+      anomalies: [],
     });
   });
 
@@ -3038,11 +3044,42 @@ describe("ReviewSignals", () => {
           '<github-webhook-activity>{"comment":{"body":"Why does this loop twice?"}}</github-webhook-activity>',
       },
     });
-    assert.deepEqual(reviewSignals(hook), { fetched: true, human: true });
+    assert.deepEqual(reviewSignals(hook), { fetched: true, human: true, anomalies: [] });
   });
 
   it("a result for a tool this check never asked about is ignored", () => {
     const other = fetchLines("Rename it.").replace("pull_request_read", "list_pull_requests");
-    assert.deepEqual(reviewSignals(other), { fetched: false, human: false });
+    assert.deepEqual(reviewSignals(other), { fetched: false, human: false, anomalies: [] });
+  });
+
+  it("with accounts configured, authorship beats the footer", () => {
+    const bare = authored("Rename the flag.", "the-principal");
+    const read = reviewSignals(bare, null, ["pando-ramet"]);
+    assert.equal(read.human, true);
+    assert.deepEqual(read.anomalies, []);
+    const own = authored(`Applied.\n\n---\n${ATTRIBUTION_FOOTER}`, "pando-ramet");
+    assert.deepEqual(reviewSignals(own, null, ["pando-ramet"]), {
+      fetched: true,
+      human: false,
+      anomalies: [],
+    });
+  });
+
+  it("a footer on a foreign account is an anomaly, loudly", () => {
+    const forged = authored(`LGTM.\n\n---\n${ATTRIBUTION_FOOTER}`, "the-principal");
+    const read = reviewSignals(forged, null, ["pando-ramet"]);
+    assert.deepEqual(read.anomalies, [{ kind: "foreign-footer", author: "the-principal" }]);
+  });
+
+  it("an agent account posting bare is footer drift", () => {
+    const bare = authored("Applied, no footer.", "pando-ramet");
+    const read = reviewSignals(bare, null, ["pando-ramet"]);
+    assert.deepEqual(read.anomalies, [{ kind: "footer-drift", author: "pando-ramet" }]);
+    assert.equal(read.human, false);
+  });
+
+  it("without accounts, the same texts raise no anomaly", () => {
+    const forged = authored(`LGTM.\n\n---\n${ATTRIBUTION_FOOTER}`, "the-principal");
+    assert.deepEqual(reviewSignals(forged), { fetched: true, human: false, anomalies: [] });
   });
 });

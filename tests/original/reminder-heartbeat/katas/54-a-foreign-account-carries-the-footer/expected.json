@@ -1,0 +1,12 @@
+{
+  "status": "active",
+  "stop_hook_active": false,
+  "summary_written_at": "2026-08-03T15:19:25.000Z",
+  "agent_accounts": "pando-ramet",
+  "exit": 2,
+  "check": "review-persistence",
+  "sealed": false,
+  "reason": [
+    "The turn is not complete while the attribution-footer contract is broken: the account the-principal carries the attribution footer and is not a configured agent account. Every human/agent reading built on the footer is suspect until the posting account or the footer habit is fixed — or AGENT_ACCOUNTS is corrected to name the accounts the agent actually posts as."
+  ]
+}

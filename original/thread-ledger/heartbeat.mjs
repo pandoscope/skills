@@ -846,13 +846,40 @@ function checkReviewPersistence(ctx) {
     const { store } = storeCheckout(url, ctx.clones);
     if (store) stores.push({ name, path: store });
   }
+  const observed = reviewSignals(
+    ctx.transcriptText,
+    ctx.turnStart.toISOString(),
+    ctx.agentAccounts,
+  );
+  // The account safeguard, ahead of everything the footer decides: with
+  // distinct accounts configured, a footer on a foreign account or an
+  // agent account posting bare means the attribution contract itself is
+  // broken, and every classification built on it is suspect. Loud by
+  // request, and opt-in by construction — no AGENT_ACCOUNTS, no check.
+  if (observed.anomalies.length) {
+    const [first] = observed.anomalies;
+    const what =
+      first.kind === "footer-drift"
+        ? `the agent account ${first.author} posted WITHOUT the attribution footer`
+        : `the account ${first.author} carries the attribution footer and is not a configured agent account`;
+    return {
+      verdict: "fail",
+      detail: `${observed.anomalies.length} footer-contract anomalies, first: ${first.kind} by ${first.author}`,
+      reason: [
+        "The turn is not complete while the attribution-footer contract " +
+          `is broken: ${what}. Every human/agent reading built on the ` +
+          "footer is suspect until the posting account or the footer " +
+          "habit is fixed — or AGENT_ACCOUNTS is corrected to name the " +
+          "accounts the agent actually posts as.",
+      ].join("\n"),
+    };
+  }
   const wrote = stores
     .filter((entry) => storeWroteThisTurn(entry.path, ctx.turnStart))
     .map((entry) => entry.name);
   if (wrote.length) {
     return { verdict: "pass", detail: `persistence observed: ${wrote.join(", ")}` };
   }
-  const observed = reviewSignals(ctx.transcriptText, ctx.turnStart.toISOString());
   // The contradiction needs no store to be wrong: the turn said no
   // comments were read, and the transcript shows human ones fetched.
   if (token === "none" && observed.human) {
@@ -1292,6 +1319,14 @@ function context(input) {
     decisionUrl: process.env.DECISION_MEMORY_URL || null,
     evidenceUrl: process.env.EVIDENCE_MEMORY_URL || null,
     transcriptText: text,
+    // The forge accounts the agent posts as, comma-separated and
+    // optional: with distinct principal and agent accounts configured,
+    // authorship beats the footer as the human/agent discriminator,
+    // and a broken footer contract fails loudly instead of misreading.
+    agentAccounts: (process.env.AGENT_ACCOUNTS || "")
+      .split(",")
+      .map((name) => name.trim())
+      .filter(Boolean),
     renderPath: process.env.LEDGER_RENDER_PATH || null,
     clones: clonesUnder(process.env.HEARTBEAT_REPO_ROOT || null),
     summary: readTurnSummary(),
