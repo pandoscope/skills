@@ -1,0 +1,2 @@
+{"ev":"opened","thread":"the-fix","title":"Fix the parser's escape handling","ticket":"o/r#61","at":"2026-08-03T09:31:02+00:00","anchor":{"session":"session_kata_clean","msg":1,"url":"https://claude.test/code/session_kata_clean"}}
+{"ev":"completed","thread":"the-fix","note":"merged","pr":"o/r#7","at":"2026-08-03T15:16:00+00:00","anchor":{"session":"session_kata_clean","msg":2,"url":"https://claude.test/code/session_kata_clean"}}

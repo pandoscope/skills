@@ -1,0 +1,11 @@
+{
+  "status": "active",
+  "stop_hook_active": false,
+  "summary_written_at": "2026-08-03T15:19:25.000Z",
+  "exit": 2,
+  "check": "kata-reminder",
+  "sealed": false,
+  "reason": [
+    "the-fix completed with o/r#7 this turn. A kata freezes the incident while it is fresh — the corpus is this org's own failure catalogue, and a case not written down now is reconstructed later or lost. Write the kata, or note in the thread why none is owed. This reminder fires once and will not block again."
+  ]
+}

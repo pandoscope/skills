@@ -196,6 +196,14 @@ turns and records legitimately land when the rulings settle — a
 blocking check would fire between waves, so it only logs what it
 sees until the compliance data earns it more.
 
+**The remind tier (checks 10 and 11).** Work that completes with a
+PR owes the corpus a kata: the trigger is mechanical, the adequacy is
+not, so the hook reminds exactly once per thread — the fresh-incident
+moment is when a kata is cheap — and afterwards records only the
+claim. A question-shaped close without a `blocked` event is observed
+and never blocked on: the detector is imperfect by admission, and an
+imperfect detector is measured before it may nag.
+
 **A ledger conflict is resolved by union — `--ours`/`--theirs` are
 never valid.** The log is append-only and both sides are real events,
 so the only correct merge keeps every line in stamp order; the recorder
