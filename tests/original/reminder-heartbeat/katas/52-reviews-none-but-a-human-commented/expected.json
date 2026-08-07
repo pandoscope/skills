@@ -1,0 +1,11 @@
+{
+  "status": "active",
+  "stop_hook_active": false,
+  "summary_written_at": "2026-08-03T15:19:25.000Z",
+  "exit": 2,
+  "check": "review-persistence",
+  "sealed": false,
+  "reason": [
+    "The turn is not complete while the summary contradicts the transcript. It declares `reviews: none`, but comments fetched this turn carry no attribution footer — comments a human wrote. Persist what they decided as a decision-memory or evidence-memory record and declare `reviews: persisted`."
+  ]
+}

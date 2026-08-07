@@ -1,0 +1,12 @@
+{
+  "status": "active",
+  "stop_hook_active": false,
+  "summary_written_at": "2026-08-03T15:19:25.000Z",
+  "decision_url": "decision-memory",
+  "exit": 2,
+  "check": "review-persistence",
+  "sealed": false,
+  "reason": [
+    "The turn is not complete while the summary claims a persistence no store shows. It declares `reviews: persisted`, but no memory checkout gained a write this turn. Write the record, or declare what actually happened — a declaration widens detection and never greens this check."
+  ]
+}

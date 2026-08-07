@@ -121,12 +121,23 @@ Your part is one file per turn, `~/.claude/turn-summary.txt`:
 ```text
 threads: reminder-heartbeat, seal-event
 tickets: my-org/skills#56
+reviews: none
 ```
 
 Every check is a mechanical diff of that declaration against what was
 actually written and pushed. When one fails, the block reason states
 the completion criterion and the exact command — run it and end the
 turn; it is never a prompt to start new work.
+
+The `reviews:` line is the declared half of a standing habit: wherever
+a check has a blind spot, the model declares and the observer
+cross-checks. Its states are `none`, `read`, `persisted` and
+`nothing-to-persist`. A declaration can widen detection — declaring
+`none` over a transcript that fetched footer-less comment bodies
+fires, and so does claiming `persisted` over untouched stores — but it
+never greens the check: only an observed memory write does that. The
+explicit waiver, `nothing-to-persist`, passes as a logged claim, so
+declining to persist is a visible act rather than a silence.
 
 The check list, the seal, the verdict log and the environment contract
 are code, documented where they live: the header of `heartbeat.mjs`.
@@ -149,6 +160,17 @@ may live there, it must only never leave. It runs before the pushed
 check so a hit blocks before any push instruction, and every report
 names the term's SOURCE, never its value — the confirm commands count
 matches rather than printing them.
+
+**What a review decided is persisted, not just read.** The truth
+source is the attribution-footer contract (skills#46, check 14): a
+fetched comment body without the footer was written by a human, and a
+human's review answers must not live only in a transcript the
+container discards. Either memory store counts as persisted — "not
+lost" beats "right cabinet" — and the match is coarse by ruling:
+human comments in, zero memory writes out, fires once. The footer
+heuristic alone only observes; what blocks is the mechanical side —
+the `reviews:` declaration against the stores, or a declaration the
+transcript contradicts.
 
 **A ledger conflict is resolved by union — `--ours`/`--theirs` are
 never valid.** The log is append-only and both sides are real events,

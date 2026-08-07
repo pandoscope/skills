@@ -13,6 +13,7 @@ import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  ATTRIBUTION_FOOTER,
   LedgerError,
   currentStates,
   fold,
@@ -22,6 +23,7 @@ import {
   lastAssistantText,
   lastUserTurnAt,
   refViolations,
+  reviewSignals,
   stripCode,
   transcriptUsage,
   mergeLogLines,
@@ -2960,5 +2962,87 @@ describe("OutgoingScan", () => {
       shellRef("PUSH_BLOCKLIST term 2"),
       "\"$(printf %s \"$PUSH_BLOCKLIST\" | cut -d'|' -f2)\"",
     );
+  });
+});
+
+describe("ReviewSignals", () => {
+  const fetchLines = (body, at = "2026-08-03T15:12:00.000Z") =>
+    [
+      {
+        type: "assistant",
+        timestamp: at,
+        message: {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_1",
+              name: "mcp__github__pull_request_read",
+              input: { method: "get_review_comments" },
+            },
+          ],
+        },
+      },
+      {
+        type: "user",
+        timestamp: at,
+        message: {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_1",
+              content: [{ type: "text", text: JSON.stringify({ comments: [{ body }] }) }],
+            },
+          ],
+        },
+      },
+    ]
+      .map((line) => JSON.stringify(line))
+      .join("\n");
+
+  it("a fetched body without the footer is a human comment", () => {
+    const signals = reviewSignals(fetchLines("Rename the flag — double negative."));
+    assert.deepEqual(signals, { fetched: true, human: true });
+  });
+
+  it("a body carrying the footer is Claude's own post coming back", () => {
+    const signals = reviewSignals(fetchLines(`Applied.\n\n---\n${ATTRIBUTION_FOOTER}`));
+    assert.deepEqual(signals, { fetched: true, human: false });
+  });
+
+  it("no comment fetch means no signal at all", () => {
+    const plain = JSON.stringify({
+      type: "user",
+      timestamp: "2026-08-03T15:10:00.000Z",
+      message: { role: "user", content: "Finish the slice." },
+    });
+    assert.deepEqual(reviewSignals(plain), { fetched: false, human: false });
+  });
+
+  it("activity before the boundary is another turn's business", () => {
+    const early = fetchLines("Rename it.", "2026-08-03T14:00:00.000Z");
+    assert.deepEqual(reviewSignals(early, "2026-08-03T15:10:00.000Z"), {
+      fetched: false,
+      human: false,
+    });
+  });
+
+  it("webhook activity blocks carry bodies too", () => {
+    const hook = JSON.stringify({
+      type: "user",
+      timestamp: "2026-08-03T15:12:00.000Z",
+      message: {
+        role: "user",
+        content:
+          '<github-webhook-activity>{"comment":{"body":"Why does this loop twice?"}}</github-webhook-activity>',
+      },
+    });
+    assert.deepEqual(reviewSignals(hook), { fetched: true, human: true });
+  });
+
+  it("a result for a tool this check never asked about is ignored", () => {
+    const other = fetchLines("Rename it.").replace("pull_request_read", "list_pull_requests");
+    assert.deepEqual(reviewSignals(other), { fetched: false, human: false });
   });
 });

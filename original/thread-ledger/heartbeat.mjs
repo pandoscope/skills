@@ -52,6 +52,7 @@ import {
   lastAssistantText,
   lastUserTurnAt,
   refViolations,
+  reviewSignals,
   stripCode,
   transcriptUsage,
 } from "./core.mjs";
@@ -82,7 +83,7 @@ function localFile(name) {
 function readTurnSummary() {
   const file = localFile("turn-summary.txt");
   if (!fs.existsSync(file)) {
-    return { path: file, exists: false, writtenAt: null, threads: [], tickets: [] };
+    return { path: file, exists: false, writtenAt: null, threads: [], tickets: [], reviews: null };
   }
   const text = fs.readFileSync(file, "utf8");
   const field = (name) => {
@@ -90,12 +91,22 @@ function readTurnSummary() {
     if (!line) return [];
     return line.slice(line.indexOf(":") + 1).split(",").map((s) => s.trim()).filter(Boolean);
   };
+  // A single-valued line, raw: the reviews declaration is a state
+  // word, not a list, and its grammar belongs to the check that reads
+  // it — an unrecognized word is the check's finding, not a parse
+  // failure here.
+  const single = (name) => {
+    const line = text.split("\n").find((item) => item.trim().startsWith(`${name}:`));
+    if (!line) return null;
+    return line.slice(line.indexOf(":") + 1).trim() || null;
+  };
   return {
     path: file,
     exists: true,
     writtenAt: fs.statSync(file).mtime,
     threads: field("threads"),
     tickets: field("tickets"),
+    reviews: single("reviews"),
   };
 }
 
@@ -155,7 +166,7 @@ function committedThisTurn(repo, turnStart) {
  * stamp of the message the principal last typed.
  */
 function checkTurnSummary(ctx) {
-  const write = `  printf 'threads: %s\\ntickets: %s\\n' '<thread-slug>, <thread-slug>' '<owner/repo#n>' > ${ctx.summary.path}`;
+  const write = `  printf 'threads: %s\\ntickets: %s\\nreviews: %s\\n' '<thread-slug>, <thread-slug>' '<owner/repo#n>' '<none|read|persisted|nothing-to-persist>' > ${ctx.summary.path}`;
 
   // Without a boundary nothing downstream means what it says: freshness
   // has nothing to compare against and check 3's window widens to all
@@ -764,6 +775,151 @@ function checkDecisionRecord(ctx) {
 }
 
 /**
+ * Did this memory store gain a write during the turn?
+ *
+ * Coarse on purpose ("not lost" beats "right cabinet"): a commit since
+ * the turn began, or a working-tree change whose file was touched
+ * after it. The mtime bound keeps a store that was already dirty
+ * before the turn from greening every turn after — the false green
+ * would point the wrong way for a check about loss.
+ */
+function storeWroteThisTurn(root, turnStart) {
+  if (committedThisTurn({ path: root }, turnStart)) return true;
+  const status = gitOrNull(root, "status", "--porcelain", "--untracked-files=all");
+  if (!status) return false;
+  return status
+    .split("\n")
+    .filter((line) => line.trim())
+    .some((line) => {
+      const file = path.join(root, line.slice(3).trim());
+      try {
+        return fs.statSync(file).mtime >= turnStart;
+      } catch {
+        return false;
+      }
+    });
+}
+
+/**
+ * Check 14 — what a review decided is persisted, not just read.
+ *
+ * The truth source is the attribution-footer contract: a fetched
+ * comment body without the footer was written by a human, and a
+ * human's review answers that live only in the transcript are lost
+ * with the container. Coarse turn-level match by ruling — human
+ * comments in, zero memory writes out, fires once; either store
+ * counts as persisted, because "not lost" beats "right cabinet".
+ *
+ * The summary's `reviews:` line is an ADDITIONAL signal, cross-checked
+ * and never trusted alone: a declaration can widen detection — its own
+ * contradiction fires — but a claim from the context that already
+ * believed the work happened cannot green the check. The one
+ * exception is the explicit waiver, `nothing-to-persist`, which is
+ * logged as a claim exactly so declining to persist is a visible act
+ * rather than a silence. The footer heuristic on its own, with no
+ * declaration to contradict, only observes.
+ */
+function checkReviewPersistence(ctx) {
+  if (!ctx.turnStart) {
+    return { verdict: "unconfigured", detail: "no turn boundary to measure against" };
+  }
+  const declared = ctx.summary.reviews;
+  const token = declared ? declared.split(/[\s,]+/)[0].toLowerCase() : null;
+  const known = [null, "none", "read", "persisted", "nothing-to-persist"];
+  if (!known.includes(token)) {
+    return {
+      verdict: "fail",
+      detail: `unreadable reviews declaration: ${declared}`,
+      reason: [
+        "The turn is not complete until its reviews declaration parses. " +
+          `\`reviews: ${declared}\` names no state this check reads — declare ` +
+          "one of: none, read, persisted, nothing-to-persist.",
+      ].join("\n"),
+    };
+  }
+  const stores = [];
+  for (const [name, url] of [
+    ["decision-memory", ctx.decisionUrl],
+    ["evidence-memory", ctx.evidenceUrl],
+  ]) {
+    if (!url) continue;
+    const { store } = storeCheckout(url, ctx.clones);
+    if (store) stores.push({ name, path: store });
+  }
+  const wrote = stores
+    .filter((entry) => storeWroteThisTurn(entry.path, ctx.turnStart))
+    .map((entry) => entry.name);
+  if (wrote.length) {
+    return { verdict: "pass", detail: `persistence observed: ${wrote.join(", ")}` };
+  }
+  const observed = reviewSignals(ctx.transcriptText, ctx.turnStart.toISOString());
+  // The contradiction needs no store to be wrong: the turn said no
+  // comments were read, and the transcript shows human ones fetched.
+  if (token === "none" && observed.human) {
+    return {
+      verdict: "fail",
+      detail: "declared none, but human comment bodies were fetched this turn",
+      reason: [
+        "The turn is not complete while the summary contradicts the " +
+          "transcript. It declares `reviews: none`, but comments fetched " +
+          "this turn carry no attribution footer — comments a human wrote. " +
+          "Persist what they decided as a decision-memory or " +
+          "evidence-memory record and declare `reviews: persisted`.",
+      ].join("\n"),
+    };
+  }
+  if ((token === "read" || token === "persisted") && !stores.length) {
+    return {
+      verdict: "unconfigured",
+      detail: `declared ${token}, but no memory store checkout was found to observe`,
+    };
+  }
+  if (token === "persisted") {
+    return {
+      verdict: "fail",
+      detail: "declared persisted, but no memory checkout gained a write this turn",
+      reason: [
+        "The turn is not complete while the summary claims a persistence " +
+          "no store shows. It declares `reviews: persisted`, but no memory " +
+          "checkout gained a write this turn. Write the record, or declare " +
+          "what actually happened — a declaration widens detection and " +
+          "never greens this check.",
+      ].join("\n"),
+    };
+  }
+  if (token === "read") {
+    return {
+      verdict: "fail",
+      detail: "reviews read this turn and nothing reached a memory",
+      reason: [
+        "The turn is not complete until what the review decided is written " +
+          "down. The summary declares `reviews: read` and no memory " +
+          "checkout gained a write this turn — answers that live only in " +
+          "the transcript are lost with it. Persist the outcome as a " +
+          "decision-memory or evidence-memory record, or declare " +
+          "`reviews: nothing-to-persist` if the comments changed nothing — " +
+          "that waiver is logged as a claim.",
+      ].join("\n"),
+    };
+  }
+  if (token === "nothing-to-persist") {
+    return {
+      verdict: "pass",
+      detail: "nothing-to-persist declared — a claim, logged unverified",
+    };
+  }
+  if (token === null && observed.human) {
+    return {
+      verdict: "pass",
+      detail:
+        "human comment bodies fetched and nothing declared — observed only " +
+        "(the footer heuristic runs observe-first)",
+    };
+  }
+  return { verdict: "pass", detail: "no review activity declared or observed" };
+}
+
+/**
  * Check 5 — the rendered ledger page is newer than what it should show.
  *
  * The silent-render incident, twice over: a dead render workflow hidden
@@ -986,6 +1142,7 @@ const CHECKS = [
   { check: "pushed", run: checkPushed },
   { check: "ledger-event", run: checkLedgerEvent },
   { check: "decision-record", run: checkDecisionRecord },
+  { check: "review-persistence", run: checkReviewPersistence },
   { check: "response-hygiene", run: checkResponseHygiene },
   { check: "artifact-fresh", run: checkArtifactFresh },
 ];
@@ -1133,6 +1290,8 @@ function context(input) {
     // the store's convention is to clone fresh per recording session —
     // so there is no conventional path to derive it to.
     decisionUrl: process.env.DECISION_MEMORY_URL || null,
+    evidenceUrl: process.env.EVIDENCE_MEMORY_URL || null,
+    transcriptText: text,
     renderPath: process.env.LEDGER_RENDER_PATH || null,
     clones: clonesUnder(process.env.HEARTBEAT_REPO_ROOT || null),
     summary: readTurnSummary(),
