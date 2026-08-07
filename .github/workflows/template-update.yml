@@ -254,6 +254,16 @@ jobs:
             --json body --jq .body \
             || echo "_No release notes found for $NEW_REF in $template_repo._")"
 
+          # The changelog is quoted material from another repo, and it
+          # must not act on this one (#149). Release notes render every
+          # reference as `closes owner/repo#n`, GitHub reads closing
+          # keywords in a PR BODY, and `owner/repo#n` reaches across
+          # repositories — so merging an update PR here closed an
+          # upstream ticket whose work was not done. The verb is
+          # defused and the link kept: `closes [x#1]` -> `ref [x#1]`.
+          changelog="$(printf '%s' "$changelog" | sed -E \
+            's/(close[sd]?|fix(e[sd])?|resolve[sd]?)([[:space:]]+\[?[A-Za-z0-9._\/-]*#[0-9]+)/ref\3/Ig')"
+
           {
             echo "Automated \`copier update\` of the agentic template: \`$OLD_REF\` -> \`$NEW_REF\`."
             echo
