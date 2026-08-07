@@ -13,16 +13,20 @@ import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  ATTRIBUTION_FOOTER,
   LedgerError,
   currentStates,
   fold,
   forgeOf,
+  grillingInvokedAt,
   isUserTurn,
   knownPrs,
   lastAssistantText,
   lastUserTurnAt,
   refViolations,
+  reviewSignals,
   stripCode,
+  ticketWrites,
   transcriptUsage,
   mergeLogLines,
   orderClosed,
@@ -2960,5 +2964,202 @@ describe("OutgoingScan", () => {
       shellRef("PUSH_BLOCKLIST term 2"),
       "\"$(printf %s \"$PUSH_BLOCKLIST\" | cut -d'|' -f2)\"",
     );
+  });
+});
+
+describe("ReviewSignals", () => {
+  const fetchPayload = (payload, at = "2026-08-03T15:12:00.000Z") =>
+    [
+      {
+        type: "assistant",
+        timestamp: at,
+        message: {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_1",
+              name: "mcp__github__pull_request_read",
+              input: { method: "get_review_comments" },
+            },
+          ],
+        },
+      },
+      {
+        type: "user",
+        timestamp: at,
+        message: {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_1",
+              content: [{ type: "text", text: JSON.stringify(payload) }],
+            },
+          ],
+        },
+      },
+    ]
+      .map((line) => JSON.stringify(line))
+      .join("\n");
+
+  const fetchLines = (body, at = "2026-08-03T15:12:00.000Z") =>
+    fetchPayload({ comments: [{ body }] }, at);
+
+  const authored = (body, login) => fetchPayload({ comments: [{ body, user: { login } }] });
+
+  it("a fetched body without the footer is a human comment", () => {
+    const signals = reviewSignals(fetchLines("Rename the flag — double negative."));
+    assert.deepEqual(signals, { fetched: true, human: true, anomalies: [] });
+  });
+
+  it("a body carrying the footer is Claude's own post coming back", () => {
+    const signals = reviewSignals(fetchLines(`Applied.\n\n---\n${ATTRIBUTION_FOOTER}`));
+    assert.deepEqual(signals, { fetched: true, human: false, anomalies: [] });
+  });
+
+  it("no comment fetch means no signal at all", () => {
+    const plain = JSON.stringify({
+      type: "user",
+      timestamp: "2026-08-03T15:10:00.000Z",
+      message: { role: "user", content: "Finish the slice." },
+    });
+    assert.deepEqual(reviewSignals(plain), { fetched: false, human: false, anomalies: [] });
+  });
+
+  it("activity before the boundary is another turn's business", () => {
+    const early = fetchLines("Rename it.", "2026-08-03T14:00:00.000Z");
+    assert.deepEqual(reviewSignals(early, "2026-08-03T15:10:00.000Z"), {
+      fetched: false,
+      human: false,
+      anomalies: [],
+    });
+  });
+
+  it("webhook activity blocks carry bodies too", () => {
+    const hook = JSON.stringify({
+      type: "user",
+      timestamp: "2026-08-03T15:12:00.000Z",
+      message: {
+        role: "user",
+        content:
+          '<github-webhook-activity>{"comment":{"body":"Why does this loop twice?"}}</github-webhook-activity>',
+      },
+    });
+    assert.deepEqual(reviewSignals(hook), { fetched: true, human: true, anomalies: [] });
+  });
+
+  it("a result for a tool this check never asked about is ignored", () => {
+    const other = fetchLines("Rename it.").replace("pull_request_read", "list_pull_requests");
+    assert.deepEqual(reviewSignals(other), { fetched: false, human: false, anomalies: [] });
+  });
+
+  it("with accounts configured, authorship beats the footer", () => {
+    const bare = authored("Rename the flag.", "the-principal");
+    const read = reviewSignals(bare, null, ["pando-ramet"]);
+    assert.equal(read.human, true);
+    assert.deepEqual(read.anomalies, []);
+    const own = authored(`Applied.\n\n---\n${ATTRIBUTION_FOOTER}`, "pando-ramet");
+    assert.deepEqual(reviewSignals(own, null, ["pando-ramet"]), {
+      fetched: true,
+      human: false,
+      anomalies: [],
+    });
+  });
+
+  it("a footer on a foreign account is an anomaly, loudly", () => {
+    const forged = authored(`LGTM.\n\n---\n${ATTRIBUTION_FOOTER}`, "the-principal");
+    const read = reviewSignals(forged, null, ["pando-ramet"]);
+    assert.deepEqual(read.anomalies, [{ kind: "foreign-footer", author: "the-principal" }]);
+  });
+
+  it("an agent account posting bare is footer drift", () => {
+    const bare = authored("Applied, no footer.", "pando-ramet");
+    const read = reviewSignals(bare, null, ["pando-ramet"]);
+    assert.deepEqual(read.anomalies, [{ kind: "footer-drift", author: "pando-ramet" }]);
+    assert.equal(read.human, false);
+  });
+
+  it("without accounts, the same texts raise no anomaly", () => {
+    const forged = authored(`LGTM.\n\n---\n${ATTRIBUTION_FOOTER}`, "the-principal");
+    assert.deepEqual(reviewSignals(forged), { fetched: true, human: false, anomalies: [] });
+  });
+});
+
+
+describe("TicketWrites", () => {
+  const write = (name, input, at = "2026-08-03T15:14:00.000Z") =>
+    JSON.stringify({
+      type: "assistant",
+      timestamp: at,
+      message: {
+        role: "assistant",
+        content: [{ type: "tool_use", id: "toolu_w", name, input }],
+      },
+    });
+
+  it("an issue-writing call names its ticket", () => {
+    const text = write("mcp__github__add_issue_comment", {
+      owner: "o",
+      repo: "r",
+      issue_number: 61,
+      body: "done",
+    });
+    assert.deepEqual([...ticketWrites(text)], ["o/r#61"]);
+  });
+
+  it("reading a ticket is not updating it", () => {
+    const text = write("mcp__github__issue_read", { owner: "o", repo: "r", issue_number: 61 });
+    assert.deepEqual([...ticketWrites(text)], []);
+  });
+
+  it("a write before the boundary is another turn's", () => {
+    const text = write(
+      "mcp__github__issue_write",
+      { owner: "o", repo: "r", issue_number: 61 },
+      "2026-08-03T14:00:00.000Z",
+    );
+    assert.deepEqual([...ticketWrites(text, "2026-08-03T15:10:00.000Z")], []);
+  });
+
+  it("owner and repo casing folds to one ticket", () => {
+    const text = write("mcp__github__issue_write", { owner: "O", repo: "R", issue_number: 61 });
+    assert.deepEqual([...ticketWrites(text)], ["o/r#61"]);
+  });
+});
+
+
+describe("GrillingInvoked", () => {
+  const user = (text, at) =>
+    JSON.stringify({ type: "user", timestamp: at, message: { role: "user", content: text } });
+  const skill = (name, at) =>
+    JSON.stringify({
+      type: "assistant",
+      timestamp: at,
+      message: {
+        role: "assistant",
+        content: [{ type: "tool_use", id: "t1", name: "Skill", input: { skill: name } }],
+      },
+    });
+
+  it("the typed slash command counts", () => {
+    const text = user(
+      "<command-name>/grill-me</command-name>\n<command-args>the plan</command-args>",
+      "2026-08-03T15:10:00.000Z",
+    );
+    assert.equal(grillingInvokedAt(text), "2026-08-03T15:10:00.000Z");
+  });
+
+  it("the Skill call counts, and the LAST invocation wins", () => {
+    const text = [
+      skill("grilling", "2026-08-03T15:00:00.000Z"),
+      skill("grilling", "2026-08-03T16:00:00.000Z"),
+    ].join("\n");
+    assert.equal(grillingInvokedAt(text), "2026-08-03T16:00:00.000Z");
+  });
+
+  it("prose about grilling is not an invocation", () => {
+    const text = [user("let us grill the plan later", "2026-08-03T15:10:00.000Z"), skill("tdd", "2026-08-03T15:11:00.000Z")].join("\n");
+    assert.equal(grillingInvokedAt(text), null);
   });
 });

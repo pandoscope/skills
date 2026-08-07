@@ -1,0 +1,4 @@
+threads: ruling-follow-up
+tickets:
+reviews: none
+rulings: seal-outside-machine

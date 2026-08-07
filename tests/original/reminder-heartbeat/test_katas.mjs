@@ -115,6 +115,16 @@ function decisionCheckout(dir, spec) {
 }
 
 /**
+ * The evidence store URL a kata names, or null when it names none.
+ *
+ * Same contract as `decision_url`: review persistence counts EITHER
+ * store, so a kata has to be able to stand up each one on its own.
+ */
+function evidenceUrl(dir, spec) {
+  return spec?.evidence_url ? path.join(dir, ".origins", `${spec.evidence_url}.git`) : null;
+}
+
+/**
  * Expand the placeholders a checked-in expectation cannot hold.
  *
  * Reason text names absolute paths, which differ per machine, so the
@@ -175,6 +185,7 @@ function fire(dir, spec, script = HEARTBEAT) {
       // exercising the path a session without it takes.
       ...(spec.session_url ? { LEDGER_SESSION_URL: spec.session_url } : {}),
       ...(decisionUrl(dir, spec) ? { DECISION_MEMORY_URL: decisionUrl(dir, spec) } : {}),
+      ...(evidenceUrl(dir, spec) ? { EVIDENCE_MEMORY_URL: evidenceUrl(dir, spec) } : {}),
       // The baseline arm: verdicts logged, turn never blocked. Only set
       // when the kata names it, so every other kata keeps proving the
       // blocking path.
@@ -183,6 +194,9 @@ function fire(dir, spec, script = HEARTBEAT) {
       // Only set when the kata names it, so every other kata keeps
       // exercising the built-in-only scan an ordinary session runs.
       ...(spec.push_blocklist ? { PUSH_BLOCKLIST: spec.push_blocklist } : {}),
+      // Only set when the kata names it, so every other kata keeps
+      // exercising the footer-only reading an account-less session has.
+      ...(spec.agent_accounts ? { AGENT_ACCOUNTS: spec.agent_accounts } : {}),
     },
   });
   assert.equal(result.error, undefined, `the hook did not run: ${result.error}`);
@@ -332,7 +346,7 @@ function assertKata(name, dir, spec, result) {
   // an empty verdict list is the honest shape of "nothing was checked".
   assert.deepEqual(
     record.verdicts.map((verdict) => verdict.check),
-    spec.verdicts ?? ["turn-summary", "push-blocklist", "pushed", "ledger-event", "decision-record", "response-hygiene", "artifact-fresh"],
+    spec.verdicts ?? ["turn-summary", "push-blocklist", "pushed", "ledger-event", "tickets-updated", "decision-record", "rulings-recorded", "review-persistence", "grilling-recorded", "kata-reminder", "blocked-captured", "response-hygiene", "artifact-fresh"],
     `${name}: every check reports, pass or fail`,
   );
   assert.equal(record.fired, spec.check, `${name}: the check the log says fired`);

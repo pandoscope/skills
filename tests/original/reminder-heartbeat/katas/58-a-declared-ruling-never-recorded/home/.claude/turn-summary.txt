@@ -1,0 +1,4 @@
+threads:
+tickets:
+reviews: none
+rulings: naming-things

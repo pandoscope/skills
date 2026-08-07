@@ -1,0 +1,14 @@
+{
+  "status": "active",
+  "stop_hook_active": false,
+  "summary_written_at": "2026-08-03T15:19:25.000Z",
+  "decision_url": "decision-memory",
+  "exit": 2,
+  "check": "rulings-recorded",
+  "sealed": false,
+  "reason": [
+    "The turn is not complete until every ruling it declared is a record. Declared and not in any decisions/ file that arrived this turn: naming-things. Write each record, or correct the declaration to the slugs actually recorded.",
+    "",
+    "  python3 {{decisions}}/tools/record.py record --from <drafts.json>"
+  ]
+}

@@ -51,8 +51,11 @@ import {
   knownPrs,
   lastAssistantText,
   lastUserTurnAt,
+  grillingInvokedAt,
   refViolations,
+  reviewSignals,
   stripCode,
+  ticketWrites,
   transcriptUsage,
 } from "./core.mjs";
 import { digestOf, readLog, stretchOf } from "./diligence.mjs";
@@ -82,7 +85,16 @@ function localFile(name) {
 function readTurnSummary() {
   const file = localFile("turn-summary.txt");
   if (!fs.existsSync(file)) {
-    return { path: file, exists: false, writtenAt: null, threads: [], tickets: [] };
+    return {
+      path: file,
+      exists: false,
+      writtenAt: null,
+      threads: [],
+      tickets: [],
+      reviews: null,
+      rulings: [],
+      waivers: {},
+    };
   }
   const text = fs.readFileSync(file, "utf8");
   const field = (name) => {
@@ -90,12 +102,34 @@ function readTurnSummary() {
     if (!line) return [];
     return line.slice(line.indexOf(":") + 1).split(",").map((s) => s.trim()).filter(Boolean);
   };
+  // A single-valued line, raw: the reviews declaration is a state
+  // word, not a list, and its grammar belongs to the check that reads
+  // it — an unrecognized word is the check's finding, not a parse
+  // failure here.
+  const single = (name) => {
+    const line = text.split("\n").find((item) => item.trim().startsWith(`${name}:`));
+    if (!line) return null;
+    return line.slice(line.indexOf(":") + 1).trim() || null;
+  };
+  // Every `no-update:` line is a per-ticket waiver: the first token
+  // names the ticket, the rest is the reason — a claim the check logs
+  // but never verifies, so declining to update is a visible act.
+  const waivers = {};
+  for (const line of text.split("\n")) {
+    if (!line.trim().startsWith("no-update:")) continue;
+    const rest = line.slice(line.indexOf(":") + 1).trim();
+    const [ticket, ...why] = rest.split(/\s+/);
+    if (ticket) waivers[ticket.toLowerCase()] = why.join(" ") || "(no reason given)";
+  }
   return {
     path: file,
     exists: true,
     writtenAt: fs.statSync(file).mtime,
     threads: field("threads"),
     tickets: field("tickets"),
+    reviews: single("reviews"),
+    rulings: field("rulings"),
+    waivers,
   };
 }
 
@@ -155,7 +189,7 @@ function committedThisTurn(repo, turnStart) {
  * stamp of the message the principal last typed.
  */
 function checkTurnSummary(ctx) {
-  const write = `  printf 'threads: %s\\ntickets: %s\\n' '<thread-slug>, <thread-slug>' '<owner/repo#n>' > ${ctx.summary.path}`;
+  const write = `  printf 'threads: %s\\ntickets: %s\\nreviews: %s\\n' '<thread-slug>, <thread-slug>' '<owner/repo#n>' '<none|read|persisted|nothing-to-persist>' > ${ctx.summary.path}`;
 
   // Without a boundary nothing downstream means what it says: freshness
   // has nothing to compare against and check 3's window widens to all
@@ -674,7 +708,8 @@ function recordsThisTurn(root, turnStart) {
 }
 
 /**
- * Check 4 — a decision marked in the code has a record beside it.
+ * The decision-record check — a decision marked in the code has a
+ * record beside it.
  *
  * The reasoning behind a decision is free to write down in the turn
  * that made it and can only be reconstructed afterwards; a
@@ -761,6 +796,416 @@ function checkDecisionRecord(ctx) {
       `  ${opened ? "" : `${recorder} open && `}${recorder} record --from <drafts.json>`,
     ].join("\n"),
   };
+}
+
+/**
+ * Check 4 — every ticket the turn declared heard about it.
+ *
+ * The declared set diffs against issue-writing tool calls in the
+ * transcript — no network, same unlock as every transcript-side
+ * check. Fires on EVERY declared ticket lacking an observed write, by
+ * ruling: better a coarse reminder than a ticket that silently
+ * diverges from what the session knows. The per-ticket escape is the
+ * `no-update:` waiver — logged as a claim, never verified, so
+ * declining to update is a visible act rather than a silence.
+ */
+function checkTicketsUpdated(ctx) {
+  if (!ctx.turnStart) {
+    return { verdict: "unconfigured", detail: "no turn boundary to measure against" };
+  }
+  const declared = ctx.summary.tickets
+    .map((ticket) => ticket.toLowerCase())
+    .filter((ticket) => /^[\w.-]+\/[\w.-]+#\d+$/.test(ticket));
+  if (!declared.length) {
+    return { verdict: "pass", detail: "no tickets declared — nothing to diff" };
+  }
+  const written = ticketWrites(ctx.transcriptText, ctx.turnStart.toISOString());
+  const waived = declared.filter((ticket) => ctx.summary.waivers[ticket]);
+  const missing = declared.filter(
+    (ticket) => !written.has(ticket) && !ctx.summary.waivers[ticket],
+  );
+  if (!missing.length) {
+    const claims = waived.length
+      ? `; waived as claims: ${waived.map((t) => `${t} (${ctx.summary.waivers[t]})`).join(", ")}`
+      : "";
+    return { verdict: "pass", detail: `${declared.length} tickets declared${claims}` };
+  }
+  return {
+    verdict: "fail",
+    detail: `no observed write for ${missing.join(", ")}`,
+    reason: [
+      "The turn is not complete until every ticket it declared heard " +
+        `about it. Declared and never written to this turn: ` +
+        `${missing.join(", ")}. Update each one on the forge, or waive ` +
+        "it explicitly — add a line per ticket to " +
+        `${ctx.summary.path}: no-update: <owner/repo#n> <why> — the ` +
+        "waiver is logged as a claim.",
+    ].join("\n"),
+  };
+}
+
+/**
+ * Did this memory store gain a write during the turn?
+ *
+ * Coarse on purpose ("not lost" beats "right cabinet"): a commit since
+ * the turn began, or a working-tree change whose file was touched
+ * after it. The mtime bound keeps a store that was already dirty
+ * before the turn from greening every turn after — the false green
+ * would point the wrong way for a check about loss.
+ */
+function storeWroteThisTurn(root, turnStart) {
+  if (committedThisTurn({ path: root }, turnStart)) return true;
+  const status = gitOrNull(root, "status", "--porcelain", "--untracked-files=all");
+  if (!status) return false;
+  return status
+    .split("\n")
+    .filter((line) => line.trim())
+    .some((line) => {
+      const file = path.join(root, line.slice(3).trim());
+      try {
+        return fs.statSync(file).mtime >= turnStart;
+      } catch {
+        return false;
+      }
+    });
+}
+
+/**
+ * Check 8 — every ruling the turn declared is a record in the store.
+ *
+ * The `rulings:` summary line names the slugs the principal ruled on
+ * this turn; each one must appear in a decisions/ filename that
+ * ARRIVED this turn. Purely mechanical — declared set vs observed
+ * files — so it lands blocking. The blind spot is accepted by ruling
+ * E10: a ruling the turn never declares is invisible here, and the
+ * habit of declaring is what the grammar trains.
+ */
+function checkRulingsRecorded(ctx) {
+  if (!ctx.turnStart) {
+    return { verdict: "unconfigured", detail: "no turn boundary to measure against" };
+  }
+  if (!ctx.summary.rulings.length) {
+    return { verdict: "pass", detail: "no rulings declared — nothing to diff" };
+  }
+  if (!ctx.decisionUrl) {
+    return {
+      verdict: "unconfigured",
+      detail: "rulings declared but DECISION_MEMORY_URL is unset — nothing was checked",
+    };
+  }
+  const { store, open } = storeCheckout(ctx.decisionUrl, ctx.clones);
+  if (!store) {
+    return {
+      verdict: "unconfigured",
+      detail: "rulings declared but the decision store has no checkout to observe",
+    };
+  }
+  if (open.length > 1) {
+    return {
+      verdict: "unconfigured",
+      detail: `${open.length} decision-store checkouts have open recorder sessions — ambiguous`,
+    };
+  }
+  const arrived = recordsThisTurn(store, ctx.turnStart);
+  const missing = ctx.summary.rulings.filter(
+    (slug) => !arrived.some((name) => name.includes(slug)),
+  );
+  if (!missing.length) {
+    return { verdict: "pass", detail: `${ctx.summary.rulings.length} declared rulings recorded` };
+  }
+  const recorder = `python3 ${path.join(store, "tools", "record.py")}`;
+  return {
+    verdict: "fail",
+    detail: `no record arrived for ${missing.join(", ")}`,
+    reason: [
+      "The turn is not complete until every ruling it declared is a " +
+        `record. Declared and not in any decisions/ file that arrived ` +
+        `this turn: ${missing.join(", ")}. Write each record, or correct ` +
+        "the declaration to the slugs actually recorded.",
+      "",
+      `  ${recorder} record --from <drafts.json>`,
+    ].join("\n"),
+  };
+}
+
+/**
+ * Check 13 — a grilling leaves records behind. Observe-first.
+ *
+ * The invocation is mechanical (the slash command or the Skill call
+ * is in the transcript); the TIMING is not — answers arrive in waves
+ * over later turns and the records legitimately land when the rulings
+ * settle. A blocking check would fire between waves, so this one only
+ * observes: invocation seen, records since it counted, verdict always
+ * a pass with the state in its detail. Ruling A2 — a heuristic
+ * detector is measured before it may nag.
+ */
+function checkGrillingRecorded(ctx) {
+  if (!ctx.turnStart) {
+    return { verdict: "unconfigured", detail: "no turn boundary to measure against" };
+  }
+  const invoked = grillingInvokedAt(ctx.transcriptText);
+  if (!invoked) {
+    return { verdict: "pass", detail: "no grilling invoked this session" };
+  }
+  if (!ctx.decisionUrl) {
+    return {
+      verdict: "unconfigured",
+      detail: "grilling invoked but DECISION_MEMORY_URL is unset — nothing was checked",
+    };
+  }
+  const { store } = storeCheckout(ctx.decisionUrl, ctx.clones);
+  if (!store) {
+    return {
+      verdict: "unconfigured",
+      detail: "grilling invoked but the decision store has no checkout to observe",
+    };
+  }
+  const since = recordsThisTurn(store, new Date(invoked)).length;
+  return {
+    verdict: "pass",
+    detail: since
+      ? `grilling invoked; ${since} records since`
+      : "grilling invoked and no record since — observing, not blocking",
+  };
+}
+
+/**
+ * Check 10 — completed work with a PR leaves a kata behind. Remind-once.
+ *
+ * The trigger is mechanical (a `completed` event carrying `--pr`
+ * landed this turn); the adequacy of a kata is not, and a hook that
+ * pretended otherwise would block on a judgement it cannot make. So
+ * this check reminds exactly once per thread — the fresh-incident
+ * moment is when a kata is cheap to write — and afterwards records
+ * only the claim. The delivered set is hook-owned local state, keyed
+ * by session and thread.
+ */
+function checkKataReminder(ctx) {
+  if (!ctx.turnStart) {
+    return { verdict: "unconfigured", detail: "no turn boundary to measure against" };
+  }
+  const start = ctx.turnStart.getTime();
+  const finished = ctx.events
+    .filter((event) => event.anchor?.session === ctx.session || event.by)
+    .filter((event) => event.at && new Date(event.at).getTime() >= start)
+    .filter((event) => event.ev === "completed" && event.pr);
+  if (!finished.length) {
+    return { verdict: "pass", detail: "nothing completed with a PR this turn" };
+  }
+  const file = localFile("kata-reminders.json");
+  let delivered = {};
+  try {
+    delivered = JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    delivered = {};
+  }
+  const fresh = finished.filter((event) => !delivered[`${ctx.session}/${event.thread}`]);
+  if (!fresh.length) {
+    return {
+      verdict: "pass",
+      detail: `kata reminder already delivered for ${finished
+        .map((event) => event.thread)
+        .join(", ")} — adequacy stays a claim`,
+    };
+  }
+  // Marked delivered at FIRING: remind-once means once, whatever the
+  // model does with it — a reminder that re-fires until obeyed is a
+  // blocking check wearing a softer name.
+  for (const event of fresh) delivered[`${ctx.session}/${event.thread}`] = event.pr;
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(delivered, null, 2), "utf8");
+  const [first] = fresh;
+  return {
+    verdict: "fail",
+    detail: `completed with a PR and no kata prompt yet: ${fresh
+      .map((event) => event.thread)
+      .join(", ")}`,
+    reason: [
+      `${first.thread} completed with ${first.pr} this turn. A kata ` +
+        "freezes the incident while it is fresh — the corpus is this " +
+        "org's own failure catalogue, and a case not written down now " +
+        "is reconstructed later or lost. Write the kata, or note in the " +
+        "thread why none is owed. This reminder fires once and will not " +
+        "block again.",
+    ].join("\n"),
+  };
+}
+
+/**
+ * Check 11 — a question-shaped close is a blocked thread. Observe-only.
+ *
+ * The detector is imperfect by admission: a final message ending in a
+ * question USUALLY means the turn is waiting on the principal, and a
+ * wait not captured as a `blocked` event is invisible to the next
+ * session. Imperfect detectors do not block (ruling A2) — this one
+ * logs what it sees, and the compliance data decides whether it ever
+ * earns a voice.
+ */
+function checkBlockedCaptured(ctx) {
+  if (!ctx.turnStart) {
+    return { verdict: "unconfigured", detail: "no turn boundary to measure against" };
+  }
+  const text = (ctx.assistantText ?? "").trimEnd();
+  if (!text.endsWith("?")) {
+    return { verdict: "pass", detail: "the close is not question-shaped" };
+  }
+  const start = ctx.turnStart.getTime();
+  const blocked = ctx.events
+    .filter((event) => event.anchor?.session === ctx.session)
+    .filter((event) => event.at && new Date(event.at).getTime() >= start)
+    .some((event) => event.ev === "blocked");
+  return {
+    verdict: "pass",
+    detail: blocked
+      ? "question-shaped close and a blocked event captured"
+      : "question-shaped close and no blocked event — observing, not blocking",
+  };
+}
+
+/**
+ * Check 14 — what a review decided is persisted, not just read.
+ *
+ * The truth source is the attribution-footer contract: a fetched
+ * comment body without the footer was written by a human, and a
+ * human's review answers that live only in the transcript are lost
+ * with the container. Coarse turn-level match by ruling — human
+ * comments in, zero memory writes out, fires once; either store
+ * counts as persisted, because "not lost" beats "right cabinet".
+ *
+ * The summary's `reviews:` line is an ADDITIONAL signal, cross-checked
+ * and never trusted alone: a declaration can widen detection — its own
+ * contradiction fires — but a claim from the context that already
+ * believed the work happened cannot green the check. The one
+ * exception is the explicit waiver, `nothing-to-persist`, which is
+ * logged as a claim exactly so declining to persist is a visible act
+ * rather than a silence. The footer heuristic on its own, with no
+ * declaration to contradict, only observes.
+ */
+function checkReviewPersistence(ctx) {
+  if (!ctx.turnStart) {
+    return { verdict: "unconfigured", detail: "no turn boundary to measure against" };
+  }
+  const declared = ctx.summary.reviews;
+  const token = declared ? declared.split(/[\s,]+/)[0].toLowerCase() : null;
+  const known = [null, "none", "read", "persisted", "nothing-to-persist"];
+  if (!known.includes(token)) {
+    return {
+      verdict: "fail",
+      detail: `unreadable reviews declaration: ${declared}`,
+      reason: [
+        "The turn is not complete until its reviews declaration parses. " +
+          `\`reviews: ${declared}\` names no state this check reads — declare ` +
+          "one of: none, read, persisted, nothing-to-persist.",
+      ].join("\n"),
+    };
+  }
+  const stores = [];
+  for (const [name, url] of [
+    ["decision-memory", ctx.decisionUrl],
+    ["evidence-memory", ctx.evidenceUrl],
+  ]) {
+    if (!url) continue;
+    const { store } = storeCheckout(url, ctx.clones);
+    if (store) stores.push({ name, path: store });
+  }
+  const observed = reviewSignals(
+    ctx.transcriptText,
+    ctx.turnStart.toISOString(),
+    ctx.agentAccounts,
+  );
+  // The account safeguard, ahead of everything the footer decides: with
+  // distinct accounts configured, a footer on a foreign account or an
+  // agent account posting bare means the attribution contract itself is
+  // broken, and every classification built on it is suspect. Loud by
+  // request, and opt-in by construction — no AGENT_ACCOUNTS, no check.
+  if (observed.anomalies.length) {
+    const [first] = observed.anomalies;
+    const what =
+      first.kind === "footer-drift"
+        ? `the agent account ${first.author} posted WITHOUT the attribution footer`
+        : `the account ${first.author} carries the attribution footer and is not a configured agent account`;
+    return {
+      verdict: "fail",
+      detail: `${observed.anomalies.length} footer-contract anomalies, first: ${first.kind} by ${first.author}`,
+      reason: [
+        "The turn is not complete while the attribution-footer contract " +
+          `is broken: ${what}. Every human/agent reading built on the ` +
+          "footer is suspect until the posting account or the footer " +
+          "habit is fixed — or AGENT_ACCOUNTS is corrected to name the " +
+          "accounts the agent actually posts as.",
+      ].join("\n"),
+    };
+  }
+  const wrote = stores
+    .filter((entry) => storeWroteThisTurn(entry.path, ctx.turnStart))
+    .map((entry) => entry.name);
+  if (wrote.length) {
+    return { verdict: "pass", detail: `persistence observed: ${wrote.join(", ")}` };
+  }
+  // The contradiction needs no store to be wrong: the turn said no
+  // comments were read, and the transcript shows human ones fetched.
+  if (token === "none" && observed.human) {
+    return {
+      verdict: "fail",
+      detail: "declared none, but human comment bodies were fetched this turn",
+      reason: [
+        "The turn is not complete while the summary contradicts the " +
+          "transcript. It declares `reviews: none`, but comments fetched " +
+          "this turn carry no attribution footer — comments a human wrote. " +
+          "Persist what they decided as a decision-memory or " +
+          "evidence-memory record and declare `reviews: persisted`.",
+      ].join("\n"),
+    };
+  }
+  if ((token === "read" || token === "persisted") && !stores.length) {
+    return {
+      verdict: "unconfigured",
+      detail: `declared ${token}, but no memory store checkout was found to observe`,
+    };
+  }
+  if (token === "persisted") {
+    return {
+      verdict: "fail",
+      detail: "declared persisted, but no memory checkout gained a write this turn",
+      reason: [
+        "The turn is not complete while the summary claims a persistence " +
+          "no store shows. It declares `reviews: persisted`, but no memory " +
+          "checkout gained a write this turn. Write the record, or declare " +
+          "what actually happened — a declaration widens detection and " +
+          "never greens this check.",
+      ].join("\n"),
+    };
+  }
+  if (token === "read") {
+    return {
+      verdict: "fail",
+      detail: "reviews read this turn and nothing reached a memory",
+      reason: [
+        "The turn is not complete until what the review decided is written " +
+          "down. The summary declares `reviews: read` and no memory " +
+          "checkout gained a write this turn — answers that live only in " +
+          "the transcript are lost with it. Persist the outcome as a " +
+          "decision-memory or evidence-memory record, or declare " +
+          "`reviews: nothing-to-persist` if the comments changed nothing — " +
+          "that waiver is logged as a claim.",
+      ].join("\n"),
+    };
+  }
+  if (token === "nothing-to-persist") {
+    return {
+      verdict: "pass",
+      detail: "nothing-to-persist declared — a claim, logged unverified",
+    };
+  }
+  if (token === null && observed.human) {
+    return {
+      verdict: "pass",
+      detail:
+        "human comment bodies fetched and nothing declared — observed only " +
+        "(the footer heuristic runs observe-first)",
+    };
+  }
+  return { verdict: "pass", detail: "no review activity declared or observed" };
 }
 
 /**
@@ -985,7 +1430,13 @@ const CHECKS = [
   { check: "push-blocklist", run: checkPushBlocklist },
   { check: "pushed", run: checkPushed },
   { check: "ledger-event", run: checkLedgerEvent },
+  { check: "tickets-updated", run: checkTicketsUpdated },
   { check: "decision-record", run: checkDecisionRecord },
+  { check: "rulings-recorded", run: checkRulingsRecorded },
+  { check: "review-persistence", run: checkReviewPersistence },
+  { check: "grilling-recorded", run: checkGrillingRecorded },
+  { check: "kata-reminder", run: checkKataReminder },
+  { check: "blocked-captured", run: checkBlockedCaptured },
   { check: "response-hygiene", run: checkResponseHygiene },
   { check: "artifact-fresh", run: checkArtifactFresh },
 ];
@@ -1133,6 +1584,16 @@ function context(input) {
     // the store's convention is to clone fresh per recording session —
     // so there is no conventional path to derive it to.
     decisionUrl: process.env.DECISION_MEMORY_URL || null,
+    evidenceUrl: process.env.EVIDENCE_MEMORY_URL || null,
+    transcriptText: text,
+    // The forge accounts the agent posts as, comma-separated and
+    // optional: with distinct principal and agent accounts configured,
+    // authorship beats the footer as the human/agent discriminator,
+    // and a broken footer contract fails loudly instead of misreading.
+    agentAccounts: (process.env.AGENT_ACCOUNTS || "")
+      .split(",")
+      .map((name) => name.trim())
+      .filter(Boolean),
     renderPath: process.env.LEDGER_RENDER_PATH || null,
     clones: clonesUnder(process.env.HEARTBEAT_REPO_ROOT || null),
     summary: readTurnSummary(),

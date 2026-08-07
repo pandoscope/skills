@@ -1,0 +1,12 @@
+{
+  "status": "active",
+  "stop_hook_active": false,
+  "summary_written_at": "2026-08-03T15:19:25.000Z",
+  "decision_url": "decision-memory",
+  "exit": 2,
+  "check": "review-persistence",
+  "sealed": false,
+  "reason": [
+    "The turn is not complete until what the review decided is written down. The summary declares `reviews: read` and no memory checkout gained a write this turn — answers that live only in the transcript are lost with it. Persist the outcome as a decision-memory or evidence-memory record, or declare `reviews: nothing-to-persist` if the comments changed nothing — that waiver is logged as a claim."
+  ]
+}

@@ -8,6 +8,6 @@
   "reason": [
     "The turn is not complete until {{home}}/.claude/turn-summary.txt describes it. Write the ledger threads and the tickets this turn touched.",
     "",
-    "  printf 'threads: %s\\ntickets: %s\\n' '<thread-slug>, <thread-slug>' '<owner/repo#n>' > {{home}}/.claude/turn-summary.txt"
+    "  printf 'threads: %s\\ntickets: %s\\nreviews: %s\\n' '<thread-slug>, <thread-slug>' '<owner/repo#n>' '<none|read|persisted|nothing-to-persist>' > {{home}}/.claude/turn-summary.txt"
   ]
 }

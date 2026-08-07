@@ -121,12 +121,23 @@ Your part is one file per turn, `~/.claude/turn-summary.txt`:
 ```text
 threads: reminder-heartbeat, seal-event
 tickets: my-org/skills#56
+reviews: none
 ```
 
 Every check is a mechanical diff of that declaration against what was
 actually written and pushed. When one fails, the block reason states
 the completion criterion and the exact command — run it and end the
 turn; it is never a prompt to start new work.
+
+The `reviews:` line is the declared half of a standing habit: wherever
+a check has a blind spot, the model declares and the observer
+cross-checks. Its states are `none`, `read`, `persisted` and
+`nothing-to-persist`. A declaration can widen detection — declaring
+`none` over a transcript that fetched footer-less comment bodies
+fires, and so does claiming `persisted` over untouched stores — but it
+never greens the check: only an observed memory write does that. The
+explicit waiver, `nothing-to-persist`, passes as a logged claim, so
+declining to persist is a visible act rather than a silence.
 
 The check list, the seal, the verdict log and the environment contract
 are code, documented where they live: the header of `heartbeat.mjs`.
@@ -149,6 +160,49 @@ may live there, it must only never leave. It runs before the pushed
 check so a hit blocks before any push instruction, and every report
 names the term's SOURCE, never its value — the confirm commands count
 matches rather than printing them.
+
+**What a review decided is persisted, not just read.** The truth
+source is the attribution-footer contract (skills#46, check 14): a
+fetched comment body without the footer was written by a human, and a
+human's review answers must not live only in a transcript the
+container discards. Either memory store counts as persisted — "not
+lost" beats "right cabinet" — and the match is coarse by ruling:
+human comments in, zero memory writes out, fires once. The footer
+heuristic alone only observes; what blocks is the mechanical side —
+the `reviews:` declaration against the stores, or a declaration the
+transcript contradicts.
+
+With `AGENT_ACCOUNTS` set (comma-separated forge logins the agent
+posts as), authorship beats the footer as the discriminator, and the
+contract itself is guarded: a footer on a foreign account, or an
+agent account posting bare, fails loudly — every footer-based reading
+is suspect while either holds. Opt-in by construction: no variable,
+no account check.
+
+**Every ticket the turn declared heard about it.** The declared
+`tickets:` set diffs against issue-writing tool calls in the
+transcript (skills#46, check 4) — reading a ticket is not updating
+it. The per-ticket escape is a `no-update: <owner/repo#n> <why>` line
+in the same summary file: logged as a claim, never verified, so
+declining to update is a visible act rather than a silence.
+
+**Every ruling the turn declared is a record.** A `rulings:` line
+names the slugs the principal ruled on (skills#46, check 8); each one
+must appear in a decisions/ filename that arrived this turn.
+Mechanical, so it blocks; the accepted blind spot (ruling E10) is the
+ruling never declared. The grilling check (13) stays observe-first:
+the invocation is mechanical, but answers arrive in waves over later
+turns and records legitimately land when the rulings settle — a
+blocking check would fire between waves, so it only logs what it
+sees until the compliance data earns it more.
+
+**The remind tier (checks 10 and 11).** Work that completes with a
+PR owes the corpus a kata: the trigger is mechanical, the adequacy is
+not, so the hook reminds exactly once per thread — the fresh-incident
+moment is when a kata is cheap — and afterwards records only the
+claim. A question-shaped close without a `blocked` event is observed
+and never blocked on: the detector is imperfect by admission, and an
+imperfect detector is measured before it may nag.
 
 **A ledger conflict is resolved by union — `--ours`/`--theirs` are
 never valid.** The log is append-only and both sides are real events,
