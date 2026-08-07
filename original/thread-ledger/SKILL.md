@@ -186,6 +186,16 @@ it. The per-ticket escape is a `no-update: <owner/repo#n> <why>` line
 in the same summary file: logged as a claim, never verified, so
 declining to update is a visible act rather than a silence.
 
+**Every ruling the turn declared is a record.** A `rulings:` line
+names the slugs the principal ruled on (skills#46, check 8); each one
+must appear in a decisions/ filename that arrived this turn.
+Mechanical, so it blocks; the accepted blind spot (ruling E10) is the
+ruling never declared. The grilling check (13) stays observe-first:
+the invocation is mechanical, but answers arrive in waves over later
+turns and records legitimately land when the rulings settle — a
+blocking check would fire between waves, so it only logs what it
+sees until the compliance data earns it more.
+
 **A ledger conflict is resolved by union — `--ours`/`--theirs` are
 never valid.** The log is append-only and both sides are real events,
 so the only correct merge keeps every line in stamp order; the recorder

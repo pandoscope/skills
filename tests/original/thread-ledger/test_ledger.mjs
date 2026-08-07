@@ -18,6 +18,7 @@ import {
   currentStates,
   fold,
   forgeOf,
+  grillingInvokedAt,
   isUserTurn,
   knownPrs,
   lastAssistantText,
@@ -3124,5 +3125,41 @@ describe("TicketWrites", () => {
   it("owner and repo casing folds to one ticket", () => {
     const text = write("mcp__github__issue_write", { owner: "O", repo: "R", issue_number: 61 });
     assert.deepEqual([...ticketWrites(text)], ["o/r#61"]);
+  });
+});
+
+
+describe("GrillingInvoked", () => {
+  const user = (text, at) =>
+    JSON.stringify({ type: "user", timestamp: at, message: { role: "user", content: text } });
+  const skill = (name, at) =>
+    JSON.stringify({
+      type: "assistant",
+      timestamp: at,
+      message: {
+        role: "assistant",
+        content: [{ type: "tool_use", id: "t1", name: "Skill", input: { skill: name } }],
+      },
+    });
+
+  it("the typed slash command counts", () => {
+    const text = user(
+      "<command-name>/grill-me</command-name>\n<command-args>the plan</command-args>",
+      "2026-08-03T15:10:00.000Z",
+    );
+    assert.equal(grillingInvokedAt(text), "2026-08-03T15:10:00.000Z");
+  });
+
+  it("the Skill call counts, and the LAST invocation wins", () => {
+    const text = [
+      skill("grilling", "2026-08-03T15:00:00.000Z"),
+      skill("grilling", "2026-08-03T16:00:00.000Z"),
+    ].join("\n");
+    assert.equal(grillingInvokedAt(text), "2026-08-03T16:00:00.000Z");
+  });
+
+  it("prose about grilling is not an invocation", () => {
+    const text = [user("let us grill the plan later", "2026-08-03T15:10:00.000Z"), skill("tdd", "2026-08-03T15:11:00.000Z")].join("\n");
+    assert.equal(grillingInvokedAt(text), null);
   });
 });

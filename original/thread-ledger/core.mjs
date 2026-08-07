@@ -365,6 +365,46 @@ export function reviewSignals(text, since, agents = []) {
   return { fetched, human, anomalies };
 }
 
+/**
+ * When a grilling was last invoked in the transcript, or null.
+ *
+ * Both invocation shapes count: the typed slash command (a user turn
+ * carrying its `<command-name>`) and the Skill tool call. The stamp is
+ * the LAST invocation — a session that grills twice owes records for
+ * the later round too.
+ */
+export function grillingInvokedAt(text) {
+  let at = null;
+  for (const line of String(text).split("\n")) {
+    if (!line.trim() || !line.includes("grill")) continue;
+    let record;
+    try {
+      record = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    const content = record?.message?.content;
+    if (record?.type === "user") {
+      const texts =
+        typeof content === "string"
+          ? [content]
+          : Array.isArray(content)
+            ? content.filter((b) => b?.type === "text").map((b) => b.text ?? "")
+            : [];
+      if (texts.some((t) => /<command-name>\/[\w-]*grill[\w-]*<\/command-name>/.test(t))) {
+        at = record.timestamp ?? at;
+      }
+      continue;
+    }
+    if (record?.type !== "assistant" || !Array.isArray(content)) continue;
+    for (const block of content) {
+      if (block?.type !== "tool_use" || block.name !== "Skill") continue;
+      if (/grill/.test(String(block.input?.skill ?? ""))) at = record.timestamp ?? at;
+    }
+  }
+  return at;
+}
+
 const TICKET_WRITE = /(issue_write|add_issue_comment|sub_issue_write)$/;
 
 /**

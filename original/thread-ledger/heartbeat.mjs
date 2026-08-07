@@ -51,6 +51,7 @@ import {
   knownPrs,
   lastAssistantText,
   lastUserTurnAt,
+  grillingInvokedAt,
   refViolations,
   reviewSignals,
   stripCode,
@@ -91,6 +92,7 @@ function readTurnSummary() {
       threads: [],
       tickets: [],
       reviews: null,
+      rulings: [],
       waivers: {},
     };
   }
@@ -126,6 +128,7 @@ function readTurnSummary() {
     threads: field("threads"),
     tickets: field("tickets"),
     reviews: single("reviews"),
+    rulings: field("rulings"),
     waivers,
   };
 }
@@ -868,6 +871,105 @@ function storeWroteThisTurn(root, turnStart) {
 }
 
 /**
+ * Check 8 — every ruling the turn declared is a record in the store.
+ *
+ * The `rulings:` summary line names the slugs the principal ruled on
+ * this turn; each one must appear in a decisions/ filename that
+ * ARRIVED this turn. Purely mechanical — declared set vs observed
+ * files — so it lands blocking. The blind spot is accepted by ruling
+ * E10: a ruling the turn never declares is invisible here, and the
+ * habit of declaring is what the grammar trains.
+ */
+function checkRulingsRecorded(ctx) {
+  if (!ctx.turnStart) {
+    return { verdict: "unconfigured", detail: "no turn boundary to measure against" };
+  }
+  if (!ctx.summary.rulings.length) {
+    return { verdict: "pass", detail: "no rulings declared — nothing to diff" };
+  }
+  if (!ctx.decisionUrl) {
+    return {
+      verdict: "unconfigured",
+      detail: "rulings declared but DECISION_MEMORY_URL is unset — nothing was checked",
+    };
+  }
+  const { store, open } = storeCheckout(ctx.decisionUrl, ctx.clones);
+  if (!store) {
+    return {
+      verdict: "unconfigured",
+      detail: "rulings declared but the decision store has no checkout to observe",
+    };
+  }
+  if (open.length > 1) {
+    return {
+      verdict: "unconfigured",
+      detail: `${open.length} decision-store checkouts have open recorder sessions — ambiguous`,
+    };
+  }
+  const arrived = recordsThisTurn(store, ctx.turnStart);
+  const missing = ctx.summary.rulings.filter(
+    (slug) => !arrived.some((name) => name.includes(slug)),
+  );
+  if (!missing.length) {
+    return { verdict: "pass", detail: `${ctx.summary.rulings.length} declared rulings recorded` };
+  }
+  const recorder = `python3 ${path.join(store, "tools", "record.py")}`;
+  return {
+    verdict: "fail",
+    detail: `no record arrived for ${missing.join(", ")}`,
+    reason: [
+      "The turn is not complete until every ruling it declared is a " +
+        `record. Declared and not in any decisions/ file that arrived ` +
+        `this turn: ${missing.join(", ")}. Write each record, or correct ` +
+        "the declaration to the slugs actually recorded.",
+      "",
+      `  ${recorder} record --from <drafts.json>`,
+    ].join("\n"),
+  };
+}
+
+/**
+ * Check 13 — a grilling leaves records behind. Observe-first.
+ *
+ * The invocation is mechanical (the slash command or the Skill call
+ * is in the transcript); the TIMING is not — answers arrive in waves
+ * over later turns and the records legitimately land when the rulings
+ * settle. A blocking check would fire between waves, so this one only
+ * observes: invocation seen, records since it counted, verdict always
+ * a pass with the state in its detail. Ruling A2 — a heuristic
+ * detector is measured before it may nag.
+ */
+function checkGrillingRecorded(ctx) {
+  if (!ctx.turnStart) {
+    return { verdict: "unconfigured", detail: "no turn boundary to measure against" };
+  }
+  const invoked = grillingInvokedAt(ctx.transcriptText);
+  if (!invoked) {
+    return { verdict: "pass", detail: "no grilling invoked this session" };
+  }
+  if (!ctx.decisionUrl) {
+    return {
+      verdict: "unconfigured",
+      detail: "grilling invoked but DECISION_MEMORY_URL is unset — nothing was checked",
+    };
+  }
+  const { store } = storeCheckout(ctx.decisionUrl, ctx.clones);
+  if (!store) {
+    return {
+      verdict: "unconfigured",
+      detail: "grilling invoked but the decision store has no checkout to observe",
+    };
+  }
+  const since = recordsThisTurn(store, new Date(invoked)).length;
+  return {
+    verdict: "pass",
+    detail: since
+      ? `grilling invoked; ${since} records since`
+      : "grilling invoked and no record since — observing, not blocking",
+  };
+}
+
+/**
  * Check 14 — what a review decided is persisted, not just read.
  *
  * The truth source is the attribution-footer contract: a fetched
@@ -1237,7 +1339,9 @@ const CHECKS = [
   { check: "ledger-event", run: checkLedgerEvent },
   { check: "tickets-updated", run: checkTicketsUpdated },
   { check: "decision-record", run: checkDecisionRecord },
+  { check: "rulings-recorded", run: checkRulingsRecorded },
   { check: "review-persistence", run: checkReviewPersistence },
+  { check: "grilling-recorded", run: checkGrillingRecorded },
   { check: "response-hygiene", run: checkResponseHygiene },
   { check: "artifact-fresh", run: checkArtifactFresh },
 ];
