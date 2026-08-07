@@ -54,6 +54,7 @@ import {
   refViolations,
   reviewSignals,
   stripCode,
+  ticketWrites,
   transcriptUsage,
 } from "./core.mjs";
 import { digestOf, readLog, stretchOf } from "./diligence.mjs";
@@ -83,7 +84,15 @@ function localFile(name) {
 function readTurnSummary() {
   const file = localFile("turn-summary.txt");
   if (!fs.existsSync(file)) {
-    return { path: file, exists: false, writtenAt: null, threads: [], tickets: [], reviews: null };
+    return {
+      path: file,
+      exists: false,
+      writtenAt: null,
+      threads: [],
+      tickets: [],
+      reviews: null,
+      waivers: {},
+    };
   }
   const text = fs.readFileSync(file, "utf8");
   const field = (name) => {
@@ -100,6 +109,16 @@ function readTurnSummary() {
     if (!line) return null;
     return line.slice(line.indexOf(":") + 1).trim() || null;
   };
+  // Every `no-update:` line is a per-ticket waiver: the first token
+  // names the ticket, the rest is the reason — a claim the check logs
+  // but never verifies, so declining to update is a visible act.
+  const waivers = {};
+  for (const line of text.split("\n")) {
+    if (!line.trim().startsWith("no-update:")) continue;
+    const rest = line.slice(line.indexOf(":") + 1).trim();
+    const [ticket, ...why] = rest.split(/\s+/);
+    if (ticket) waivers[ticket.toLowerCase()] = why.join(" ") || "(no reason given)";
+  }
   return {
     path: file,
     exists: true,
@@ -107,6 +126,7 @@ function readTurnSummary() {
     threads: field("threads"),
     tickets: field("tickets"),
     reviews: single("reviews"),
+    waivers,
   };
 }
 
@@ -685,7 +705,8 @@ function recordsThisTurn(root, turnStart) {
 }
 
 /**
- * Check 4 — a decision marked in the code has a record beside it.
+ * The decision-record check — a decision marked in the code has a
+ * record beside it.
  *
  * The reasoning behind a decision is free to write down in the turn
  * that made it and can only be reconstructed afterwards; a
@@ -770,6 +791,52 @@ function checkDecisionRecord(ctx) {
         `${markers.length === 1 ? "" : "s"}, first at ${first.at} (${first.tag}).`,
       "",
       `  ${opened ? "" : `${recorder} open && `}${recorder} record --from <drafts.json>`,
+    ].join("\n"),
+  };
+}
+
+/**
+ * Check 4 — every ticket the turn declared heard about it.
+ *
+ * The declared set diffs against issue-writing tool calls in the
+ * transcript — no network, same unlock as every transcript-side
+ * check. Fires on EVERY declared ticket lacking an observed write, by
+ * ruling: better a coarse reminder than a ticket that silently
+ * diverges from what the session knows. The per-ticket escape is the
+ * `no-update:` waiver — logged as a claim, never verified, so
+ * declining to update is a visible act rather than a silence.
+ */
+function checkTicketsUpdated(ctx) {
+  if (!ctx.turnStart) {
+    return { verdict: "unconfigured", detail: "no turn boundary to measure against" };
+  }
+  const declared = ctx.summary.tickets
+    .map((ticket) => ticket.toLowerCase())
+    .filter((ticket) => /^[\w.-]+\/[\w.-]+#\d+$/.test(ticket));
+  if (!declared.length) {
+    return { verdict: "pass", detail: "no tickets declared — nothing to diff" };
+  }
+  const written = ticketWrites(ctx.transcriptText, ctx.turnStart.toISOString());
+  const waived = declared.filter((ticket) => ctx.summary.waivers[ticket]);
+  const missing = declared.filter(
+    (ticket) => !written.has(ticket) && !ctx.summary.waivers[ticket],
+  );
+  if (!missing.length) {
+    const claims = waived.length
+      ? `; waived as claims: ${waived.map((t) => `${t} (${ctx.summary.waivers[t]})`).join(", ")}`
+      : "";
+    return { verdict: "pass", detail: `${declared.length} tickets declared${claims}` };
+  }
+  return {
+    verdict: "fail",
+    detail: `no observed write for ${missing.join(", ")}`,
+    reason: [
+      "The turn is not complete until every ticket it declared heard " +
+        `about it. Declared and never written to this turn: ` +
+        `${missing.join(", ")}. Update each one on the forge, or waive ` +
+        "it explicitly — add a line per ticket to " +
+        `${ctx.summary.path}: no-update: <owner/repo#n> <why> — the ` +
+        "waiver is logged as a claim.",
     ].join("\n"),
   };
 }
@@ -1168,6 +1235,7 @@ const CHECKS = [
   { check: "push-blocklist", run: checkPushBlocklist },
   { check: "pushed", run: checkPushed },
   { check: "ledger-event", run: checkLedgerEvent },
+  { check: "tickets-updated", run: checkTicketsUpdated },
   { check: "decision-record", run: checkDecisionRecord },
   { check: "review-persistence", run: checkReviewPersistence },
   { check: "response-hygiene", run: checkResponseHygiene },

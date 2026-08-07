@@ -1,0 +1,11 @@
+{
+  "status": "active",
+  "stop_hook_active": false,
+  "summary_written_at": "2026-08-03T15:19:25.000Z",
+  "exit": 2,
+  "check": "tickets-updated",
+  "sealed": false,
+  "reason": [
+    "The turn is not complete until every ticket it declared heard about it. Declared and never written to this turn: o/r#61. Update each one on the forge, or waive it explicitly — add a line per ticket to {{home}}/.claude/turn-summary.txt: no-update: <owner/repo#n> <why> — the waiver is logged as a claim."
+  ]
+}

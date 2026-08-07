@@ -365,6 +365,46 @@ export function reviewSignals(text, since, agents = []) {
   return { fetched, human, anomalies };
 }
 
+const TICKET_WRITE = /(issue_write|add_issue_comment|sub_issue_write)$/;
+
+/**
+ * Tickets the transcript shows being written to since `since`, as
+ * lowercase `owner/repo#n` strings.
+ *
+ * The truth source for the tickets-updated check: an issue-writing
+ * tool call names its owner, repo and issue number in its own input,
+ * so the declared set diffs against actual calls without touching the
+ * network. Only writes count — reading a ticket is not updating it.
+ */
+export function ticketWrites(text, since) {
+  const boundary = since ? new Date(since).getTime() : null;
+  const written = new Set();
+  for (const line of String(text).split("\n")) {
+    if (!line.trim()) continue;
+    let record;
+    try {
+      record = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (record?.type !== "assistant") continue;
+    if (boundary && record.timestamp && new Date(record.timestamp).getTime() < boundary) {
+      continue;
+    }
+    const content = record.message?.content;
+    if (!Array.isArray(content)) continue;
+    for (const block of content) {
+      if (block?.type !== "tool_use") continue;
+      if (!TICKET_WRITE.test(block.name ?? "")) continue;
+      const input = block.input ?? {};
+      const n = input.issue_number ?? input.issueNumber ?? input.number;
+      if (!input.owner || !input.repo || !Number.isInteger(n)) continue;
+      written.add(`${input.owner}/${input.repo}#${n}`.toLowerCase());
+    }
+  }
+  return written;
+}
+
 /** Refs the ledger knows to be PRs: every `pr` a thread event carried. */
 export function knownPrs(events) {
   const known = new Set();

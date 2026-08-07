@@ -25,6 +25,7 @@ import {
   refViolations,
   reviewSignals,
   stripCode,
+  ticketWrites,
   transcriptUsage,
   mergeLogLines,
   orderClosed,
@@ -3081,5 +3082,47 @@ describe("ReviewSignals", () => {
   it("without accounts, the same texts raise no anomaly", () => {
     const forged = authored(`LGTM.\n\n---\n${ATTRIBUTION_FOOTER}`, "the-principal");
     assert.deepEqual(reviewSignals(forged), { fetched: true, human: false, anomalies: [] });
+  });
+});
+
+
+describe("TicketWrites", () => {
+  const write = (name, input, at = "2026-08-03T15:14:00.000Z") =>
+    JSON.stringify({
+      type: "assistant",
+      timestamp: at,
+      message: {
+        role: "assistant",
+        content: [{ type: "tool_use", id: "toolu_w", name, input }],
+      },
+    });
+
+  it("an issue-writing call names its ticket", () => {
+    const text = write("mcp__github__add_issue_comment", {
+      owner: "o",
+      repo: "r",
+      issue_number: 61,
+      body: "done",
+    });
+    assert.deepEqual([...ticketWrites(text)], ["o/r#61"]);
+  });
+
+  it("reading a ticket is not updating it", () => {
+    const text = write("mcp__github__issue_read", { owner: "o", repo: "r", issue_number: 61 });
+    assert.deepEqual([...ticketWrites(text)], []);
+  });
+
+  it("a write before the boundary is another turn's", () => {
+    const text = write(
+      "mcp__github__issue_write",
+      { owner: "o", repo: "r", issue_number: 61 },
+      "2026-08-03T14:00:00.000Z",
+    );
+    assert.deepEqual([...ticketWrites(text, "2026-08-03T15:10:00.000Z")], []);
+  });
+
+  it("owner and repo casing folds to one ticket", () => {
+    const text = write("mcp__github__issue_write", { owner: "O", repo: "R", issue_number: 61 });
+    assert.deepEqual([...ticketWrites(text)], ["o/r#61"]);
   });
 });

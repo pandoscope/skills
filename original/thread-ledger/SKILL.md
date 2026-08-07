@@ -179,6 +179,13 @@ agent account posting bare, fails loudly — every footer-based reading
 is suspect while either holds. Opt-in by construction: no variable,
 no account check.
 
+**Every ticket the turn declared heard about it.** The declared
+`tickets:` set diffs against issue-writing tool calls in the
+transcript (skills#46, check 4) — reading a ticket is not updating
+it. The per-ticket escape is a `no-update: <owner/repo#n> <why>` line
+in the same summary file: logged as a claim, never verified, so
+declining to update is a visible act rather than a silence.
+
 **A ledger conflict is resolved by union — `--ours`/`--theirs` are
 never valid.** The log is append-only and both sides are real events,
 so the only correct merge keeps every line in stamp order; the recorder
