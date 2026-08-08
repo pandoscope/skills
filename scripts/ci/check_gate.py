@@ -126,6 +126,78 @@ def ticket_violations(body, branch, labels, author, config):
     return problems, False
 
 
+def closing_refs(body, config, repo):
+    """The tickets this PR would close on merge, as owner/repo#n.
+
+    Only keywords the central file tags `closing` count — ADVANCES is
+    non-closing by design, and hardcoding the split here would be the
+    second copy of a fact reference-keywords.json already owns. Bare
+    `#n` is the merging repo's own ticket, so it normalizes against
+    `repo` rather than staying ambiguous.
+    """
+    closers = sorted(w for w, kind in config["allowed"].items() if kind == "closing")
+    refs = set()
+    pattern = r"\b(?:" + "|".join(map(re.escape, closers)) + r") (" + REF + r")"
+    for match in re.finditer(pattern, body or ""):
+        ref = match.group(1)
+        refs.add(ref if "/" in ref else f"{repo}{ref}")
+    return sorted(refs)
+
+
+def open_prs_of(events, exclude):
+    """Open PRs among a ticket's cross-references, as owner/repo#n.
+
+    The timeline is the forge's own reference index: no text search to
+    miss a phrasing, cross-repo for free, and sources the token cannot
+    read are simply absent rather than errors. `exclude` drops the PR
+    under judgement — it always references its own tickets.
+    """
+    prs = set()
+    for event in events:
+        if event.get("event") != "cross-referenced":
+            continue
+        source = event.get("source", {}).get("issue") or {}
+        if "pull_request" not in source or source.get("state") != "open":
+            continue
+        name = f"{source['repository']['full_name']}#{source['number']}"
+        if name != exclude:
+            prs.add(name)
+    return sorted(prs)
+
+
+def warn_premature_close(body, config, repo, number, token):
+    """#150: closing a ticket other open PRs still reference is loud.
+
+    A warning, never a failure — a shared mention is often legitimate
+    (a see-also, a quoted changelog), and forcing ADVANCES onto a
+    genuinely final PR would teach people to stop declaring closes.
+    Anything unreadable is a notice for the same reason a consumer
+    whose workflow lags the script by one release must not go red.
+    """
+    tickets = closing_refs(body, config, repo)
+    if not tickets:
+        return
+    if not token:
+        print("::notice::no GH_TOKEN — cannot check closing targets for other open PRs")
+        return
+    for ticket in tickets:
+        ticket_repo, _, ticket_number = ticket.rpartition("#")
+        try:
+            events = paginate(
+                f"/repos/{ticket_repo}/issues/{ticket_number}/timeline", token
+            )
+        except (OSError, ValueError) as error:
+            print(f"::notice::could not check {ticket} for other open PRs: {error}")
+            continue
+        others = open_prs_of(events, exclude=f"{repo}#{number}")
+        if others:
+            print(
+                f"::warning::merging closes {ticket}, but other open PRs still "
+                f"reference it: {', '.join(others)}. If they share its work, "
+                f"this PR should ADVANCES the ticket and the last one close it."
+            )
+
+
 def run_ticket():
     with open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8") as handle:
         event = json.load(handle)
@@ -145,6 +217,13 @@ def run_ticket():
         print(f"::error::{problem}")
     if not problems:
         print("Ticket references are canonical.")
+    warn_premature_close(
+        pr.get("body"),
+        config,
+        os.environ["GITHUB_REPOSITORY"],
+        pr["number"],
+        os.environ.get("GH_TOKEN"),
+    )
     return 1 if problems else 0
 
 
