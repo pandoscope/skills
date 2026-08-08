@@ -23,6 +23,10 @@ permissions:
   contents: read
   actions: read
   pull-requests: read
+  # The ticket job reads closing targets' timelines (#150): a CLOSES
+  # whose ticket other open PRs still reference warns before the merge
+  # closes it under them.
+  issues: read
 
 concurrency:
   group: ci-ok-${{ github.event.pull_request.number }}
@@ -35,13 +39,16 @@ jobs:
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
-      # Reads only the event payload and the central keyword file:
-      # the allow-list is exact ALL CAPS (ADVANCES/CLOSES/FIXES — rendered here
+      # Reads the event payload, the central keyword file, and — for
+      # tickets a closing keyword names — the ticket's timeline: the
+      # allow-list is exact ALL CAPS (ADVANCES/CLOSES/FIXES — rendered here
       # from reference-keywords.json, the single source), any native
       # closing keyword in any other casing fails the PR, and the only
-      # escape is the `automated` label on a bot-authored PR.
+      # escape is the `automated` label on a bot-authored PR. A close
+      # whose ticket other open PRs still reference is a warning (#150).
       - name: The PR names its tickets canonically
         env:
+          GH_TOKEN: ${{ github.token }}
           REFERENCE_KEYWORDS: .github/reference-keywords.json
         run: python3 scripts/ci/check_gate.py ticket
 
