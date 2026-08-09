@@ -340,6 +340,15 @@ carries everything else forward, so nothing is restated per append.
 Then publish `ledger.html` as an artifact, reusing the same URL so the
 principal's bookmark stays valid.
 
+`render` fast-forwards the store before it reads; `--no-pull` skips
+that. A store that cannot fast-forward still renders: the reason goes
+to stderr, and the page itself carries a "possibly outdated" banner
+so its reader knows too. Two habits stay yours, since they happen
+around the publish call: never read the published page first — the
+conflict error is cheaper, so pay it when it happens and republish —
+and concede to a session visibly publishing the same store, since its
+next render carries your events.
+
 ### Identity
 
 **The conversation's URL is the log's identity.** Pass

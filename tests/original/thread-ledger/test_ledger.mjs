@@ -3201,3 +3201,131 @@ describe("GrillingInvoked", () => {
     assert.equal(grillingInvokedAt(text), null);
   });
 });
+
+// --------------------------------------------- render pulls first (#52)
+
+describe("RenderPullsTheStoreFirst", () => {
+  /** git in `dir`, throwing on failure. */
+  function sh(dir, ...args) {
+    const result = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8" });
+    assert.equal(result.status, 0, `git ${args.join(" ")} failed:\n${result.stderr}`);
+    return result.stdout;
+  }
+
+  function cli(root, ...args) {
+    return spawnSync(process.execPath, [path.join(SKILL, "ledger.mjs"), "--root", root, ...args], {
+      encoding: "utf8",
+      env: { PATH: process.env.PATH, HOME: fs.mkdtempSync(path.join(os.tmpdir(), "nohome-")) },
+    });
+  }
+
+  /** A store clone whose origin holds one event, plus a second writer's clone. */
+  function clonedStore() {
+    const seed = tempStore();
+    sh(seed, "init", "-q", "-b", "main");
+    sh(seed, "config", "user.email", "t@example.test");
+    sh(seed, "config", "user.name", "t");
+    writeLog(seed, "s1", [{ ...opened("ours"), at: "2026-01-01T00:00:00+00:00" }]);
+    fs.writeFileSync(path.join(seed, "ledger", "s1.url"), "https://x.test/code/s1\n");
+    sh(seed, "add", "-A");
+    sh(seed, "commit", "-q", "-m", "seed");
+    const origin = fs.mkdtempSync(path.join(os.tmpdir(), "ledger-origin-"));
+    spawnSync("git", ["init", "-q", "--bare", "-b", "main", origin], { encoding: "utf8" });
+    sh(seed, "remote", "add", "origin", origin);
+    sh(seed, "push", "-q", "-u", "origin", "main");
+
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "ledger-ours-"));
+    assert.equal(
+      spawnSync("git", ["clone", "-q", origin, root], { encoding: "utf8" }).status,
+      0,
+    );
+    sh(root, "config", "user.email", "t@example.test");
+    sh(root, "config", "user.name", "t");
+    return { root, origin, seed };
+  }
+
+  /** Another writer publishes a thread our clone has never seen. */
+  function othersPublish(seed, slug) {
+    fs.appendFileSync(
+      path.join(seed, "ledger", "s2.jsonl"),
+      `${JSON.stringify({ ...opened(slug), at: "2026-01-02T00:00:00+00:00" })}\n`,
+    );
+    fs.writeFileSync(path.join(seed, "ledger", "s2.url"), "https://x.test/code/s2\n");
+    sh(seed, "add", "-A");
+    sh(seed, "commit", "-q", "-m", "ledger(other): a thread we do not have");
+    sh(seed, "push", "-q", "origin", "main");
+  }
+
+  // The measured cost this replaces: the discipline lived in SKILL.md as
+  // "pull immediately before rendering", so every turn re-derived it and
+  // a stale page published cleanly whenever a turn forgot.
+  it("renders what the remote has, not what the checkout had", () => {
+    const { root, seed } = clonedStore();
+    othersPublish(seed, "theirs");
+    const out = path.join(root, "LEDGER.md");
+    const result = cli(root, "render", "--format", "md", "--out", out);
+    assert.equal(result.status, 0, `render failed: ${result.stderr}`);
+    const text = fs.readFileSync(out, "utf8");
+    assert.match(text, /theirs/);
+    assert.doesNotMatch(text, /Possibly outdated/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("--no-pull renders the checkout as it stands", () => {
+    const { root, seed } = clonedStore();
+    othersPublish(seed, "theirs");
+    const out = path.join(root, "LEDGER.md");
+    const result = cli(root, "render", "--format", "md", "--no-pull", "--out", out);
+    assert.equal(result.status, 0, `render failed: ${result.stderr}`);
+    const text = fs.readFileSync(out, "utf8");
+    assert.doesNotMatch(text, /theirs/);
+    assert.match(text, /ours/);
+    // Honest about what it skipped: the page says so.
+    assert.match(text, /Possibly outdated: rendered without checking the remote/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  // Reports, never gates: a ledger that refuses to render when the
+  // network is down is a worse tool than one that renders and says so.
+  it("a store that cannot fast-forward still renders, and says why", () => {
+    const { root } = clonedStore();
+    // Diverged: a local commit the remote does not have, so --ff-only
+    // has nowhere to go.
+    fs.appendFileSync(
+      path.join(root, "ledger", "s1.jsonl"),
+      `${JSON.stringify({ ...opened("local-only"), at: "2026-01-03T00:00:00+00:00" })}\n`,
+    );
+    sh(root, "add", "-A");
+    sh(root, "commit", "-q", "-m", "ledger(s1): local");
+    sh(root, "remote", "set-url", "origin", path.join(root, "no-such-remote"));
+    const out = path.join(root, "LEDGER.md");
+    const result = cli(root, "render", "--format", "md", "--out", out);
+    assert.equal(result.status, 0, `render failed: ${result.stderr}`);
+    assert.match(result.stderr, /could not fast-forward/);
+    const text = fs.readFileSync(out, "utf8");
+    assert.match(text, /local-only/);
+    // The reader learns what the operator would: the page banners it.
+    assert.match(text, /Possibly outdated: the store could not be fast-forwarded/);
+    // Same banner on the HTML page, as static markup the page script
+    // cannot lose.
+    const html = path.join(root, "ledger.html");
+    const htmlRun = cli(root, "render", "--out", html);
+    assert.equal(htmlRun.status, 0, `html render failed: ${htmlRun.stderr}`);
+    assert.match(fs.readFileSync(html, "utf8"), /id="stale">⚠ Possibly outdated/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("a plain log directory renders without reaching for a remote", () => {
+    const root = tempStore();
+    writeLog(root, "s1", [{ ...opened("bare"), at: "2026-01-01T00:00:00+00:00" }]);
+    fs.writeFileSync(path.join(root, "ledger", "s1.url"), "https://x.test/code/s1\n");
+    const out = path.join(root, "LEDGER.md");
+    const result = cli(root, "render", "--format", "md", "--out", out);
+    assert.equal(result.status, 0, `render failed: ${result.stderr}`);
+    assert.doesNotMatch(result.stderr, /fast-forward/);
+    const text = fs.readFileSync(out, "utf8");
+    assert.match(text, /bare/);
+    assert.doesNotMatch(text, /Possibly outdated/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+});
