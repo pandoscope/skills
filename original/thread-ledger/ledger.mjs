@@ -408,20 +408,16 @@ function findTranscript(explicit) {
  * `git -C` would otherwise judge whatever repo happens to enclose it.
  */
 /**
- * Fast-forward the store before a render reads it (skills#52).
+ * Fast-forward store before render reads it (skills#52).
  *
- * The published page is a snapshot of the fold, and a snapshot taken
- * from a checkout the remote has already moved past is wrong in the
- * one way nobody checks: it renders cleanly. This was prose in
- * SKILL.md — "pull immediately before rendering" — and prose is a rule
- * the writer re-derives every turn. Here it is the tool's own step,
- * which is where a rule stops being remembered and starts being true.
+ * Page = fold snapshot. Stale checkout -> wrong page, renders
+ * cleanly, nobody checks. Was SKILL.md prose ("pull before render")
+ * -> writer re-derives every turn, forgets, publishes stale. Tool's
+ * own step -> rule true, not remembered.
  *
- * Reports, never gates: offline, diverged, or no repository at all,
- * the page still renders from what is on disk and the reason goes to
- * stderr. A ledger that refuses to render when the network is down
- * would be a worse tool than one that renders a slightly old page and
- * says so.
+ * Reports, never gates: offline / diverged / no repo -> page still
+ * renders from disk, reason -> stderr. Refusing to render offline =
+ * worse tool than old page plus warning.
  */
 export function pullForRender(root) {
   let top;
