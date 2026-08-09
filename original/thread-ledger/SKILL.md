@@ -340,12 +340,14 @@ carries everything else forward, so nothing is restated per append.
 Then publish `ledger.html` as an artifact, reusing the same URL so the
 principal's bookmark stays valid.
 
-`render` pulls store first — stale checkout = tool problem, not
-yours. `--no-pull` skips. Pull fails -> still renders, says so on
-stderr. Two habits stay yours (tool cannot see publish call): no
-pre-read of published page — conflict error cheaper, pay only when
-hit, republish; other session visibly publishing same store ->
-concede, its next render carries your events.
+`render` fast-forwards the store before it reads; `--no-pull` skips
+that. A store that cannot fast-forward still renders: the reason goes
+to stderr, and the page itself carries a "possibly outdated" banner
+so its reader knows too. Two habits stay yours, since they happen
+around the publish call: never read the published page first — the
+conflict error is cheaper, so pay it when it happens and republish —
+and concede to a session visibly publishing the same store, since its
+next render carries your events.
 
 ### Identity
 

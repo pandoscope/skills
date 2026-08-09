@@ -3267,6 +3267,7 @@ describe("RenderPullsTheStoreFirst", () => {
     assert.equal(result.status, 0, `render failed: ${result.stderr}`);
     const text = fs.readFileSync(out, "utf8");
     assert.match(text, /theirs/);
+    assert.doesNotMatch(text, /Possibly outdated/);
     fs.rmSync(root, { recursive: true, force: true });
   });
 
@@ -3279,6 +3280,8 @@ describe("RenderPullsTheStoreFirst", () => {
     const text = fs.readFileSync(out, "utf8");
     assert.doesNotMatch(text, /theirs/);
     assert.match(text, /ours/);
+    // Honest about what it skipped: the page says so.
+    assert.match(text, /Possibly outdated: rendered without checking the remote/);
     fs.rmSync(root, { recursive: true, force: true });
   });
 
@@ -3299,7 +3302,16 @@ describe("RenderPullsTheStoreFirst", () => {
     const result = cli(root, "render", "--format", "md", "--out", out);
     assert.equal(result.status, 0, `render failed: ${result.stderr}`);
     assert.match(result.stderr, /could not fast-forward/);
-    assert.match(fs.readFileSync(out, "utf8"), /local-only/);
+    const text = fs.readFileSync(out, "utf8");
+    assert.match(text, /local-only/);
+    // The reader learns what the operator would: the page banners it.
+    assert.match(text, /Possibly outdated: the store could not be fast-forwarded/);
+    // Same banner on the HTML page, as static markup the page script
+    // cannot lose.
+    const html = path.join(root, "ledger.html");
+    const htmlRun = cli(root, "render", "--out", html);
+    assert.equal(htmlRun.status, 0, `html render failed: ${htmlRun.stderr}`);
+    assert.match(fs.readFileSync(html, "utf8"), /id="stale">⚠ Possibly outdated/);
     fs.rmSync(root, { recursive: true, force: true });
   });
 
@@ -3311,7 +3323,9 @@ describe("RenderPullsTheStoreFirst", () => {
     const result = cli(root, "render", "--format", "md", "--out", out);
     assert.equal(result.status, 0, `render failed: ${result.stderr}`);
     assert.doesNotMatch(result.stderr, /fast-forward/);
-    assert.match(fs.readFileSync(out, "utf8"), /bare/);
+    const text = fs.readFileSync(out, "utf8");
+    assert.match(text, /bare/);
+    assert.doesNotMatch(text, /Possibly outdated/);
     fs.rmSync(root, { recursive: true, force: true });
   });
 });

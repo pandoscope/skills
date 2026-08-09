@@ -408,35 +408,37 @@ function findTranscript(explicit) {
  * `git -C` would otherwise judge whatever repo happens to enclose it.
  */
 /**
- * Fast-forward store before render reads it (skills#52).
+ * Fast-forward the store before a render reads it (skills#52).
  *
- * Page = fold snapshot. Stale checkout -> wrong page, renders
- * cleanly, nobody checks. Was SKILL.md prose ("pull before render")
- * -> writer re-derives every turn, forgets, publishes stale. Tool's
- * own step -> rule true, not remembered.
+ * The page is a snapshot of the fold, and a stale checkout produces a
+ * wrong page that renders cleanly. This rule used to live in SKILL.md
+ * as prose; as the tool's own step it holds without being remembered.
  *
- * Reports, never gates: offline / diverged / no repo -> page still
- * renders from disk, reason -> stderr. Refusing to render offline =
- * worse tool than old page plus warning.
+ * Reports, never gates: offline, diverged or not a repository, the
+ * page still renders from disk. The reason goes to stderr, and the
+ * caller gets banner text for the page itself, so the reader learns
+ * what the operator would. Returns null when the store is current.
  */
 export function pullForRender(root) {
   let top;
   try {
     top = git(root, "rev-parse", "--show-toplevel").trim();
   } catch {
-    return; // a bare log directory has no remote to be behind
+    return null; // a bare log directory has no remote to be behind
   }
   // Same guard as the push side: `git -C` would otherwise pull whatever
   // repository happens to enclose a plain log directory.
-  if (fs.realpathSync(top) !== fs.realpathSync(root)) return;
+  if (fs.realpathSync(top) !== fs.realpathSync(root)) return null;
   try {
     git(root, "pull", "--ff-only", "-q");
+    return null;
   } catch (err) {
     const reason = String(err.message ?? err).split("\n").find((line) => line.trim()) ?? "";
     process.stderr.write(
       `ledger: could not fast-forward ${root} before rendering — the page ` +
         `is built from this checkout as it stands (${reason.trim()})\n`,
     );
+    return "Possibly outdated: the store could not be fast-forwarded before this render.";
   }
 }
 
@@ -929,7 +931,7 @@ function bundle() {
  * the file carries each fact once and filters or graphs added later work
  * on the data rather than on markup.
  */
-export function renderPage(events, title, nowMsg, codes, sessionUrl, diligence = [], names = {}, forge = {}) {
+export function renderPage(events, title, nowMsg, codes, sessionUrl, diligence = [], names = {}, forge = {}, staleNote = null) {
   // `</` inside the payload would close the script element early and let
   // a thread title inject markup. The escape is invisible to JSON.parse,
   // so the embedded data stays byte-faithful.
@@ -957,9 +959,14 @@ export function renderPage(events, title, nowMsg, codes, sessionUrl, diligence =
     `<textarea class="pop-text" id="crash-text" readonly rows="12" spellcheck="false">` +
     `${esc(crashPromptDefault())}</textarea></div></div>`;
 
+  // Static markup on purpose: the banner must survive whatever the
+  // page's own script does, because it reports on the data the script
+  // is about to fold.
+  const stale = staleNote ? `<div id="stale">⚠ ${esc(staleNote)}</div>\n` : "";
+
   return (
-    `<title>${esc(title)}</title>\n<style>${CSS}${CRASH_CSS}</style>\n` +
-    `<div id="view"></div>\n${crash}\n` +
+    `<title>${esc(title)}</title>\n<style>${CSS}${CRASH_CSS}${STALE_CSS}</style>\n` +
+    `${stale}<div id="view"></div>\n${crash}\n` +
     `<details class="diag"><summary>diagnostics</summary>` +
     `<div class="pop-body"><div class="pop-head">paste this back` +
     `<span class="pop-acts"><button class="cp" type="button">copy</button></span></div>` +
@@ -986,6 +993,12 @@ function crashPromptDefault() {
     "The events are in the #ledger-data script block on the page.",
   ].join("\n");
 }
+
+const STALE_CSS = `
+#stale{max-width:60rem;margin:.75rem auto 0;padding:.5rem .9rem;
+  border:1px solid var(--wait);border-radius:8px;color:var(--wait);
+  font-size:.85rem}
+`;
 
 const CRASH_CSS = `
 #crash{max-width:52rem;margin:3rem auto;padding:1.25rem;border-radius:10px;
@@ -1142,8 +1155,14 @@ export function main(argv) {
 
   // Before reading, not after: the fold a render publishes must come
   // from the store as the remote has it (skills#52). `--no-pull` is for
-  // deliberate offline renders and for tests that pin the events.
-  if (cmd === "render" && !opts["no-pull"]) pullForRender(root);
+  // deliberate offline renders and for tests that pin the events —
+  // honest about what it skipped, so the page says so too.
+  let staleNote = null;
+  if (cmd === "render") {
+    staleNote = opts["no-pull"]
+      ? "Possibly outdated: rendered without checking the remote (--no-pull)."
+      : pullForRender(root);
+  }
 
   const events = readAll(root);
   if (cmd === "state") {
@@ -1172,8 +1191,9 @@ export function main(argv) {
   if (opts.format === "md") {
     const generated = new Date().toISOString().slice(0, 16).replace("T", " ") + " UTC";
     page = renderMarkdown(folded, title, nowMsg, codes, generated, sessionUrl, forge);
+    if (staleNote) page = `> ⚠ ${staleNote}\n\n${page}`;
   } else {
-    page = renderPage(events, title, nowMsg, codes, sessionUrl, readDiligence(root), readNames(root), forge);
+    page = renderPage(events, title, nowMsg, codes, sessionUrl, readDiligence(root), readNames(root), forge, staleNote);
   }
   fs.writeFileSync(out, page, "utf8");
   process.stdout.write(`wrote ${out}\n`);
