@@ -340,14 +340,16 @@ carries everything else forward, so nothing is restated per append.
 Then publish `ledger.html` as an artifact, reusing the same URL so the
 principal's bookmark stays valid.
 
-Pull the store immediately before rendering, and render immediately
-before publishing — the store, not the page, is the source of truth,
-so a render from the newer tip always supersedes. Do not read the
-published page first: the conflict error a stale publish earns is
-cheaper than reading the page pre-emptively. Pay it only when it
-happens, then republish. When another session is visibly publishing
-the same store, concede instead of retrying — its next render already
-carries your events.
+`render` fast-forwards the store before it reads, so a page built from
+a checkout the remote has moved past is the tool's problem, not yours;
+`--no-pull` opts out, and a store that cannot fast-forward still
+renders and says so. Two habits stay yours, because they govern what
+you do around the publish call and nothing here can see it: do not
+read the published page first — the conflict error a stale publish
+earns is cheaper than reading it first, so pay it only when it
+happens and republish; and when another session is visibly publishing
+the same store, concede instead of retrying, because its next render
+already carries your events.
 
 ### Identity
 

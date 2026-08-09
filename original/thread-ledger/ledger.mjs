@@ -407,6 +407,43 @@ function findTranscript(explicit) {
  * repository, because a bare log directory has no push to protect and
  * `git -C` would otherwise judge whatever repo happens to enclose it.
  */
+/**
+ * Fast-forward the store before a render reads it (skills#52).
+ *
+ * The published page is a snapshot of the fold, and a snapshot taken
+ * from a checkout the remote has already moved past is wrong in the
+ * one way nobody checks: it renders cleanly. This was prose in
+ * SKILL.md — "pull immediately before rendering" — and prose is a rule
+ * the writer re-derives every turn. Here it is the tool's own step,
+ * which is where a rule stops being remembered and starts being true.
+ *
+ * Reports, never gates: offline, diverged, or no repository at all,
+ * the page still renders from what is on disk and the reason goes to
+ * stderr. A ledger that refuses to render when the network is down
+ * would be a worse tool than one that renders a slightly old page and
+ * says so.
+ */
+export function pullForRender(root) {
+  let top;
+  try {
+    top = git(root, "rev-parse", "--show-toplevel").trim();
+  } catch {
+    return; // a bare log directory has no remote to be behind
+  }
+  // Same guard as the push side: `git -C` would otherwise pull whatever
+  // repository happens to enclose a plain log directory.
+  if (fs.realpathSync(top) !== fs.realpathSync(root)) return;
+  try {
+    git(root, "pull", "--ff-only", "-q");
+  } catch (err) {
+    const reason = String(err.message ?? err).split("\n").find((line) => line.trim()) ?? "";
+    process.stderr.write(
+      `ledger: could not fast-forward ${root} before rendering — the page ` +
+        `is built from this checkout as it stands (${reason.trim()})\n`,
+    );
+  }
+}
+
 function requireDefaultBranch(root) {
   let top;
   try {
@@ -969,7 +1006,7 @@ const FLAGS = [
   "ticket", "parent", "deps", "urgency", "importance", "pct", "note", "on",
   "what", "trigger", "out", "format", "by", "range", "branch", "pr", "repos",
 ];
-const BOOLS = ["conversation-only", "no-push"];
+const BOOLS = ["conversation-only", "no-push", "no-pull"];
 
 /**
  * Split argv into a command and its options.
@@ -1037,6 +1074,7 @@ const USAGE = `ledger — a session's open-work record
                 [--branch <name>] [--pr owner/repo#2]
   ledger state
   ledger render [--out <file>] [--format html|md] [--title …] [--session-url …]
+                [--no-pull]   # render pulls the store first; this skips it
                 (--out defaults to LEDGER_RENDER_PATH)
   ledger guard --range <before>..<after>   # append-only + fold guard, for store CI
   ledger merged-report --repos <dir>       # live threads whose branch merged; reports, never gates
@@ -1105,6 +1143,11 @@ export function main(argv) {
     process.stdout.write(reconcile(root));
     return 0;
   }
+
+  // Before reading, not after: the fold a render publishes must come
+  // from the store as the remote has it (skills#52). `--no-pull` is for
+  // deliberate offline renders and for tests that pin the events.
+  if (cmd === "render" && !opts["no-pull"]) pullForRender(root);
 
   const events = readAll(root);
   if (cmd === "state") {
