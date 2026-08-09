@@ -708,6 +708,44 @@ describe("MultiSessionRender", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  // The writer reads the same variable the artifact-fresh check does
+  // (skills#115): a path the model retypes each turn drifted once, and
+  // the default removes the copy that can drift. Explicit --out wins.
+  it("render defaults --out from LEDGER_RENDER_PATH", () => {
+    const root = twoSessionStore();
+    const out = path.join(root, "watched.html");
+    const result = spawnSync(process.execPath, [path.join(SKILL, "ledger.mjs"), "--root", root, "render"], {
+      encoding: "utf8",
+      env: { PATH: process.env.PATH, HOME: fs.mkdtempSync(path.join(os.tmpdir(), "nohome-")), LEDGER_RENDER_PATH: out },
+    });
+    assert.equal(result.status, 0, `render failed: ${result.stderr}`);
+    assert.ok(fs.existsSync(out), "the watched path was not written");
+    assert.match(result.stdout, /watched\.html/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("explicit --out overrides LEDGER_RENDER_PATH", () => {
+    const root = twoSessionStore();
+    const explicit = path.join(root, "explicit.html");
+    const result = spawnSync(process.execPath, [path.join(SKILL, "ledger.mjs"), "--root", root, "render", "--out", explicit], {
+      encoding: "utf8",
+      env: { PATH: process.env.PATH, HOME: fs.mkdtempSync(path.join(os.tmpdir(), "nohome-")), LEDGER_RENDER_PATH: path.join(root, "env.html") },
+    });
+    assert.equal(result.status, 0, `render failed: ${result.stderr}`);
+    assert.ok(fs.existsSync(explicit));
+    assert.ok(!fs.existsSync(path.join(root, "env.html")));
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("render with neither --out nor the variable names both", () => {
+    const root = twoSessionStore();
+    const result = cli(root, "render");
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /--out/);
+    assert.match(result.stderr, /LEDGER_RENDER_PATH/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
   it("reports folded state from a store with two conversations", () => {
     const root = twoSessionStore();
     const result = cli(root, "state");
@@ -979,7 +1017,7 @@ describe("Anchors", () => {
   it("no control characters reach the page", () => {
     const events = [opened("a", { title: "x" })];
     const page = renderPage(events, "t", null, {}, null);
-    assert.doesNotMatch(page, /[ --]/);
+    assert.doesNotMatch(page, /[\x00--]/);
   });
 });
 

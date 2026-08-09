@@ -1036,7 +1036,8 @@ const USAGE = `ledger — a session's open-work record
                 [--by bot] [--no-push]
                 [--branch <name>] [--pr owner/repo#2]
   ledger state
-  ledger render --out <file> [--format html|md] [--title …] [--session-url …]
+  ledger render [--out <file>] [--format html|md] [--title …] [--session-url …]
+                (--out defaults to LEDGER_RENDER_PATH)
   ledger guard --range <before>..<after>   # append-only + fold guard, for store CI
   ledger merged-report --repos <dir>       # live threads whose branch merged; reports, never gates
   ledger reconcile                         # ledger vs forge divergences, needs gh
@@ -1112,7 +1113,15 @@ export function main(argv) {
   }
 
   if (cmd !== "render") throw new LedgerError(`unknown command ${JSON.stringify(cmd)}`);
-  if (!opts.out) throw new LedgerError("render needs --out");
+  // The artifact-fresh check reads LEDGER_RENDER_PATH; a writer that
+  // must be handed the same path by the model re-introduces the copy
+  // that drifts (skills#115 — a session rendered ledger-page.html for
+  // a check watching ledger.html). Explicit --out still wins: tests
+  // and store CI render to paths of their own choosing.
+  const out = opts.out ?? process.env.LEDGER_RENDER_PATH;
+  if (!out) {
+    throw new LedgerError("render needs --out (or LEDGER_RENDER_PATH set)");
+  }
 
   const folded = fold(events);
   const sessionUrl = storeUrl(root, opts["session-url"]);
@@ -1127,8 +1136,8 @@ export function main(argv) {
   } else {
     page = renderPage(events, title, nowMsg, codes, sessionUrl, readDiligence(root), readNames(root), forge);
   }
-  fs.writeFileSync(opts.out, page, "utf8");
-  process.stdout.write(`wrote ${opts.out}\n`);
+  fs.writeFileSync(out, page, "utf8");
+  process.stdout.write(`wrote ${out}\n`);
   return 0;
 }
 
