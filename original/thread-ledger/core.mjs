@@ -81,6 +81,18 @@ export const BLOCKED_ON = ["internal", "external", "principal"];
 // `owner/repo#123`, anywhere in a line of prose.
 export const TICKET_RE = /\b([\w.-]+\/[\w.-]+#\d+)\b/g;
 
+// The same reference as a FIELD: anchored, one ticket and nothing else.
+// Derived from TICKET_RE rather than spelled again, so the canonical
+// shape cannot fork between the scanner and the validators (skills#114).
+export const TICKET_SHAPE = new RegExp(`^(?:${TICKET_RE.source})$`);
+
+/** The one refusal for a malformed forge reference, shared by every field. */
+function requireTicketShape(field, value) {
+  if (!TICKET_SHAPE.test(String(value))) {
+    throw new LedgerError(`${field} must look like owner/repo#123, got ${JSON.stringify(value)}`);
+  }
+}
+
 /** Rejected append. Carries the reason a human needs to fix it. */
 export class LedgerError extends Error {}
 
@@ -666,9 +678,7 @@ export function validate(event, history) {
   if (event.branch !== undefined && (typeof event.branch !== "string" || !event.branch.trim())) {
     throw new LedgerError("branch must be a non-empty string naming the work's branch");
   }
-  if (event.pr !== undefined && !/^[\w.-]+\/[\w.-]+#\d+$/.test(String(event.pr))) {
-    throw new LedgerError(`pr must look like owner/repo#123, got ${JSON.stringify(event.pr)}`);
-  }
+  if (event.pr !== undefined) requireTicketShape("pr", event.pr);
 
   const state = currentStates(history)[thread] ?? "";
   if (METADATA_EVENTS.includes(kind)) {
@@ -815,6 +825,7 @@ function validateMetadata(kind, event, history, thread) {
     if (!event.ticket) {
       throw new LedgerError("promoted needs the 'ticket' it was promoted to");
     }
+    requireTicketShape("ticket", event.ticket);
     if (ticketOf(history, thread)) {
       throw new LedgerError(
         `${JSON.stringify(thread)} already references a ticket; promotion is ` +
@@ -854,6 +865,12 @@ function validateOpening(event, history) {
         "— exactly one, never both, never neither. The board is where work lives.",
     );
   }
+  // Shape as well as presence (skills#114): a shortcode or a stray
+  // space validated here and surfaced weeks later in the close-loop
+  // run, filed under a token-permissions heading whose remedy could
+  // not fix it. The write is where the typo is one keystroke from its
+  // author.
+  if (hasTicket) requireTicketShape("ticket", event.ticket);
   const parent = event.parent;
   if (parent && !history.some((item) => item.thread === parent)) {
     throw new LedgerError(`parent thread ${JSON.stringify(parent)} does not exist`);

@@ -187,6 +187,41 @@ describe("Guards", () => {
     );
   });
 
+  // The dojo's incident discipline, in the validator's own suite
+  // (skills#114): a shortcode ticket like "AET#137" validated, landed,
+  // and the close-loop run later filed the unreadable reference under
+  // "give the bot Issues read access" — a remedy that cannot work. The
+  // refusal belongs at the write, in the same words as the pr check's.
+  it("an opened event refuses a ticket that is not owner/repo#n", () => {
+    for (const bad of ["#137", "AET#137", "pandoscope/skills #46", "owner/repo#", "owner/repo", "o/r#1 extra"]) {
+      throws(
+        () => validate({ ev: "opened", thread: "t", title: "t", ticket: bad }, []),
+        "ticket must look like owner/repo#123",
+      );
+    }
+  });
+
+  it("promoted refuses the same malformed shapes", () => {
+    const history = [
+      { ev: "opened", thread: "t", title: "t", conversation_only: true },
+    ];
+    throws(
+      () => validate({ ev: "promoted", thread: "t", ticket: "AET#137" }, history),
+      "ticket must look like owner/repo#123",
+    );
+  });
+
+  it("dots and dashes in either segment still pass", () => {
+    validate(
+      { ev: "opened", thread: "t", title: "t", ticket: "some-org.x/repo-a.b#12" },
+      [],
+    );
+    validate(
+      { ev: "promoted", thread: "c", ticket: "some-org.x/repo-a.b#12" },
+      [{ ev: "opened", thread: "c", title: "c", conversation_only: true }],
+    );
+  });
+
   it("recorder-owned fields are overwritten", () => {
     const stamped = stamp(
       { ...opened("a"), at: "1999-01-01T00:00:00+00:00", anchor: { session: "fake" } },
