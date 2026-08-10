@@ -1,0 +1,17 @@
+{
+  "status": "active",
+  "stop_hook_active": true,
+  "summary_written_at": "2026-07-30T14:32:00.000Z",
+  "exit": 2,
+  "check": "ledger-event",
+  "sealed": false,
+  "reason": [
+    "The turn is not complete until the ledger has an event for every thread it changed. Missing: session-memory-store.",
+    "",
+    "  node {{ledger}} append --ev progress --thread session-memory-store --pct <n> --note \"<what changed>\""
+  ],
+  "records_before": 1,
+  "cycle": 2,
+  "outcome": "blocked",
+  "session": "session_kata_guard"
+}

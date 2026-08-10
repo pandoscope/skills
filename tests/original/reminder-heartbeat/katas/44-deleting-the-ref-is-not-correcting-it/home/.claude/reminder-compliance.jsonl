@@ -1,1 +1,1 @@
-{"at":"2026-08-03T15:19:40+00:00","session":"session_kata_clean","msg":1,"cycle":1,"model":"kata","tokens":{"input":0,"output":0,"cacheRead":0,"cacheCreation":0},"guarded":false,"outcome":"blocked","fired":"response-hygiene","verdicts":[]}
+{"at": "2026-08-03T15:19:40+00:00", "session": "session_kata_clean", "msg": 1, "cycle": 1, "model": "kata", "tokens": {"input": 0, "output": 0, "cacheRead": 0, "cacheCreation": 0}, "guarded": false, "outcome": "blocked", "fired": "response-hygiene", "verdicts": [], "turnKey": "2026-08-03T15:10:00.000Z"}

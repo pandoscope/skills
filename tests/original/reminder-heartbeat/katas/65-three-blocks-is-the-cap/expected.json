@@ -7,5 +7,9 @@
   "sealed": false,
   "reason": [
     "The turn is released UNSEALED \u2014 ledger-event is still failing: no event this turn for session-memory-store. Not blocking again; the next turn begins with this outstanding, and the store's tail shows it."
-  ]
+  ],
+  "records_before": 3,
+  "cycle": 4,
+  "outcome": "unsealed",
+  "session": "session_kata_guard"
 }

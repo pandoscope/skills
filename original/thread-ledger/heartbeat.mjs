@@ -1542,6 +1542,15 @@ function checkCommitSigned(ctx) {
 // Priority order. First failure wins; the rest wait for the next turn.
 // push-blocklist sits ahead of pushed deliberately: a hit must block
 // BEFORE the turn is told to push, or the reminder itself publishes it.
+// At most this many blocks in one turn. Bounded because several checks
+// are not agent-actionable — a network fault under `pushed`, a
+// concurrent writer under `artifact-fresh`, a crash — and an unbounded
+// loop over those traps the session, which is the fear the crash path
+// already names. Bounded also because the checks that accept unverified
+// claims (waivers, `nothing-to-persist`) make a false claim the cheapest
+// exit from a loop: pressure past this point buys lies, not bookkeeping.
+const MAX_BLOCKS = 3;
+
 const CHECKS = [
   { check: "turn-summary", run: checkTurnSummary },
   { check: "push-blocklist", run: checkPushBlocklist },
@@ -1562,28 +1571,74 @@ const CHECKS = [
 
 // ------------------------------------------------------- compliance log
 
-/**
- * Which Stop of this turn this is, counted from the log itself.
- *
- * `stop_hook_active` only says "at least one block already happened",
- * so it cannot tell a second cycle from a fifth. The log can, and it is
- * the same file the answer has to be written to.
- */
-function cycleOf(file, ctx) {
-  if (!fs.existsSync(file)) return 1;
-  let seen = 0;
+/** Every compliance record for `session`, oldest first. */
+function recordsFor(file, session) {
+  if (!fs.existsSync(file)) return [];
+  const records = [];
   for (const line of fs.readFileSync(file, "utf8").split("\n")) {
     if (!line.trim()) continue;
     try {
       const record = JSON.parse(line);
-      if (record.session === ctx.session && record.msg === ctx.msg) seen += 1;
+      if (record.session === session) records.push(record);
     } catch {
       // A torn line is not a cycle. Counting one would be worse than
       // missing it: the cost of a real cycle would land on the wrong
       // turn, where nothing could ever contradict it.
     }
   }
-  return seen + 1;
+  return records;
+}
+
+/**
+ * Where this turn began — stable across the hook's own re-fires.
+ *
+ * Every check measures "this turn" from here, so a boundary that moves
+ * mid-turn silently rewrites all thirteen of them. It does move. The
+ * block feedback this hook writes is delivered to the model as a user
+ * turn carrying its own timestamp, so on the guarded fire both
+ * `countUserTurns` and `lastUserTurnAt` advance past it, and work the
+ * model did BEFORE it was blocked falls outside its own turn.
+ *
+ * Measured: `ledger-event` passed on a turn's first Stop ("1 threads
+ * recorded") and failed twelve seconds later on the re-fire ("no event
+ * this turn"), same store, same append — the append simply preceded the
+ * feedback that moved the boundary.
+ *
+ * So the UNGUARDED fire defines the turn: it is the first Stop after the
+ * principal spoke. A guarded fire inherits that boundary from the record
+ * the opening fire wrote rather than recomputing it from a transcript
+ * this hook has since added to.
+ */
+function turnBoundary(file, guarded, session, computed) {
+  if (!guarded) return computed;
+  const prior = recordsFor(file, session);
+  const last = prior[prior.length - 1];
+  return last?.turnKey ?? computed;
+}
+
+/**
+ * Which Stop of this turn this is, counted from the log itself.
+ *
+ * `stop_hook_active` only says "at least one block already happened",
+ * so it cannot tell a second cycle from a fifth. The log can, and it is
+ * the same file the answer has to be written to. Counted by `turnKey`
+ * rather than `msg`: `msg` advances on the re-fire (the feedback is a
+ * user turn), so a same-turn record never matched and the counter was
+ * pinned at 1 forever — measured across 24 records of one session.
+ */
+function cycleOf(file, ctx) {
+  return recordsFor(file, ctx.session).filter((record) => record.turnKey === ctx.turnKey)
+    .length + 1;
+}
+
+/** Checks already delivered as a block reason this turn. */
+function deliveredThisTurn(file, ctx) {
+  return new Set(
+    recordsFor(file, ctx.session)
+      .filter((record) => record.turnKey === ctx.turnKey && record.outcome === "blocked")
+      .map((record) => record.fired)
+      .filter(Boolean),
+  );
 }
 
 /**
@@ -1605,6 +1660,9 @@ function complianceRecord(file, ctx, verdicts, outcome, fired) {
     at: new Date().toISOString().replace(/\.\d+Z$/, "+00:00"),
     session: ctx.session,
     msg: ctx.msg,
+    // The turn's identity, written so the next fire of the same turn can
+    // inherit it instead of recomputing a boundary this hook has moved.
+    turnKey: ctx.turnKey,
     // Which Stop of this turn. Cycle 1 is the model's unprompted
     // attempt — it has not been reminded yet — so cycle-1 verdicts are
     // the no-reminder baseline, measured without a second arm to run.
@@ -1669,7 +1727,6 @@ function context(input) {
   const root = named || resolveRoot(null);
   const transcript = input.transcript_path ?? null;
   const text = transcript && fs.existsSync(transcript) ? fs.readFileSync(transcript, "utf8") : "";
-  const turnStart = lastUserTurnAt(text);
   // The conversation's URL is the log's identity, and the hook is not
   // told it — `session_id` is a platform-local id that matches no log
   // in the store. With one conversation recorded, guessing lands on the
@@ -1683,6 +1740,16 @@ function context(input) {
     input.session_id,
     transcript,
   );
+  const guarded = input.stop_hook_active === true;
+  // Resolved once, here, so all thirteen checks measure the same turn.
+  // Recomputed on the guarded fire it would land after this hook's own
+  // block feedback and shorten the turn to nothing.
+  const turnKey = turnBoundary(
+    localFile("reminder-compliance.jsonl"),
+    guarded,
+    session,
+    lastUserTurnAt(text),
+  );
   return {
     root,
     transcript,
@@ -1690,8 +1757,9 @@ function context(input) {
     sessionUrl,
     msg: countUserTurns(text),
     usage: transcriptUsage(text),
-    turnStart: turnStart ? new Date(turnStart) : null,
-    guarded: input.stop_hook_active === true,
+    turnKey,
+    turnStart: turnKey ? new Date(turnKey) : null,
+    guarded,
     namedItself: Boolean(process.env.LEDGER_SESSION_URL),
     // How many conversations this store logs. One is unambiguous
     // whatever the environment says; beyond that the hook needs telling.
@@ -1796,13 +1864,38 @@ export function run(input) {
 
   // The loop guard, read before blocking rather than before checking.
   // `stop_hook_active` is true when this hook already blocked the turn
-  // once; blocking again feeds the model the same reason it just acted
-  // on. The turn is released, unsealed — the honest record of a turn
-  // that did not finish — and every verdict is still logged, because
-  // this pass is the only place where whether the model complied with
-  // the reason it was given can be observed at all.
+  // once, and repeating a reason the model just acted on is how a Stop
+  // hook traps a session.
+  //
+  // But a re-fire commonly fails a DIFFERENT check: remediating one
+  // reveals the next. Measured over ten turns of one session, eight
+  // re-fires fired on a check the block had never named — the model had
+  // acted on what it was told and hit a new wall, silently, because the
+  // release wrote nothing. That is not the loop the guard protects
+  // against, so a reason never yet delivered this turn is worth one more
+  // block, up to MAX_BLOCKS.
+  //
+  // Everything else releases the turn unsealed — the honest record of a
+  // turn that did not finish — and says so on stderr. A released turn
+  // the model KNOWS is unsealed is a different thing from one it reads
+  // as success. Every verdict is still logged either way: this pass is
+  // the only place where whether the model complied with the reason it
+  // was given can be observed at all.
   if (ctx.guarded) {
+    const file = localFile("reminder-compliance.jsonl");
+    const delivered = deliveredThisTurn(file, ctx);
+    const unheard = delivered.size > 0 && !delivered.has(failed.check);
+    if (unheard && cycleOf(file, ctx) <= MAX_BLOCKS) {
+      logCompliance(ctx, reported, "blocked", failed.check);
+      process.stderr.write(`${failed.reason}\n`);
+      return 2;
+    }
     logCompliance(ctx, reported, "unsealed", failed.check);
+    process.stderr.write(
+      `The turn is released UNSEALED — ${failed.check} is still failing: ` +
+        `${failed.detail}. Not blocking again; the next turn begins with ` +
+        `this outstanding, and the store's tail shows it.\n`,
+    );
     return 0;
   }
 

@@ -8,5 +8,7 @@
   "outcome": "unsealed",
   "cycle": 2,
   "records_before": 1,
-  "reason": []
+  "reason": [
+    "The turn is released UNSEALED \u2014 response-hygiene is still failing: 1 assigned corrections missing from the response. Not blocking again; the next turn begins with this outstanding, and the store's tail shows it."
+  ]
 }

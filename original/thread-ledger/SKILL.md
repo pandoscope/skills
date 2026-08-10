@@ -129,6 +129,19 @@ actually written and pushed. When one fails, the block reason states
 the completion criterion and the exact command — run it and end the
 turn; it is never a prompt to start new work.
 
+`threads:` is a **same-turn claim, not a topic list**: every slug named
+needs an event appended during this turn. Naming a thread the turn
+merely discussed fails `ledger-event`, correctly — the declaration says
+the ledger is current about that thread, and it is not. Append first,
+then declare what you appended.
+
+The hook blocks once per reason, not once per turn. A re-fire that
+fails a check the block never named earns one more block, up to three
+per turn, because that is a wall the model has not been told about
+rather than a reason it just ignored. Past that the turn is released
+**unsealed** and says so on stderr: a released turn is not a passed
+one, and the store's unsealed tail is the durable record of it.
+
 The `reviews:` line is the declared half of a standing habit: wherever
 a check has a blind spot, the model declares and the observer
 cross-checks. Its states are `none`, `read`, `persisted` and
