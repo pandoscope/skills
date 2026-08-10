@@ -1636,6 +1636,10 @@ export function run(input) {
       { ev: "sealed", diligence: digestOf(window, baseline) },
       ctx.transcript,
       ctx.sessionUrl,
+      // Identity from LEDGER_SESSION_URL is explicit here exactly as
+      // --session-url is at the CLI (skills#62): a second conversation
+      // the environment named must be able to seal its own log.
+      ctx.namedItself,
     );
     flushDiligence(ctx.root, ctx.session, window);
     // The seal protocol's third phase (skills#46): the checks gated the

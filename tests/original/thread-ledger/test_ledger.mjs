@@ -404,7 +404,12 @@ describe("SessionLink", () => {
     const root = tempStore();
     const first = resolveSession(root, "https://x.test/s/abc", null, null);
     const second = resolveSession(root, null, null, null);
-    assert.deepEqual(first, second);
+    // Identity and URL persist; the third element deliberately does
+    // not — remembered is not stated, and only a stated identity may
+    // bypass the one-log guard (skills#62).
+    assert.deepEqual(first.slice(0, 2), second.slice(0, 2));
+    assert.equal(first[2], true);
+    assert.equal(second[2], false);
     fs.rmSync(root, { recursive: true, force: true });
   });
 });
@@ -464,6 +469,65 @@ describe("OneLogPerConversation", () => {
     writeLog(root, "one", [{ ...opened("a"), at: "2026-01-01T00:00:00+00:00" }]);
     writeLog(root, "two", []);
     checkSessionFile(root, "three");
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("an explicit --session-url opens a second conversation's log beside the first", () => {
+    // The guard exists to catch an INFERRED name disagreeing with the
+    // store — one conversation acquiring two names between runs. An
+    // identity stated by URL is authoritative (skills#62), so a genuine
+    // second conversation appends without hand-creating its log file
+    // first. Through the CLI, because that is the path the workaround
+    // was invented for.
+    const root = tempStore();
+    writeLog(root, "session_abc", [{ ...opened("a"), at: "2026-01-01T00:00:00+00:00" }]);
+    const run = spawnSync(
+      process.execPath,
+      [
+        path.join(SKILL, "ledger.mjs"), "--root", root, "append",
+        "--ev", "opened", "--thread", "b", "--title", "b", "--ticket", "o/r#2",
+        "--session-url", "https://x.test/s/session_def", "--no-push",
+      ],
+      { encoding: "utf8", env: { PATH: process.env.PATH, HOME: root } },
+    );
+    assert.equal(run.status, 0, run.stderr);
+    assert.ok(fs.existsSync(path.join(root, "ledger", "session_def.jsonl")));
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("an inferred --session that disagrees is still refused, toward the URL flag", () => {
+    // The original incident stays caught — and the remedy the message
+    // offers must not be deleting another session's record.
+    const root = tempStore();
+    writeLog(root, "chosen-name", [{ ...opened("a"), at: "2026-01-01T00:00:00+00:00" }]);
+    const run = spawnSync(
+      process.execPath,
+      [
+        path.join(SKILL, "ledger.mjs"), "--root", root, "append",
+        "--ev", "progress", "--thread", "a", "--pct", "10",
+        "--session", "uuid-stem", "--no-push",
+      ],
+      { encoding: "utf8", env: { PATH: process.env.PATH, HOME: root } },
+    );
+    assert.notEqual(run.status, 0);
+    assert.match(run.stderr, /--session-url/);
+    assert.doesNotMatch(run.stderr, /delete/i);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("an explicit identity skips the guard on the direct append path too", () => {
+    // The sealing hook appends through the same function with identity
+    // from LEDGER_SESSION_URL — explicit there too (ctx.namedItself). A
+    // guard that blocked the seal would re-create the workaround one
+    // layer down.
+    const root = tempStore();
+    writeLog(root, "session_abc", [{ ...opened("a"), at: "2026-01-01T00:00:00+00:00" }]);
+    const stamped = append(
+      root, "session_def", { ev: "progress", thread: "a", pct: 5 },
+      null, "https://x.test/s/session_def", true,
+    );
+    assert.equal(stamped.anchor.session, "session_def");
+    assert.ok(fs.existsSync(path.join(root, "ledger", "session_def.jsonl")));
     fs.rmSync(root, { recursive: true, force: true });
   });
 

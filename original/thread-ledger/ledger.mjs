@@ -252,6 +252,12 @@ export function readAll(root) {
  * Appending under a second name starts a fresh file that folds in beside
  * the first, and nothing looks wrong: both files are valid, the state is
  * merely built from the wrong one.
+ *
+ * The guard is for INFERRED names only (skills#62). It cannot tell a
+ * drifted name from a genuinely new conversation — but the caller can,
+ * and one that states identity by URL has said so authoritatively: the
+ * append path skips the check then, and a second conversation opens its
+ * own log beside the first, which is the store's documented shape.
  */
 export function checkSessionFile(root, session) {
   const existing = logFiles(root)
@@ -262,9 +268,12 @@ export function checkSessionFile(root, session) {
   if (existing.length === 1 && existing[0] !== session) {
     throw new LedgerError(
       `this store logs session ${JSON.stringify(existing[0])}, not ` +
-        `${JSON.stringify(session)} — appending would start a second log for ` +
-        `one conversation. Pass --session ${existing[0]}, or delete the old ` +
-        `file if the split is intended.`,
+        `${JSON.stringify(session)} — an append under a second inferred name ` +
+        `would split one conversation's log in two. If this is that ` +
+        `conversation, pass --session ${existing[0]}. If it is genuinely a ` +
+        `new conversation, state its identity with --session-url (or ` +
+        `LEDGER_SESSION_URL): an explicit URL is the identity, and the ` +
+        `guard steps aside for it.`,
     );
   }
 }
@@ -307,7 +316,10 @@ export function resolveSession(root, givenUrl, givenId, transcript, { write = fa
     const session = sessionFromUrl(url);
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, `${session}.url`), `${url}\n`, "utf8");
-    return [session, url];
+    // The third element says the identity was STATED, not inferred —
+    // the one-log guard steps aside for a caller who answered the
+    // question it exists to ask (skills#62).
+    return [session, url, true];
   }
 
   // A WRITE proves its identity or refuses (skills#51). The fallbacks
@@ -324,7 +336,7 @@ export function resolveSession(root, givenUrl, givenId, transcript, { write = fa
   // store makes that fallback exact, while the CLI append always has a
   // caller who can say who they are.
   if (write) {
-    if (givenId) return [givenId, urlFor(root, givenId)];
+    if (givenId) return [givenId, urlFor(root, givenId), false];
     throw new LedgerError(
       "refusing to append without an explicit identity: pass --session-url " +
         "(or set LEDGER_SESSION_URL), or --session when the log is named " +
@@ -340,17 +352,17 @@ export function resolveSession(root, givenUrl, givenId, transcript, { write = fa
     : [];
   if (known.length === 1) {
     const url = fs.readFileSync(path.join(dir, known[0]), "utf8").trim();
-    if (url) return [sessionFromUrl(url), url];
+    if (url) return [sessionFromUrl(url), url, false];
   }
 
-  if (givenId) return [givenId, urlFor(root, givenId)];
+  if (givenId) return [givenId, urlFor(root, givenId), false];
   if (transcript) {
     process.stderr.write(
       "ledger: no session URL known; identifying this conversation by its " +
         "transcript filename, which is local to this machine. Pass " +
         "--session-url once to fix the identity in the store.\n",
     );
-    return [path.basename(transcript, ".jsonl"), null];
+    return [path.basename(transcript, ".jsonl"), null, false];
   }
   throw new LedgerError(
     "cannot tell which conversation this is: no --session-url, no recorded " +
@@ -480,12 +492,15 @@ function requireDefaultBranch(root) {
  * Validate, stamp, append one event. Returns the stamped event; throws
  * without writing when validation fails.
  */
-export function append(root, session, event, transcript, sessionUrl) {
+export function append(root, session, event, transcript, sessionUrl, explicitIdentity = false) {
   requireDefaultBranch(root);
   // The one-log guard asks whether a conversation is splitting its log
   // in two. A writer that is not a conversation has no such log to
-  // split, and its own is expected to sit beside the sessions'.
-  if (!event.by) checkSessionFile(root, session);
+  // split, and its own is expected to sit beside the sessions' — and a
+  // session that STATED its identity has already answered the guard's
+  // question (skills#62): the split it catches is an inferred name
+  // drifting, which an explicit URL cannot do.
+  if (!event.by && !explicitIdentity) checkSessionFile(root, session);
   const history = readAll(root);
   validate(event, history);
   const stamped = stamp(event, session, countUserMessages(transcript), sessionUrl);
@@ -1118,8 +1133,8 @@ export function main(argv) {
     // resolution, which exists to answer "which conversation is this".
     // Routed through it, the workflow would inherit a session's name and
     // URL and its events would read as that session's own work.
-    const [session, sessionUrl] = opts.by
-      ? [opts.by, null]
+    const [session, sessionUrl, explicitIdentity] = opts.by
+      ? [opts.by, null, false]
       : resolveSession(
           root,
           opts["session-url"] || process.env.LEDGER_SESSION_URL || null,
@@ -1127,7 +1142,7 @@ export function main(argv) {
           transcript,
           { write: true },
         );
-    const stamped = append(root, session, eventFrom(opts), transcript, sessionUrl);
+    const stamped = append(root, session, eventFrom(opts), transcript, sessionUrl, explicitIdentity);
     // Printed before the push, because the write already happened: a
     // push that fails must not make a recorded event look unrecorded.
     process.stdout.write(`${JSON.stringify(stamped)}\n`);
