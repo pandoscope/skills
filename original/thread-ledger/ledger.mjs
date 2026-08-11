@@ -85,14 +85,40 @@ function verifyOrigin(root, url) {
 }
 
 /**
+ * The harness clone of `url` in the session root, or null.
+ *
+ * SESSION_MEMORY_ROOT is exported by the Stop-hook wrapper, so it is
+ * absent from an ordinary command line in the same session. Reading
+ * the session.env the hooks read — and deriving the directory exactly
+ * as ensure-stores.sh does — is what makes a bare `append` and the
+ * heartbeat agree without anyone remembering to export a variable.
+ */
+function harnessClone(url) {
+  const envFile = path.join(process.env.HOME ?? os.homedir(), ".claude", "session.env");
+  let sessionRoot = null;
+  try {
+    const match = fs.readFileSync(envFile, "utf8").match(/^SESSION_ROOT=(.*)$/m);
+    sessionRoot = match ? match[1].trim() : null;
+  } catch {
+    return null;
+  }
+  if (!sessionRoot) return null;
+  const dir = path.join(sessionRoot, path.basename(url.replace(/\/+$/, ""), ".git"));
+  return fs.existsSync(path.join(dir, ".git")) ? dir : null;
+}
+
+/**
  * Locate the session-memory clone.
  *
- * `--root` names a clone outright. Otherwise SESSION_MEMORY_URL must be
- * set: an unset store variable fails here rather than degrading to a
- * conventional path. A warning is not enough — a fallback that happens
- * to work is indistinguishable from a configured store until it writes
- * somewhere unexpected, and by then events have been recorded where
- * nobody will look for them.
+ * `--root` names a clone outright. Otherwise SESSION_MEMORY_ROOT names
+ * it — the same variable the Stop-hook heartbeat reads, so the copy
+ * this tool writes IS the copy the checker judges. Resolve, never
+ * clone (meta#67): a writer that clones a store of its own splits
+ * every store into a written copy and a read copy, and the split is
+ * silent — each half is a healthy git clone, and the checker reports a
+ * just-written event as missing. A missing clone therefore fails here,
+ * naming the fix (add the store to the session's sources), exactly as
+ * ensure-stores.sh does.
  */
 export function resolveRoot(explicit) {
   if (explicit) return explicit;
@@ -105,12 +131,18 @@ export function resolveRoot(explicit) {
         "--root to name a clone explicitly.",
     );
   }
-  if (fs.existsSync(DEFAULT_ROOT)) {
-    verifyOrigin(DEFAULT_ROOT, url);
-    return DEFAULT_ROOT;
+  const named = process.env.SESSION_MEMORY_ROOT || harnessClone(url) || DEFAULT_ROOT;
+  if (!fs.existsSync(path.join(named, ".git"))) {
+    throw new LedgerError(
+      `no session-memory clone at ${named}. This tool does not clone one: a ` +
+        `second clone splits the store into a copy the writer writes and a copy ` +
+        `the heartbeat reads (meta#67). Add the store repo to this session's ` +
+        `sources so the harness clones it, set SESSION_MEMORY_ROOT to the ` +
+        `existing clone, or pass --root. Nothing was written.`,
+    );
   }
-  git(process.cwd(), "clone", url, DEFAULT_ROOT);
-  return DEFAULT_ROOT;
+  verifyOrigin(named, url);
+  return named;
 }
 
 /**
