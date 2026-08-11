@@ -55,6 +55,7 @@ import {
   push,
   readAll,
   renderPage,
+  resolveRoot,
   resolveSession,
 } from "../../../original/thread-ledger/ledger.mjs";
 import {
@@ -3426,5 +3427,78 @@ describe("RenderPullsTheStoreFirst", () => {
     assert.match(text, /bare/);
     assert.doesNotMatch(text, /Possibly outdated/);
     fs.rmSync(root, { recursive: true, force: true });
+  });
+});
+
+// ------------------------------------------------------- store resolution
+
+describe("StoreResolution", () => {
+  // The writer and the Stop-hook checker must resolve the SAME clone.
+  // The heartbeat is handed SESSION_MEMORY_ROOT (the harness clone in
+  // the session root); a writer that ignores it and falls back to a
+  // path of its own recreates the split meta#67 removed from
+  // ensure-stores.sh — silently, on the first append of every session.
+  const withEnv = (vars, fn) => {
+    const saved = process.env;
+    try {
+      process.env = { ...process.env, ...vars };
+      return fn();
+    } finally {
+      process.env = saved;
+    }
+  };
+
+  it("prefers SESSION_MEMORY_ROOT over any default path", () => {
+    const root = tempStore();
+    const url = "https://x.test/pandoscope/session-memory.git";
+    spawnSync("git", ["-C", root, "init", "-q"]);
+    spawnSync("git", ["-C", root, "remote", "add", "origin", url]);
+    try {
+      withEnv({ SESSION_MEMORY_ROOT: root, SESSION_MEMORY_URL: url }, () => {
+        assert.equal(resolveRoot(null), root);
+      });
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("derives the harness clone from session.env when no var is set", () => {
+    // A bare `ledger.mjs append` in a session gets no exported
+    // SESSION_MEMORY_ROOT — the sentinel exports it only inside the Stop
+    // hook. Resolution therefore reads the same session.env the hooks
+    // read, so the writer lands on the harness clone rather than on a
+    // conventional path that may be a different clone entirely.
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "ledger-home-"));
+    const sessionRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ledger-root-"));
+    const url = "https://x.test/pandoscope/session-memory.git";
+    const clone = path.join(sessionRoot, "session-memory");
+    fs.mkdirSync(clone, { recursive: true });
+    spawnSync("git", ["-C", clone, "init", "-q"]);
+    spawnSync("git", ["-C", clone, "remote", "add", "origin", url]);
+    fs.mkdirSync(path.join(home, ".claude"), { recursive: true });
+    fs.writeFileSync(path.join(home, ".claude", "session.env"), `SESSION_ROOT=${sessionRoot}\n`);
+    try {
+      withEnv({ HOME: home, SESSION_MEMORY_URL: url, SESSION_MEMORY_ROOT: "" }, () => {
+        assert.equal(resolveRoot(null), clone);
+      });
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+      fs.rmSync(sessionRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses rather than cloning a store of its own", () => {
+    const absent = path.join(os.tmpdir(), "ledger-absent-store-xyz");
+    fs.rmSync(absent, { recursive: true, force: true });
+    withEnv(
+      {
+        SESSION_MEMORY_ROOT: absent,
+        SESSION_MEMORY_URL: "https://x.test/pandoscope/session-memory.git",
+      },
+      () => {
+        assert.throws(() => resolveRoot(null), /does not clone one/);
+      },
+    );
+    assert.equal(fs.existsSync(absent), false);
   });
 });
