@@ -1,0 +1,13 @@
+{
+  "status": "active",
+  "stop_hook_active": false,
+  "summary_written_at": "2026-08-03T16:53:30.000Z",
+  "exit": 2,
+  "check": "commit-signed",
+  "sealed": false,
+  "reason": [
+    "The turn is not complete until every commit it made is signed: skills has 1 unsigned commit(s) from this turn while signing is configured, so the push will be rejected by the verified-signatures ruleset.",
+    "",
+    "  git -C {{repos}}/skills rebase --exec 'git commit --amend --no-edit -S' origin/claude/kata"
+  ]
+}

@@ -1422,12 +1422,131 @@ function appendArgs(thread, state) {
   return `--ev ${next} --thread ${thread} ${extra[next] ?? '--note "<what changed>"'}`.trim();
 }
 
+/**
+ * Check 15 — no clone carries a local git identity.
+ *
+ * The identity that must sign and author every commit is derived once,
+ * from the signing key's own uid, and written to the GLOBAL config. A
+ * local `user.email` beats it, and a commit then names an identity the
+ * key does not — which the forge validates cryptographically and still
+ * renders Unverified, unmergeable under a verified-signatures ruleset,
+ * with no error anywhere along the way (meta#74).
+ *
+ * Checked every turn rather than repaired once at SessionStart: the
+ * harness writes these overrides when it attaches a clone, which can
+ * happen mid-session, and a model reaching for `git config user.email`
+ * to settle an unrelated complaint puts one back. A repair that only
+ * runs before the work cannot see either.
+ *
+ * The fix REMOVES the local key rather than correcting it: one identity
+ * held in one place cannot drift from the key's uid later.
+ */
+function checkCloneConfig(ctx) {
+  if (!ctx.repoRoot) {
+    return {
+      verdict: "unconfigured",
+      detail: "HEARTBEAT_REPO_ROOT is unset — no clones were examined",
+    };
+  }
+  for (const repo of ctx.clones) {
+    for (const key of ["user.email", "user.name"]) {
+      const local = gitOrNull(repo.path, "config", "--local", "--get", key);
+      if (!local) continue;
+      return {
+        verdict: "fail",
+        detail: `${repo.name} sets ${key} locally (${local})`,
+        reason: [
+          "The turn is not complete until no clone overrides the git " +
+            `identity locally: ${repo.name} sets ${key}. A commit made ` +
+            "there is signed by a key that does not name its author, so " +
+            "the forge renders it Unverified and it cannot be merged.",
+          "",
+          `  git -C ${repo.path} config --local --unset-all ${key}`,
+        ].join("\n"),
+      };
+    }
+  }
+  return {
+    verdict: "pass",
+    detail: `${ctx.clones.length} clone(s) use the global identity`,
+  };
+}
+
+/**
+ * Check 16 — commits made this turn are signed, where signing is on.
+ *
+ * Gated on the clone's own effective config rather than assumed: a
+ * deployment that does not sign is not failing, and reporting it as a
+ * failure every turn would train the reader to skip the one report that
+ * matters. Where `commit.gpgsign` IS set, an unsigned commit is a defect
+ * that surfaces only at push time under the org's ruleset (meta#70),
+ * long after the turn that made it.
+ *
+ * `%G?` is read for presence, not validity: `U` — good signature of
+ * unknown validity — is the ordinary local answer for a key whose owner
+ * trust was never set, and failing on it would fail every correctly
+ * signed commit. Whether the forge can bind that signature to an account
+ * is the identity question check 15 answers.
+ */
+function checkCommitSigned(ctx) {
+  if (!ctx.turnStart) return { verdict: "pass", detail: "no turn boundary" };
+  for (const repo of ctx.clones) {
+    if (ctx.root && path.resolve(repo.path) === path.resolve(ctx.root)) continue;
+    if (gitOrNull(repo.path, "config", "--get", "commit.gpgsign") !== "true") continue;
+    const lines = gitOrNull(
+      repo.path,
+      "log",
+      `--since=${ctx.turnStart.toISOString()}`,
+      "--format=%H %G?",
+    );
+    if (!lines) continue;
+    // The hashes go in the detail, which is logged, and never into the
+    // reason, which is asserted: pinning a fixture's hash in a contract
+    // string couples the wording to a value the harness can shift, and
+    // the count plus the clone is what the reader acts on anyway.
+    const unsigned = lines
+      .split("\n")
+      .map((line) => line.split(" "))
+      .filter(([sha, state]) => sha && state === "N")
+      .map(([sha]) => sha);
+    if (!unsigned.length) continue;
+    const branch = gitOrNull(repo.path, "rev-parse", "--abbrev-ref", "HEAD") ?? "HEAD";
+    const named = gitOrNull(repo.path, "rev-parse", "--verify", "--quiet", `origin/${branch}`);
+    // An unsigned commit cannot have been pushed — the ruleset refuses
+    // it — so replaying onto the upstream rewrites only local history,
+    // and one form covers a single commit and a run of them alike.
+    const fix = named
+      ? `git -C ${repo.path} rebase --exec 'git commit --amend --no-edit -S' origin/${branch}`
+      : `git -C ${repo.path} commit --amend --no-edit -S`;
+    return {
+      verdict: "fail",
+      detail: `${repo.name}: ${unsigned.length} unsigned this turn (${unsigned
+        .map((sha) => sha.slice(0, 8))
+        .join(", ")}) while commit.gpgsign is true`,
+      reason: [
+        "The turn is not complete until every commit it made is signed: " +
+          `${repo.name} has ${unsigned.length} unsigned commit(s) from ` +
+          "this turn while signing is configured, so the push will be " +
+          "rejected by the verified-signatures ruleset.",
+        "",
+        `  ${fix}`,
+      ].join("\n"),
+    };
+  }
+  return {
+    verdict: "pass",
+    detail: "commits this turn are signed where signing is configured",
+  };
+}
+
 // Priority order. First failure wins; the rest wait for the next turn.
 // push-blocklist sits ahead of pushed deliberately: a hit must block
 // BEFORE the turn is told to push, or the reminder itself publishes it.
 const CHECKS = [
   { check: "turn-summary", run: checkTurnSummary },
   { check: "push-blocklist", run: checkPushBlocklist },
+  { check: "clone-config", run: checkCloneConfig },
+  { check: "commit-signed", run: checkCommitSigned },
   { check: "pushed", run: checkPushed },
   { check: "ledger-event", run: checkLedgerEvent },
   { check: "tickets-updated", run: checkTicketsUpdated },

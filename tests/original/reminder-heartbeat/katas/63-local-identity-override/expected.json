@@ -1,0 +1,13 @@
+{
+  "status": "active",
+  "stop_hook_active": false,
+  "summary_written_at": "2026-08-03T16:53:30.000Z",
+  "exit": 2,
+  "check": "clone-config",
+  "sealed": false,
+  "reason": [
+    "The turn is not complete until no clone overrides the git identity locally: skills sets user.email. A commit made there is signed by a key that does not name its author, so the forge renders it Unverified and it cannot be merged.",
+    "",
+    "  git -C {{repos}}/skills config --local --unset-all user.email"
+  ]
+}

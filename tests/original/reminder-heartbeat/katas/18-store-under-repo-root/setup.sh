@@ -6,8 +6,6 @@ set -eu
 kata_repo skills clean
 mv store repos/session-memory
 git init -q -b main repos/session-memory
-git -C repos/session-memory config user.email kata@example.test
-git -C repos/session-memory config user.name kata
 git -C repos/session-memory add -A
 GIT_COMMITTER_DATE=2020-01-01T00:00:00Z git -C repos/session-memory commit -q \
     --date 2020-01-01T00:00:00Z -m "chore: seed"
