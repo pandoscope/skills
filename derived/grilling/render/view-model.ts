@@ -185,10 +185,12 @@ function buildQuestion(q: DecisionQuestion, session: number, preferences: string
     badges: badgesFor(option.kind, q.lineage.cold, option.matches?.length ?? 0),
     ifClause: option.ifClause,
     entails: option.entails,
-    footnotes: (option.matches ?? []).map((name) => {
-      const note = footnotes.find((f) => f.name === name)!;
-      return { marker: note.marker, anchorId: note.anchorId };
-    }),
+    footnotes: (option.matches ?? [])
+      .map((name) => {
+        const note = footnotes.find((f) => f.name === name)!;
+        return { marker: note.marker, anchorId: note.anchorId };
+      })
+      .sort((a, b) => a.marker - b.marker),
     score:
       total > 0 && raw[i] > 0
         ? {
