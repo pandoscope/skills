@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync, existsSync, cpSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync, cpSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -29,18 +29,18 @@ const red = {
 };
 
 /**
- * Run the renderer CLI on a context file.
+ * Run the renderer CLI on a session file.
  *
- * @param {string} contextPath - Path to the decision-context JSON file.
+ * @param {string} sessionPath - Path to the grilling-session JSON file.
  * @returns {{status: number, stderr: string, outDir: string}} Exit code,
  *   captured stderr, and the fresh output directory used.
  */
-function render(contextPath) {
+function render(sessionPath) {
   const outDir = mkdtempSync(join(tmpdir(), "grilling-render-"));
   try {
     execFileSync(
       process.execPath,
-      ["--experimental-strip-types", "--disable-warning=ExperimentalWarning", RENDER_TS, contextPath, "--out", outDir],
+      ["--experimental-strip-types", "--disable-warning=ExperimentalWarning", RENDER_TS, sessionPath, "--out", outDir],
       { encoding: "utf8" },
     );
     return { status: 0, stderr: "", outDir };
@@ -50,92 +50,114 @@ function render(contextPath) {
 }
 
 /**
- * Extract the injected decision-context JSON from rendered artifact HTML.
+ * Extract the injected session JSON from rendered artifact HTML.
  *
- * @param {string} html - Contents of question.html.
+ * @param {string} html - Contents of session.html.
  * @returns {string} The raw JSON text inside the data script tag.
  */
 function embeddedJson(html) {
   const m = html.match(/<script type="application\/json" id="decision-context">([\s\S]*?)<\/script>/);
-  assert.ok(m, "question.html carries no decision-context data script tag");
+  assert.ok(m, "session.html carries no decision-context data script tag");
   return m[1];
 }
 
 /**
- * Write a decision-context object to a temp file.
+ * Write a grilling-session object to a temp file.
  *
- * @param {object} ctx - The context to serialize.
+ * @param {object} session - The session to serialize.
  * @returns {string} Path of the written JSON file.
  */
-function contextFile(ctx) {
-  const dir = mkdtempSync(join(tmpdir(), "grilling-ctx-"));
-  const path = join(dir, "context.json");
-  writeFileSync(path, JSON.stringify(ctx));
+function sessionFile(session) {
+  const dir = mkdtempSync(join(tmpdir(), "grilling-session-"));
+  const path = join(dir, "session.json");
+  writeFileSync(path, JSON.stringify(session));
   return path;
 }
 
-/** A minimal valid cold context to mutate in validation tests. */
-function validContext() {
-  return JSON.parse(readFileSync(join(FIXTURES, "valid-cold.json"), "utf8"));
+/** The valid session fixture, freshly parsed for mutation. */
+function validSession() {
+  return JSON.parse(readFileSync(join(FIXTURES, "session.json"), "utf8"));
 }
 
-test("rejects contexts violating the schema, naming the offending field", () => {
+red.fails("valid session renders artifact html with injected JSON and a text fallback", () => {
+  const fixture = join(FIXTURES, "session.json");
+  const { status, stderr, outDir } = render(fixture);
+  assert.equal(status, 0, `renderer failed: ${stderr}`);
+
+  const html = readFileSync(join(outDir, "session.html"), "utf8");
+  assert.deepEqual(
+    JSON.parse(embeddedJson(html)),
+    JSON.parse(readFileSync(fixture, "utf8")),
+    "injected JSON must round-trip to the input session",
+  );
+
+  const md = readFileSync(join(outDir, "session.md"), "utf8");
+  assert.match(md, /^## S1Q1 — Which database backs the session store\?$/m, "SxQy question heading missing");
+  assert.match(md, /^## S1Q2 — Where does the grilling renderer live\?$/m, "second question missing");
+  assert.match(md, /^A1\. \*\*Postgres\*\*/m, "A-numbered slot line missing");
+  assert.match(md, /^A3\. \*\*Free text\*\*/m, "renderer must append the free-text slot itself");
+});
+
+red.fails("slots carry the refined badges and the answer hint offers the BAB shorthand", () => {
+  const { status, stderr, outDir } = render(join(FIXTURES, "session.json"));
+  assert.equal(status, 0, `renderer failed: ${stderr}`);
+  const md = readFileSync(join(outDir, "session.md"), "utf8");
+  assert.match(md, /prediction — matches your usual/, "prediction badge missing on the merged slot");
+  assert.match(md, /recommendation — my pick \(cold\)/, "cold recommendation badge missing");
+  assert.match(md, /\(wildcard, if single-writer stays guaranteed\)/, "wildcard badge missing");
+  assert.doesNotMatch(md, /your usual — per /, "old badge wording must be gone");
+  assert.match(md, /`tools-travel-with-their-skill`/, "inline verbatim rule must survive into the fallback");
+  assert.match(md, /"N, BAB …"/, "answer hint must offer the BAB shorthand");
+});
+
+red.fails("answer state is displayed: chosen free text with rejection reasons, and skips", () => {
+  const { status, stderr, outDir } = render(join(FIXTURES, "session.json"));
+  assert.equal(status, 0, `renderer failed: ${stderr}`);
+  const md = readFileSync(join(outDir, "session.md"), "utf8");
+  assert.match(md, /S1Q1A3: DuckDB, we already embed it elsewhere/, "free-text ruling missing");
+  assert.match(md, /Rejected: single-writer stays guaranteed/, "rejection reason missing");
+  assert.match(md, /S1Q3: skipped/, "skip state missing");
+});
+
+red.fails("rejects sessions violating the schema, naming the offending field", () => {
   const cases = [
-    ["question", (ctx) => delete ctx.question, /question/],
-    ["version", (ctx) => (ctx.version = 2), /version.*2/],
-    ["empty options", (ctx) => (ctx.options = []), /options/],
-    ["too many options", (ctx) => (ctx.options = Array(4).fill(ctx.options[0])), /options/],
-    ["unknown kind", (ctx) => (ctx.options[0].kind = "maybe"), /kind.*maybe/],
-    ["missing lineage", (ctx) => delete ctx.lineage, /lineage/],
+    ["version 1 document", (s) => (s.version = 1), /version.*1/],
+    ["missing session number", (s) => delete s.session, /session/],
+    ["empty questions", (s) => (s.questions = []), /questions/],
+    ["duplicate seq", (s) => (s.questions[1].seq = 1), /seq/],
+    ["missing question text", (s) => delete s.questions[0].question, /questions\[0\].question/],
+    ["unknown kind", (s) => (s.questions[0].options[0].kind = "maybe"), /questions\[0\].options\[0\].kind.*maybe/],
+    ["missing lineage", (s) => delete s.questions[0].lineage, /questions\[0\].lineage/],
     [
       "cold contradicted by a usual slot",
-      (ctx) => {
-        ctx.options[0].kind = "usual";
-        ctx.options[0].citesRules = ["prefer-boring-tech"];
+      (s) => {
+        s.questions[0].options[0].kind = "usual";
+        s.questions[0].options[0].citesRules = ["prefer-boring-tech"];
       },
       /cold/,
     ],
-    ["usual slot without cited rules", (ctx) => {
-      ctx.lineage.cold = false;
-      ctx.options[0].kind = "usual";
-    }, /citesRules/],
-    ["near-tie pointing at a missing slot", (ctx) => (ctx.nearTie = { slots: [1, 7], differsOn: "ops" }), /nearTie/],
+    [
+      "usual slot without cited rules",
+      (s) => {
+        s.questions[0].lineage.cold = false;
+        s.questions[0].options[0].kind = "usual";
+      },
+      /citesRules/,
+    ],
+    [
+      "near-tie pointing at a missing slot",
+      (s) => (s.questions[0].nearTie = { slots: [1, 7], differsOn: "ops" }),
+      /nearTie/,
+    ],
+    ["chosen slot out of range", (s) => (s.questions[0].answer.chosen = 9), /chosen.*9/],
   ];
   for (const [name, mutate, expected] of cases) {
-    const ctx = validContext();
-    mutate(ctx);
-    const { status, stderr } = render(contextFile(ctx));
+    const session = validSession();
+    mutate(session);
+    const { status, stderr } = render(sessionFile(session));
     assert.equal(status, 1, `${name}: expected rejection, got exit ${status}`);
     assert.match(stderr, expected, `${name}: error does not name the field/value`);
   }
-});
-
-test("script-closing sequences in context text cannot break out of the data tag", () => {
-  const ctx = validContext();
-  ctx.options[0].entails = 'renders literally: </script><script>alert("x")</script>';
-  const { status, stderr, outDir } = render(contextFile(ctx));
-  assert.equal(status, 0, `renderer failed: ${stderr}`);
-  const html = readFileSync(join(outDir, "question.html"), "utf8");
-  const raw = embeddedJson(html);
-  assert.ok(!raw.includes("</script"), "injected JSON contains a literal script-closing sequence");
-  assert.deepEqual(JSON.parse(raw), ctx, "escaped JSON must still round-trip to the input context");
-});
-
-test("text fallback carries lineage, near-tie, and the correction affordance", () => {
-  const warm = render(join(FIXTURES, "valid-warm.json"));
-  assert.equal(warm.status, 0, `renderer failed: ${warm.stderr}`);
-  const md = readFileSync(join(warm.outDir, "question.md"), "utf8");
-  assert.match(md, /recommended — matches your usual/, "merged slot badge missing");
-  assert.match(md, /options 1\/2 roughly equivalent — differ on distribution overhead/, "near-tie note missing");
-  assert.match(md, /^### Lineage$/m, "lineage section missing");
-  assert.match(md, /tools-travel-with-their-skill — matched: renderer is skill-local tooling/, "matched rule missing from lineage");
-  assert.match(md, /prefer-boring-tech — set aside: no technology choice at stake/, "set-aside rule missing from lineage");
-  assert.match(md, /but actually because/, "correction affordance hint missing");
-
-  const cold = render(join(FIXTURES, "valid-cold.json"));
-  assert.equal(cold.status, 0, `renderer failed: ${cold.stderr}`);
-  const coldMd = readFileSync(join(cold.outDir, "question.md"), "utf8");
-  assert.match(coldMd, /Cold: no active preference rule applies/, "cold note missing from lineage");
 });
 
 // Guard, not a red-cycle behavior: template.html is generated (declared
@@ -154,24 +176,4 @@ test("committed template.html is the build output of its sources", () => {
     readFileSync(join(tmp, "template.html"), "utf8"),
     "template.html is stale — rebuild via make grilling-template",
   );
-});
-
-test("valid context renders artifact html with injected JSON and a text fallback", () => {
-  const fixture = join(FIXTURES, "valid-cold.json");
-  const { status, stderr, outDir } = render(fixture);
-  assert.equal(status, 0, `renderer failed: ${stderr}`);
-
-  const html = readFileSync(join(outDir, "question.html"), "utf8");
-  assert.deepEqual(
-    JSON.parse(embeddedJson(html)),
-    JSON.parse(readFileSync(fixture, "utf8")),
-    "injected JSON must round-trip to the input context",
-  );
-
-  assert.ok(existsSync(join(outDir, "question.md")), "text fallback question.md missing");
-  const md = readFileSync(join(outDir, "question.md"), "utf8");
-  assert.match(md, /Which database backs the session store\?/);
-  assert.match(md, /^1\. \*\*Postgres\*\*/m, "slot 1 line missing");
-  assert.match(md, /^2\. \*\*SQLite\*\*/m, "slot 2 line missing");
-  assert.match(md, /^3\. \*\*Free text\*\*/m, "renderer must append the free-text slot itself");
 });

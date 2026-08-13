@@ -1,0 +1,79 @@
+{
+  "version": 2,
+  "session": 1,
+  "questions": [
+    {
+      "seq": 1,
+      "question": "Which database backs the session store?",
+      "context": "Single-node deployment; existing ops tooling is Postgres-only.",
+      "options": [
+        {
+          "label": "Postgres",
+          "kind": "pick",
+          "entails": "reuse existing ops tooling, one more schema to migrate"
+        },
+        {
+          "label": "SQLite",
+          "kind": "wildcard",
+          "ifClause": "single-writer stays guaranteed",
+          "entails": "zero ops, file-backed, no concurrent writers"
+        }
+      ],
+      "lineage": {
+        "cold": true,
+        "rulesConsidered": [
+          {
+            "name": "prefer-boring-tech",
+            "disposition": "set aside: names languages, not datastores"
+          }
+        ]
+      },
+      "answer": {
+        "chosen": 3,
+        "freeText": "DuckDB, we already embed it elsewhere",
+        "rejectionReasons": ["single-writer stays guaranteed"]
+      }
+    },
+    {
+      "seq": 2,
+      "question": "Where does the grilling renderer live?",
+      "options": [
+        {
+          "label": "Inside the skill directory",
+          "kind": "usual-and-pick",
+          "citesRules": ["tools-travel-with-their-skill"],
+          "entails": "ships to consumers via skills update — `tools-travel-with-their-skill` — no extra install"
+        },
+        {
+          "label": "Separate npm package",
+          "kind": "alternative",
+          "ifClause": "other skills need the renderer too",
+          "entails": "own release cycle, consumers add a dependency"
+        }
+      ],
+      "nearTie": { "slots": [1, 2], "differsOn": "distribution overhead" },
+      "lineage": {
+        "cold": false,
+        "rulesConsidered": [
+          {
+            "name": "tools-travel-with-their-skill",
+            "disposition": "matched: renderer is skill-local tooling"
+          }
+        ]
+      }
+    },
+    {
+      "seq": 3,
+      "question": "Rename the skill to interrogation?",
+      "options": [
+        {
+          "label": "Keep grilling",
+          "kind": "pick",
+          "entails": "no churn in trigger phrases or docs"
+        }
+      ],
+      "lineage": { "cold": true, "rulesConsidered": [] },
+      "answer": { "skipped": true }
+    }
+  ]
+}
