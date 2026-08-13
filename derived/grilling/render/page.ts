@@ -62,6 +62,23 @@ function renderPage(ctx: DecisionContext, root: HTMLElement): void {
     list.append(item);
   }
   root.append(list);
+
+  if (vm.nearTieNote) root.append(el("p", "near-tie", vm.nearTieNote));
+
+  const lineage = el("section", "lineage");
+  lineage.append(el("h2", "section-heading", "Lineage"));
+  if (vm.lineage.coldNote) lineage.append(el("p", "lineage-cold", vm.lineage.coldNote));
+  const rules = el("ul", "lineage-rules");
+  for (const rule of vm.lineage.rules) {
+    const item = el("li", "lineage-rule");
+    item.append(el("span", "lineage-rule-name", rule.name));
+    item.append(el("span", "lineage-rule-disposition", ` — ${rule.disposition}`));
+    rules.append(item);
+  }
+  lineage.append(rules);
+  root.append(lineage);
+
+  root.append(el("p", "answer-hint", vm.answerHint));
 }
 
 const dataTag = document.getElementById("decision-context");

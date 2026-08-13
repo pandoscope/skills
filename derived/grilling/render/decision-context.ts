@@ -42,9 +42,10 @@ export interface DecisionOption {
    * "usual" = what the active preference set predicts,
    * "pick" = the agent's independent best,
    * "usual-and-pick" = the merged slot when prediction and recommendation
-   * coincide, "wildcard" = exploratory branch.
+   * coincide, "wildcard" = exploratory branch, "alternative" = a plain
+   * runner-up (e.g. slot 2 when prediction and recommendation merged).
    */
-  kind: "usual" | "pick" | "usual-and-pick" | "wildcard";
+  kind: "usual" | "pick" | "usual-and-pick" | "wildcard" | "alternative";
   /** Condition under which this option beats the recommendation. */
   ifClause?: string;
   /** What choosing this option entails. */
@@ -154,7 +155,7 @@ function validateOption(value: unknown, path: string): DecisionOption {
   const option = requireRecord(value, path);
   requireNonEmptyString(option.label, `${path}.label`);
   requireNonEmptyString(option.entails, `${path}.entails`);
-  const kinds = ["usual", "pick", "usual-and-pick", "wildcard"];
+  const kinds = ["usual", "pick", "usual-and-pick", "wildcard", "alternative"];
   if (typeof option.kind !== "string" || !kinds.includes(option.kind)) {
     throw new Error(`${path}.kind must be one of ${kinds.join("|")}, got: ${JSON.stringify(option.kind)}`);
   }

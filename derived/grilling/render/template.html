@@ -117,6 +117,44 @@
     margin: 0.4rem 0 0;
     color: var(--muted);
   }
+  .near-tie {
+    margin: 0;
+    padding: 0.6rem 1.1rem;
+    border-left: 3px solid var(--accent);
+    background: var(--accent-soft);
+    border-radius: 0 8px 8px 0;
+  }
+  .lineage {
+    border-top: 1px solid var(--border);
+    padding-top: 1rem;
+  }
+  .lineage-cold {
+    margin: 0 0 0.4rem;
+    color: var(--muted);
+    font-style: italic;
+  }
+  .lineage-rules {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+  .lineage-rule-name {
+    font-weight: 650;
+    color: var(--accent);
+  }
+  .lineage-rule-disposition {
+    color: var(--muted);
+  }
+  .answer-hint {
+    margin: 0;
+    color: var(--muted);
+    font-style: italic;
+    border-top: 1px solid var(--border);
+    padding-top: 1rem;
+  }
 </style>
 <script type="application/json" id="decision-context">__DECISION_CONTEXT_JSON__</script>
 <div id="app"></div>
@@ -158,6 +196,14 @@ function buildViewModel(ctx) {
         question: ctx.question,
         context: ctx.context,
         options,
+        nearTieNote: ctx.nearTie
+            ? `Near tie: options ${ctx.nearTie.slots.join("/")} roughly equivalent — differ on ${ctx.nearTie.differsOn}.`
+            : undefined,
+        lineage: {
+            coldNote: ctx.lineage.cold ? "Cold: no active preference rule applies." : undefined,
+            rules: ctx.lineage.rulesConsidered.map((rule) => ({ name: rule.name, disposition: rule.disposition })),
+        },
+        answerHint: 'Reply in chat with a slot number, or "N, but actually because ..." to accept an option while overriding its stated reason.',
     };
 }
 /**
@@ -175,7 +221,9 @@ function badgeFor(kind, citesRules) {
         return `recommended — matches your usual${rules ? ` (${citesRules.join(", ")})` : ""}`;
     if (kind === "wildcard")
         return "wildcard";
-    return "my pick";
+    if (kind === "pick")
+        return "my pick";
+    return undefined;
 }
 
 /**
@@ -237,6 +285,22 @@ function renderPage(ctx, root) {
         list.append(item);
     }
     root.append(list);
+    if (vm.nearTieNote)
+        root.append(el("p", "near-tie", vm.nearTieNote));
+    const lineage = el("section", "lineage");
+    lineage.append(el("h2", "section-heading", "Lineage"));
+    if (vm.lineage.coldNote)
+        lineage.append(el("p", "lineage-cold", vm.lineage.coldNote));
+    const rules = el("ul", "lineage-rules");
+    for (const rule of vm.lineage.rules) {
+        const item = el("li", "lineage-rule");
+        item.append(el("span", "lineage-rule-name", rule.name));
+        item.append(el("span", "lineage-rule-disposition", ` — ${rule.disposition}`));
+        rules.append(item);
+    }
+    lineage.append(rules);
+    root.append(lineage);
+    root.append(el("p", "answer-hint", vm.answerHint));
 }
 const dataTag = document.getElementById("decision-context");
 const root = document.getElementById("app");

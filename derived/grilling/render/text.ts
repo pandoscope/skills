@@ -15,7 +15,11 @@ export function renderMarkdown(vm: ViewModel): string {
   const lines: string[] = [`## ${vm.heading} — ${vm.question}`, ""];
   if (vm.context) lines.push(vm.context, "");
   for (const option of vm.options) lines.push(optionLine(option));
-  lines.push("");
+  if (vm.nearTieNote) lines.push("", vm.nearTieNote);
+  lines.push("", "### Lineage", "");
+  if (vm.lineage.coldNote) lines.push(vm.lineage.coldNote);
+  for (const rule of vm.lineage.rules) lines.push(`- ${rule.name} — ${rule.disposition}`);
+  lines.push("", `*${vm.answerHint}*`, "");
   return lines.join("\n");
 }
 

@@ -20,6 +20,20 @@ export interface ViewModel {
   context?: string;
   /** All slots in order, free-text slot included. */
   options: OptionView[];
+  /** Near-tie note shown after the options, when the slots are near-tied. */
+  nearTieNote?: string;
+  /** Lineage display: which preference rules were considered. */
+  lineage: LineageView;
+  /** How to answer, including the correction affordance. */
+  answerHint: string;
+}
+
+/** Display-ready lineage of the recommendation. */
+export interface LineageView {
+  /** Cold note when no active preference rule applies. */
+  coldNote?: string;
+  /** Rules considered, matched or set aside. */
+  rules: { name: string; disposition: string }[];
 }
 
 /** Display-ready form of one slot. */
@@ -64,6 +78,15 @@ export function buildViewModel(ctx: DecisionContext): ViewModel {
     question: ctx.question,
     context: ctx.context,
     options,
+    nearTieNote: ctx.nearTie
+      ? `Near tie: options ${ctx.nearTie.slots.join("/")} roughly equivalent — differ on ${ctx.nearTie.differsOn}.`
+      : undefined,
+    lineage: {
+      coldNote: ctx.lineage.cold ? "Cold: no active preference rule applies." : undefined,
+      rules: ctx.lineage.rulesConsidered.map((rule) => ({ name: rule.name, disposition: rule.disposition })),
+    },
+    answerHint:
+      'Reply in chat with a slot number, or "N, but actually because ..." to accept an option while overriding its stated reason.',
   };
 }
 
@@ -74,10 +97,11 @@ export function buildViewModel(ctx: DecisionContext): ViewModel {
  * @param citesRules - Preference rules the slot cites, when any.
  * @returns The badge text shown next to the option label.
  */
-function badgeFor(kind: "usual" | "pick" | "usual-and-pick" | "wildcard", citesRules?: string[]): string {
+function badgeFor(kind: DecisionContext["options"][number]["kind"], citesRules?: string[]): string | undefined {
   const rules = citesRules?.length ? ` — per ${citesRules.join(", ")}` : "";
   if (kind === "usual") return `your usual${rules}`;
   if (kind === "usual-and-pick") return `recommended — matches your usual${rules ? ` (${citesRules!.join(", ")})` : ""}`;
   if (kind === "wildcard") return "wildcard";
-  return "my pick";
+  if (kind === "pick") return "my pick";
+  return undefined;
 }

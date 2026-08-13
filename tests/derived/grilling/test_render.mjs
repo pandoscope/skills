@@ -121,7 +121,7 @@ test("script-closing sequences in context text cannot break out of the data tag"
   assert.deepEqual(JSON.parse(raw), ctx, "escaped JSON must still round-trip to the input context");
 });
 
-red.fails("text fallback carries lineage, near-tie, and the correction affordance", () => {
+test("text fallback carries lineage, near-tie, and the correction affordance", () => {
   const warm = render(join(FIXTURES, "valid-warm.json"));
   assert.equal(warm.status, 0, `renderer failed: ${warm.stderr}`);
   const md = readFileSync(join(warm.outDir, "question.md"), "utf8");
