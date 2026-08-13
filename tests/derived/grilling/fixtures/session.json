@@ -10,13 +10,15 @@
         {
           "label": "Postgres",
           "kind": "pick",
-          "entails": "reuse existing ops tooling, one more schema to migrate"
+          "entails": "reuse existing ops tooling, one more schema to migrate",
+          "agentScore": 0.6
         },
         {
           "label": "SQLite",
           "kind": "wildcard",
           "ifClause": "single-writer stays guaranteed",
-          "entails": "zero ops, file-backed, no concurrent writers"
+          "entails": "zero ops, file-backed, no concurrent writers",
+          "agentScore": 0.2
         }
       ],
       "lineage": {
@@ -31,7 +33,9 @@
       "answer": {
         "chosen": 3,
         "freeText": "DuckDB, we already embed it elsewhere",
-        "rejectionReasons": ["single-writer stays guaranteed"]
+        "rejectionReasons": [
+          "single-writer stays guaranteed"
+        ]
       }
     },
     {
@@ -41,17 +45,29 @@
         {
           "label": "Inside the skill directory",
           "kind": "usual-and-pick",
-          "citesRules": ["tools-travel-with-their-skill"],
-          "entails": "ships to consumers via skills update — `tools-travel-with-their-skill` — no extra install"
+          "entails": "ships to consumers via skills update, no extra install",
+          "matches": [
+            "tools-travel-with-their-skill"
+          ]
         },
         {
           "label": "Separate npm package",
           "kind": "alternative",
           "ifClause": "other skills need the renderer too",
-          "entails": "own release cycle, consumers add a dependency"
+          "entails": "own release cycle, consumers add a dependency",
+          "agentScore": 0.3,
+          "proposedPreferences": [
+            "a renderer used by two skills graduates to its own package"
+          ]
         }
       ],
-      "nearTie": { "slots": [1, 2], "differsOn": "distribution overhead" },
+      "nearTie": {
+        "slots": [
+          1,
+          2
+        ],
+        "differsOn": "distribution overhead"
+      },
       "lineage": {
         "cold": false,
         "rulesConsidered": [
@@ -72,8 +88,17 @@
           "entails": "no churn in trigger phrases or docs"
         }
       ],
-      "lineage": { "cold": true, "rulesConsidered": [] },
-      "answer": { "skipped": true }
+      "lineage": {
+        "cold": true,
+        "rulesConsidered": []
+      },
+      "answer": {
+        "skipped": true
+      }
     }
+  ],
+  "preferences": [
+    "tools-travel-with-their-skill",
+    "prefer-boring-tech"
   ]
 }

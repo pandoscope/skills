@@ -79,7 +79,7 @@ function validSession() {
   return JSON.parse(readFileSync(join(FIXTURES, "session.json"), "utf8"));
 }
 
-test("valid session renders artifact html with injected JSON and a text fallback", () => {
+red.fails("valid session renders artifact html with injected JSON and a text fallback", () => {
   const fixture = join(FIXTURES, "session.json");
   const { status, stderr, outDir } = render(fixture);
   assert.equal(status, 0, `renderer failed: ${stderr}`);
@@ -98,19 +98,49 @@ test("valid session renders artifact html with injected JSON and a text fallback
   assert.match(md, /^A3\. \*\*Free text\*\*/m, "renderer must append the free-text slot itself");
 });
 
-test("slots carry the refined badges and the answer hint offers the BAB shorthand", () => {
+red.fails("slots carry count badges, the merged slot shows the recommendation badge too", () => {
   const { status, stderr, outDir } = render(join(FIXTURES, "session.json"));
   assert.equal(status, 0, `renderer failed: ${stderr}`);
   const md = readFileSync(join(outDir, "session.md"), "utf8");
-  assert.match(md, /prediction — matches your usual/, "prediction badge missing on the merged slot");
+  assert.match(md, /prediction — matches 1 of your preferences/, "count-based prediction badge missing");
+  assert.match(
+    md,
+    /prediction — matches 1 of your preferences, recommendation — my pick/,
+    "merged slot must carry the recommendation badge alongside the prediction badge",
+  );
   assert.match(md, /recommendation — my pick \(cold\)/, "cold recommendation badge missing");
   assert.match(md, /\(wildcard, if single-writer stays guaranteed\)/, "wildcard badge missing");
-  assert.doesNotMatch(md, /your usual — per /, "old badge wording must be gone");
-  assert.match(md, /`tools-travel-with-their-skill`/, "inline verbatim rule must survive into the fallback");
+  assert.doesNotMatch(md, /matches your usual/, "old badge wording must be gone");
   assert.match(md, /"N, BAB …"/, "answer hint must offer the BAB shorthand");
 });
 
-test("answer state is displayed: chosen free text with rejection reasons, and skips", () => {
+red.fails("matched preferences become footnote refs resolving to ranked lineage entries", () => {
+  const { status, stderr, outDir } = render(join(FIXTURES, "session.json"));
+  assert.equal(status, 0, `renderer failed: ${stderr}`);
+  const md = readFileSync(join(outDir, "session.md"), "utf8");
+  assert.match(md, /ships to consumers via skills update, no extra install \[1\]/, "footnote marker missing after entails");
+  assert.match(
+    md,
+    /\[1\] tools-travel-with-their-skill \(rank 1, weight 75%\) — matched: renderer is skill-local tooling/,
+    "footnote entry must carry rank, ROC weight, and the lineage disposition",
+  );
+  assert.doesNotMatch(md, /`tools-travel-with-their-skill`/, "full rule text must no longer be inlined in the prose");
+});
+
+red.fails("options carry normalized scores with a per-contribution breakdown", () => {
+  const { status, stderr, outDir } = render(join(FIXTURES, "session.json"));
+  assert.equal(status, 0, `renderer failed: ${stderr}`);
+  const md = readFileSync(join(outDir, "session.md"), "utf8");
+  // S1Q2: A1 matches rank-1 pref (ROC weight 0.75); A2 has agentScore 0.3
+  // capped by the top weight (0.3 * 0.75) -> 77% vs 23%.
+  assert.match(md, /score 77% \(tools-travel-with-their-skill 77%\)/, "preference-driven score missing");
+  assert.match(md, /score 23% \(my judgment 23%\)/, "agent-judgment score missing");
+  // S1Q1 (cold): agent scores only, 0.6 vs 0.2 -> 75% / 25%.
+  assert.match(md, /score 75% \(my judgment 75%\)/, "cold agent score missing");
+  assert.match(md, /proposed preference: a renderer used by two skills graduates to its own package/, "proposed preference missing");
+});
+
+red.fails("answer state is displayed: chosen free text with rejection reasons, and skips", () => {
   const { status, stderr, outDir } = render(join(FIXTURES, "session.json"));
   assert.equal(status, 0, `renderer failed: ${stderr}`);
   const md = readFileSync(join(outDir, "session.md"), "utf8");
@@ -119,7 +149,7 @@ test("answer state is displayed: chosen free text with rejection reasons, and sk
   assert.match(md, /S1Q3: skipped/, "skip state missing");
 });
 
-test("rejects sessions violating the schema, naming the offending field", () => {
+red.fails("rejects sessions violating the schema, naming the offending field", () => {
   const cases = [
     ["version 1 document", (s) => (s.version = 1), /version.*1/],
     ["missing session number", (s) => delete s.session, /session/],
@@ -132,17 +162,27 @@ test("rejects sessions violating the schema, naming the offending field", () => 
       "cold contradicted by a usual slot",
       (s) => {
         s.questions[0].options[0].kind = "usual";
-        s.questions[0].options[0].citesRules = ["prefer-boring-tech"];
+        s.questions[0].options[0].matches = ["prefer-boring-tech"];
       },
       /cold/,
     ],
     [
-      "usual slot without cited rules",
+      "usual slot without matched preferences",
       (s) => {
         s.questions[0].lineage.cold = false;
         s.questions[0].options[0].kind = "usual";
       },
-      /citesRules/,
+      /matches/,
+    ],
+    [
+      "match naming an unknown preference",
+      (s) => (s.questions[1].options[0].matches = ["no-such-preference"]),
+      /matches.*no-such-preference/,
+    ],
+    [
+      "agent score out of range",
+      (s) => (s.questions[0].options[0].agentScore = 1.5),
+      /agentScore.*1\.5/,
     ],
     [
       "near-tie pointing at a missing slot",
