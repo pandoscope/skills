@@ -1,0 +1,120 @@
+<title>Grilling</title>
+<style>
+  :root {
+    --bg: #f7f6f3;
+    --card: #ffffff;
+    --fg: #1f2328;
+    --muted: #6a6f76;
+    --border: #e0ddd6;
+    --accent: #7752c4;
+    --accent-soft: #efe9fb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #191a1d;
+      --card: #222329;
+      --fg: #e8e6e1;
+      --muted: #9a9fa8;
+      --border: #34363d;
+      --accent: #a487e8;
+      --accent-soft: #2d2540;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #191a1d;
+    --card: #222329;
+    --fg: #e8e6e1;
+    --muted: #9a9fa8;
+    --border: #34363d;
+    --accent: #a487e8;
+    --accent-soft: #2d2540;
+  }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font: 16px/1.55 system-ui, sans-serif;
+    margin: 0;
+    padding: 2rem 1rem;
+  }
+  #app {
+    max-width: 44rem;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+  .question-header .question-seq {
+    color: var(--accent);
+    font-weight: 700;
+    font-size: 0.85rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .question-header .question-text {
+    margin: 0.25rem 0 0;
+    font-size: 1.4rem;
+    line-height: 1.3;
+  }
+  .section-heading {
+    margin: 0 0 0.35rem;
+    font-size: 0.85rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .context,
+  .option {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.9rem 1.1rem;
+  }
+  .context-text {
+    margin: 0;
+  }
+  .options {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .option-head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+  }
+  .option-number {
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-radius: 6px;
+    font-weight: 700;
+    padding: 0 0.5rem;
+  }
+  .option-label {
+    font-weight: 650;
+  }
+  .option-badge {
+    color: var(--accent);
+    font-size: 0.85rem;
+  }
+  .option-if {
+    margin: 0.4rem 0 0;
+    font-style: italic;
+    color: var(--muted);
+  }
+  .option-entails {
+    margin: 0.4rem 0 0;
+  }
+  .option-why-not {
+    margin: 0.4rem 0 0;
+    color: var(--muted);
+  }
+</style>
+<script type="application/json" id="decision-context">__DECISION_CONTEXT_JSON__</script>
+<div id="app"></div>
+<script>
+  /*__PAGE_JS__*/
+</script>

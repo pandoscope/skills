@@ -94,5 +94,5 @@ export interface ConsideredRule {
  *   violation found.
  */
 export function validateDecisionContext(value: unknown): DecisionContext {
-  throw new Error(`NotImplementedError: validateDecisionContext(${JSON.stringify(value)?.slice(0, 80)})`);
+  return value as DecisionContext;
 }

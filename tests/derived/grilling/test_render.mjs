@@ -61,7 +61,7 @@ function embeddedJson(html) {
   return m[1];
 }
 
-red.fails("valid context renders artifact html with injected JSON and a text fallback", () => {
+test("valid context renders artifact html with injected JSON and a text fallback", () => {
   const fixture = join(FIXTURES, "valid-cold.json");
   const { status, stderr, outDir } = render(fixture);
   assert.equal(status, 0, `renderer failed: ${stderr}`);

@@ -12,7 +12,19 @@
  *
  * Exits 0 on success. Exits 1 with a field-naming message on stderr when
  * the input violates the schema or cannot be read.
+ *
+ * DECISION:IFACE — this CLI is the enforcement point for the question
+ * format: the model authors only the JSON; both user-facing forms are
+ * derived here, so format drift is impossible rather than discouraged.
  */
+
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { validateDecisionContext } from "./decision-context.ts";
+import { buildViewModel } from "./view-model.ts";
+import { renderMarkdown } from "./text.ts";
+
+const JSON_PLACEHOLDER = "__DECISION_CONTEXT_JSON__";
 
 /**
  * Entry point.
@@ -26,7 +38,17 @@ function main(argv: string[]): void {
   if (!contextPath || outFlag !== "--out" || !outDir) {
     throw new Error(`usage: render.ts <context.json> --out <dir> (got: ${JSON.stringify(argv)})`);
   }
-  throw new Error(`NotImplementedError: render ${contextPath} into ${outDir}`);
+  const ctx = validateDecisionContext(JSON.parse(readFileSync(contextPath, "utf8")));
+
+  const template = readFileSync(join(import.meta.dirname, "template.html"), "utf8");
+  if (!template.includes(JSON_PLACEHOLDER)) {
+    throw new Error(`template.html is missing the ${JSON_PLACEHOLDER} placeholder — rebuild via build.ts`);
+  }
+  // Function replacer: the JSON is data, so `$`-sequences in it must not
+  // be interpreted as replacement patterns.
+  writeFileSync(join(outDir, "question.html"), template.replace(JSON_PLACEHOLDER, () => JSON.stringify(ctx)));
+
+  writeFileSync(join(outDir, "question.md"), renderMarkdown(buildViewModel(ctx)));
 }
 
 try {
