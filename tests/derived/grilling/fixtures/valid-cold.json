@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "seq": 3,
+  "question": "Which database backs the session store?",
+  "context": "Single-node deployment; existing ops tooling is Postgres-only.",
+  "options": [
+    {
+      "label": "Postgres",
+      "kind": "pick",
+      "entails": "reuse existing ops tooling, one more schema to migrate"
+    },
+    {
+      "label": "SQLite",
+      "kind": "wildcard",
+      "ifClause": "single-writer stays guaranteed",
+      "entails": "zero ops, file-backed, no concurrent writers"
+    }
+  ],
+  "lineage": {
+    "cold": true,
+    "rulesConsidered": [
+      {
+        "name": "prefer-boring-tech",
+        "disposition": "set aside: names languages, not datastores"
+      }
+    ]
+  }
+}
