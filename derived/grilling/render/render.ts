@@ -44,9 +44,12 @@ function main(argv: string[]): void {
   if (!template.includes(JSON_PLACEHOLDER)) {
     throw new Error(`template.html is missing the ${JSON_PLACEHOLDER} placeholder — rebuild via build.ts`);
   }
-  // Function replacer: the JSON is data, so `$`-sequences in it must not
-  // be interpreted as replacement patterns.
-  writeFileSync(join(outDir, "question.html"), template.replace(JSON_PLACEHOLDER, () => JSON.stringify(ctx)));
+  // DECISION:SEC — `<` is escaped as its unicode escape sequence inside the injected JSON so
+  // no context text can close the data script tag and become markup; the
+  // function replacer keeps `$`-sequences in the data from being
+  // interpreted as replacement patterns.
+  const json = JSON.stringify(ctx).replace(/</g, "\\u003c");
+  writeFileSync(join(outDir, "question.html"), template.replace(JSON_PLACEHOLDER, () => json));
 
   writeFileSync(join(outDir, "question.md"), renderMarkdown(buildViewModel(ctx)));
 }

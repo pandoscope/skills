@@ -110,7 +110,7 @@ test("rejects contexts violating the schema, naming the offending field", () => 
   }
 });
 
-red.fails("script-closing sequences in context text cannot break out of the data tag", () => {
+test("script-closing sequences in context text cannot break out of the data tag", () => {
   const ctx = validContext();
   ctx.options[0].entails = 'renders literally: </script><script>alert("x")</script>';
   const { status, stderr, outDir } = render(contextFile(ctx));
