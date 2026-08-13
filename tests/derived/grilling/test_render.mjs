@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync, existsSync, cpSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -136,6 +136,24 @@ test("text fallback carries lineage, near-tie, and the correction affordance", (
   assert.equal(cold.status, 0, `renderer failed: ${cold.stderr}`);
   const coldMd = readFileSync(join(cold.outDir, "question.md"), "utf8");
   assert.match(coldMd, /Cold: no active preference rule applies/, "cold note missing from lineage");
+});
+
+// Guard, not a red-cycle behavior: template.html is generated (declared
+// managed duplication); this pins it to a rebuild of its sources.
+test("committed template.html is the build output of its sources", () => {
+  const renderDir = dirname(RENDER_TS);
+  const tmp = mkdtempSync(join(tmpdir(), "grilling-template-check-"));
+  cpSync(renderDir, tmp, { recursive: true });
+  execFileSync(
+    process.execPath,
+    ["--experimental-strip-types", "--disable-warning=ExperimentalWarning", join(tmp, "build.ts")],
+    { encoding: "utf8" },
+  );
+  assert.equal(
+    readFileSync(join(renderDir, "template.html"), "utf8"),
+    readFileSync(join(tmp, "template.html"), "utf8"),
+    "template.html is stale — rebuild via make grilling-template",
+  );
 });
 
 test("valid context renders artifact html with injected JSON and a text fallback", () => {
