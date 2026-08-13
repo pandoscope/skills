@@ -31,6 +31,10 @@ test:
 		node --test "$$f" || exit 1; \
 	done
 
+.PHONY: grilling-template ## Rebuild derived/grilling/render/template.html from its sources
+grilling-template:
+	node --experimental-strip-types --disable-warning=ExperimentalWarning derived/grilling/render/build.ts
+
 .PHONY: lint ## Run all linters
 lint:
 	shellcheck $(shell find derived/ original/ -name '*.sh' -type f)

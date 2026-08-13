@@ -6,7 +6,7 @@ description: >
   side effect of choosing. Use when the user wants to stress-test their
   thinking, or uses any 'grill' trigger phrases.
 metadata.derived-from: https://github.com/mattpocock/skills/blob/e9fcdf95b402d360f90f1db8d776d5dd450f9234/skills/productivity/grilling/SKILL.md
-metadata.derivation-note: Adds multiple-choice format (recommendation = scored prediction), decision + rejection-reason recording to decision-memory repo, artifact embedding of considered alternatives. Detached from upstream — no sync.
+metadata.derivation-note: Adds multiple-choice format (recommendation = scored prediction) rendered from decision-context JSON into an artifact page or text fallback, decision + rejection-reason recording to decision-memory repo, artifact embedding of considered alternatives. Detached from upstream — no sync.
 ---
 
 # Grilling
@@ -19,19 +19,26 @@ Do not act until user confirms shared understanding.
 
 ## Question format
 
-Every decision point = multiple choice. Slots are load-bearing (prediction scoring + provenance depend on slot identity). Template shows the divergent case:
+Every decision point = multiple choice. Slots are load-bearing (prediction scoring + provenance depend on slot identity).
 
-```text
-1. X (your usual) — <reasoning per preference rule R>
-2. Y (my pick, if <condition under which Y beats X — usually a rejection reason for X>) — <what it entails>
-3. Z (wildcard, if <condition>) — <what it entails>
-4. Free text — custom choice or custom rejection reasoning
+NEVER hand-format a question. Author ONLY decision-context JSON (contract + field docs: `render/decision-context.ts` in this skill's directory), then derive both user-facing forms:
+
+```bash
+node --experimental-strip-types <skill-dir>/render/render.ts <context.json> --out <dir>
 ```
 
-- Slot 1 exploitative — what the active preference set predicts user picks. "Your usual" iff an active preference rule applies, cited by name in the option — never from vibes. No citable rule → slots 1/2 merge into `1. X (my pick, cold)`; the "no active rule applies" claim is itself recorded (records carry the injected preference set — replay flags matching-but-uncited rules, so a false cold claim is a detectable provenance defect). Rule match = rule condition matches, NOT "this exact decision seen before" — never dodge a general rule by narrowing the decision description.
-- Slot 2 = agent's independent best, formed on merits, not preferences. Coincides with 1 (common case) → merge: `1. X (recommended — matches your usual)`, slot 2 = runner-up.
-- Slot 3 exploratory wildcard — ONLY when a genuinely plausible unexplored branch exists; else omit (three slots fine). Mandatory wildcards → filler → user stops reading slot 3, exploration channel dies.
-- Slot 4 free text — always.
+- `question.html` — publish as artifact (per-session URL: publish the first question, redeploy the same artifact for each next one). Full context, lineage panel, no dialog size limits.
+- `question.md` — pure-text fallback; paste verbatim when artifact publishing is unavailable.
+- Validation failure names the offending field — fix the JSON, re-run. The renderer appends the free-text slot itself; never list it.
+
+Answers arrive as plain chat replies (slot number, or the correction affordance below). Do not use timed question dialogs — they close while the user is still typing and cannot hold the full context.
+
+Slot semantics (the JSON `kind` field):
+
+- `usual` exploitative — what the active preference set predicts user picks, iff an active preference rule applies, cited by name in `citesRules` — never from vibes. No citable rule → slots 1/2 merge into a cold `pick`; the "no active rule applies" claim is itself recorded via `lineage.cold` (records carry the injected preference set — replay flags matching-but-uncited rules, so a false cold claim is a detectable provenance defect). Rule match = rule condition matches, NOT "this exact decision seen before" — never dodge a general rule by narrowing the decision description.
+- `pick` = agent's independent best, formed on merits, not preferences. Coincides with the usual (common case) → merge into one `usual-and-pick` slot; runner-up becomes a plain `alternative`.
+- `wildcard` exploratory — ONLY when a genuinely plausible unexplored branch exists; else omit. Mandatory wildcards → filler → user stops reading the slot, exploration channel dies.
+- Free text — always; appended by the renderer.
 
 Rules:
 
@@ -61,7 +68,7 @@ Decision records go to the decision-memory repo. Repo URL comes EXCLUSIVELY from
 
 Strict input/output field separation so replay can mask outcomes:
 
-- Input side: MC block verbatim (question, options, embedded reasonings, recommendation) + `context` field — session-local facts informing the recommendation, written BEFORE the ruling — plus `artifact_ref@SHA` for durable context.
+- Input side: the decision-context JSON verbatim (the same object the renderer consumed — question, options, reasonings, lineage, `context` written BEFORE the ruling) plus `artifact_ref@SHA` for durable context.
 - Output side: chosen slot, operative if-clause/free text, correction flag.
 - Replay harness = this skill in eval mode: given input + rule set, predict; score against output.
 
