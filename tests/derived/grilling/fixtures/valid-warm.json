@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "seq": 1,
+  "question": "Where does the grilling renderer live?",
+  "options": [
+    {
+      "label": "Inside the skill directory",
+      "kind": "usual-and-pick",
+      "citesRules": ["tools-travel-with-their-skill"],
+      "entails": "ships to consumers via skills update, no extra install"
+    },
+    {
+      "label": "Separate npm package",
+      "kind": "alternative",
+      "ifClause": "other skills need the renderer too",
+      "entails": "own release cycle, consumers add a dependency"
+    }
+  ],
+  "nearTie": { "slots": [1, 2], "differsOn": "distribution overhead" },
+  "lineage": {
+    "cold": false,
+    "rulesConsidered": [
+      {
+        "name": "tools-travel-with-their-skill",
+        "disposition": "matched: renderer is skill-local tooling"
+      },
+      {
+        "name": "prefer-boring-tech",
+        "disposition": "set aside: no technology choice at stake"
+      }
+    ]
+  }
+}

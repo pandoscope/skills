@@ -121,6 +121,23 @@ test("script-closing sequences in context text cannot break out of the data tag"
   assert.deepEqual(JSON.parse(raw), ctx, "escaped JSON must still round-trip to the input context");
 });
 
+red.fails("text fallback carries lineage, near-tie, and the correction affordance", () => {
+  const warm = render(join(FIXTURES, "valid-warm.json"));
+  assert.equal(warm.status, 0, `renderer failed: ${warm.stderr}`);
+  const md = readFileSync(join(warm.outDir, "question.md"), "utf8");
+  assert.match(md, /recommended — matches your usual/, "merged slot badge missing");
+  assert.match(md, /options 1\/2 roughly equivalent — differ on distribution overhead/, "near-tie note missing");
+  assert.match(md, /^### Lineage$/m, "lineage section missing");
+  assert.match(md, /tools-travel-with-their-skill — matched: renderer is skill-local tooling/, "matched rule missing from lineage");
+  assert.match(md, /prefer-boring-tech — set aside: no technology choice at stake/, "set-aside rule missing from lineage");
+  assert.match(md, /but actually because/, "correction affordance hint missing");
+
+  const cold = render(join(FIXTURES, "valid-cold.json"));
+  assert.equal(cold.status, 0, `renderer failed: ${cold.stderr}`);
+  const coldMd = readFileSync(join(cold.outDir, "question.md"), "utf8");
+  assert.match(coldMd, /Cold: no active preference rule applies/, "cold note missing from lineage");
+});
+
 test("valid context renders artifact html with injected JSON and a text fallback", () => {
   const fixture = join(FIXTURES, "valid-cold.json");
   const { status, stderr, outDir } = render(fixture);
