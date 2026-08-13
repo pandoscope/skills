@@ -141,12 +141,31 @@ class GrillingPage {
       const head = el("div", "option-head");
       head.append(el("span", "option-number", option.id));
       head.append(el("span", "option-label", option.label));
-      if (option.badge) head.append(el("span", "option-badge", option.badge));
+      for (const badge of option.badges) head.append(el("span", "option-badge", badge));
+      if (option.score) {
+        const chip = el("span", "option-score", `${option.score.pct}%`);
+        // Hover reveals which contribution gave how much (title tooltip;
+        // the breakdown is also in the markdown fallback verbatim).
+        chip.title = option.score.breakdown.map((b) => `${b.label}: ${b.pct}%`).join("\n");
+        head.append(chip);
+      }
       item.append(head);
       if (option.ifClause) item.append(el("p", "option-if", `if ${option.ifClause}`));
       const entails = el("p", "option-entails");
       appendWithInlineCode(entails, option.entails);
+      for (const note of option.footnotes) {
+        const sup = document.createElement("sup");
+        const link = document.createElement("a");
+        link.href = `#${note.anchorId}`;
+        link.textContent = `[${note.marker}]`;
+        link.onclick = (e) => e.stopPropagation();
+        sup.append(link);
+        entails.append(" ", sup);
+      }
       item.append(entails);
+      for (const proposed of option.proposedPreferences) {
+        item.append(el("p", "option-proposed", `proposed preference: ${proposed}`));
+      }
       if (option.whyNotRecommended) {
         item.append(el("p", "option-why-not", `why not recommended: ${option.whyNotRecommended}`));
       }
@@ -187,6 +206,15 @@ class GrillingPage {
     lineage.append(el("h2", "section-heading", "Lineage"));
     if (q.lineage.coldNote) lineage.append(el("p", "lineage-cold", q.lineage.coldNote));
     const rules = el("ul", "lineage-rules");
+    for (const note of q.lineage.footnotes) {
+      const item = el("li", "lineage-rule");
+      item.id = note.anchorId;
+      item.append(el("span", "lineage-rule-marker", `[${note.marker}] `));
+      item.append(el("span", "lineage-rule-name", note.name));
+      item.append(el("span", "lineage-rule-weight", ` (rank ${note.rank}, weight ${note.weightPct}%)`));
+      if (note.disposition) item.append(el("span", "lineage-rule-disposition", ` — ${note.disposition}`));
+      rules.append(item);
+    }
     for (const rule of q.lineage.rules) {
       const item = el("li", "lineage-rule");
       item.append(el("span", "lineage-rule-name", rule.name));

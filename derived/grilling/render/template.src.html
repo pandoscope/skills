@@ -191,6 +191,32 @@
     font-family: ui-monospace, monospace;
     font-size: 0.85rem;
   }
+  .option-score {
+    margin-left: auto;
+    color: var(--accent);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    cursor: help;
+  }
+  .option-proposed {
+    margin: 0.3rem 0 0;
+    color: var(--accent);
+    font-size: 0.9rem;
+    font-style: italic;
+  }
+  .option-entails sup a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .lineage-rule-marker,
+  .lineage-rule-weight {
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  .lineage-rule:target {
+    background: var(--accent-soft);
+    border-radius: 6px;
+  }
   .why-block {
     background: var(--card);
     border: 1px solid var(--border);

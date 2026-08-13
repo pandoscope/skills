@@ -11,6 +11,26 @@
 
 import type { GrillingSession, DecisionQuestion, AnswerState } from "./decision-context.ts";
 
+/**
+ * Rank-order-centroid weights for an ordered list of n items: the item at
+ * 1-based rank i gets w_i = (1/n) * sum_{k=i..n} 1/k. The standard way to
+ * turn a pure priority ordering into weights when the items carry no
+ * scores of their own — earlier entries weigh more, later entries still
+ * count, weights sum to 1.
+ *
+ * @param n - Number of ranked items.
+ * @returns Weights indexed by rank-1.
+ */
+export function rankOrderCentroid(n: number): number[] {
+  const weights: number[] = [];
+  for (let i = 1; i <= n; i++) {
+    let sum = 0;
+    for (let k = i; k <= n; k++) sum += 1 / k;
+    weights.push(sum / n);
+  }
+  return weights;
+}
+
 /** Display-ready form of one grilling session. */
 export interface SessionViewModel {
   /** Session title, e.g. "Grilling S1". */
@@ -53,15 +73,26 @@ export interface OptionView {
   /** Short name of the option. */
   label: string;
   /**
-   * Slot annotation: "prediction — matches your usual",
-   * "recommendation — my pick", "recommendation — my pick (cold)",
-   * "wildcard", or none for plain alternatives and the free-text slot.
+   * Slot annotations, possibly several: "prediction — matches N of your
+   * preferences", "recommendation — my pick", "recommendation — my pick
+   * (cold)", "wildcard". A merged usual-and-pick slot carries both the
+   * prediction and the recommendation badge. Empty for plain
+   * alternatives and the free-text slot.
    */
-  badge?: string;
+  badges: string[];
   /** Condition under which this option beats the recommendation. */
   ifClause?: string;
   /** What choosing this option entails (may carry `inline code` spans). */
   entails: string;
+  /** Footnote markers for matched preferences, shown after the entails. */
+  footnotes: { marker: number; anchorId: string }[];
+  /**
+   * Normalized option score as percent of the question total (rounded),
+   * with the per-contribution breakdown; absent when nothing scores.
+   */
+  score?: { pct: number; breakdown: { label: string; pct: number }[] };
+  /** Agent-formulated candidate preferences, listed with the option. */
+  proposedPreferences: string[];
   /** Why not recommended, when it differs from the negated if-clause. */
   whyNotRecommended?: string;
   /** True for the renderer-appended free-text slot (gets a text box). */
@@ -72,7 +103,14 @@ export interface OptionView {
 export interface LineageView {
   /** Cold note when no active preference rule applies. */
   coldNote?: string;
-  /** Rules considered, matched or set aside. */
+  /**
+   * Footnote entries for every preference matched by any option of the
+   * question: marker number, anchor id, name, 1-based rank in the
+   * session's preference order, ROC weight as percent, and the lineage
+   * disposition when the rule was explicitly considered.
+   */
+  footnotes: { marker: number; anchorId: string; name: string; rank: number; weightPct: number; disposition?: string }[];
+  /** Rules considered but not matched by any option (e.g. set aside). */
   rules: { name: string; disposition: string }[];
 }
 
@@ -94,7 +132,7 @@ export interface AnsweredView {
 export function buildViewModel(session: GrillingSession): SessionViewModel {
   return {
     title: `Grilling S${session.session}`,
-    questions: session.questions.map((q) => buildQuestion(q, session.session)),
+    questions: session.questions.map((q) => buildQuestion(q, session.session, session.preferences ?? [])),
     answerHint:
       'Reply in chat with the answer id ("S1Q2A1" or just "1"), or "N, but actually because …" ("N, BAB …") to accept an option while overriding its stated reason. In the artifact page: click your answers, then use "Copy answers as JSON" and paste the result into chat.',
   };
@@ -105,24 +143,78 @@ export function buildViewModel(session: GrillingSession): SessionViewModel {
  *
  * @param q - The question.
  * @param session - The session number (for the S«s»Q«q» id).
+ * @param preferences - The session's ordered preference names.
  * @returns The question view model.
  */
-function buildQuestion(q: DecisionQuestion, session: number): QuestionViewModel {
+function buildQuestion(q: DecisionQuestion, session: number, preferences: string[]): QuestionViewModel {
   const id = `S${session}Q${q.seq}`;
+  const weights = rankOrderCentroid(preferences.length);
+  const topWeight = weights[0] ?? 1;
+
+  // Footnotes: one entry per preference matched by any option, ordered by
+  // preference rank, anchored so entails prose can reference them.
+  const matchedNames = [...new Set(q.options.flatMap((o) => o.matches ?? []))].sort(
+    (a, b) => preferences.indexOf(a) - preferences.indexOf(b),
+  );
+  const footnotes = matchedNames.map((name, i) => {
+    const rank = preferences.indexOf(name) + 1;
+    return {
+      marker: i + 1,
+      anchorId: `${id}-pref-${i + 1}`,
+      name,
+      rank,
+      weightPct: Math.round(weights[rank - 1] * 100),
+      disposition: q.lineage.rulesConsidered.find((r) => r.name === name)?.disposition,
+    };
+  });
+
+  // Raw score per listed option: matched preference weights plus the
+  // agent's own term, capped by the top preference weight so agent
+  // judgment can never outvote the user's highest-ranked preference.
+  const raw = q.options.map(
+    (o) =>
+      (o.matches ?? []).reduce((sum, name) => sum + weights[preferences.indexOf(name)], 0) +
+      (o.agentScore ?? 0) * topWeight,
+  );
+  const total = raw.reduce((a, b) => a + b, 0);
+
   const options: OptionView[] = q.options.map((option, i) => ({
     number: i + 1,
     id: `A${i + 1}`,
     label: option.label,
-    badge: badgeFor(option.kind, q.lineage.cold),
+    badges: badgesFor(option.kind, q.lineage.cold, option.matches?.length ?? 0),
     ifClause: option.ifClause,
     entails: option.entails,
+    footnotes: (option.matches ?? []).map((name) => {
+      const note = footnotes.find((f) => f.name === name)!;
+      return { marker: note.marker, anchorId: note.anchorId };
+    }),
+    score:
+      total > 0 && raw[i] > 0
+        ? {
+            pct: Math.round((raw[i] / total) * 100),
+            breakdown: [
+              ...(option.matches ?? []).map((name) => ({
+                label: name,
+                pct: Math.round((weights[preferences.indexOf(name)] / total) * 100),
+              })),
+              ...(option.agentScore
+                ? [{ label: "my judgment", pct: Math.round(((option.agentScore * topWeight) / total) * 100) }]
+                : []),
+            ],
+          }
+        : undefined,
+    proposedPreferences: option.proposedPreferences ?? [],
     whyNotRecommended: option.whyNotRecommended,
   }));
   options.push({
     number: options.length + 1,
     id: `A${options.length + 1}`,
     label: "Free text",
+    badges: [],
     entails: "custom choice or custom rejection reasoning",
+    footnotes: [],
+    proposedPreferences: [],
     freeText: true,
   });
   return {
@@ -135,7 +227,10 @@ function buildQuestion(q: DecisionQuestion, session: number): QuestionViewModel 
       : undefined,
     lineage: {
       coldNote: q.lineage.cold ? "Cold: no active preference rule applies." : undefined,
-      rules: q.lineage.rulesConsidered.map((rule) => ({ name: rule.name, disposition: rule.disposition })),
+      footnotes,
+      rules: q.lineage.rulesConsidered
+        .filter((rule) => !matchedNames.includes(rule.name))
+        .map((rule) => ({ name: rule.name, disposition: rule.disposition })),
     },
     candidateReasons: q.options.flatMap((option, i) => (option.ifClause ? [{ slot: `A${i + 1}`, reason: option.ifClause }] : [])),
     answered: q.answer ? buildAnswered(q.answer, id, options) : undefined,
@@ -164,15 +259,19 @@ function buildAnswered(answer: AnswerState, id: string, options: OptionView[]): 
 }
 
 /**
- * Annotation text for a slot kind.
+ * Annotation texts for a slot kind — a merged usual-and-pick slot carries
+ * both the prediction and the recommendation badge.
  *
  * @param kind - The slot kind from the decision question.
  * @param cold - Whether the question's recommendation is cold.
- * @returns The badge text shown next to the option label, if any.
+ * @param matchCount - Number of preferences the slot matches.
+ * @returns The badge texts shown next to the option label.
  */
-function badgeFor(kind: DecisionQuestion["options"][number]["kind"], cold: boolean): string | undefined {
-  if (kind === "usual" || kind === "usual-and-pick") return "prediction — matches your usual";
-  if (kind === "pick") return cold ? "recommendation — my pick (cold)" : "recommendation — my pick";
-  if (kind === "wildcard") return "wildcard";
-  return undefined;
+function badgesFor(kind: DecisionQuestion["options"][number]["kind"], cold: boolean, matchCount: number): string[] {
+  const prediction = `prediction — matches ${matchCount} of your preferences`;
+  if (kind === "usual") return [prediction];
+  if (kind === "usual-and-pick") return [prediction, "recommendation — my pick"];
+  if (kind === "pick") return [cold ? "recommendation — my pick (cold)" : "recommendation — my pick"];
+  if (kind === "wildcard") return ["wildcard"];
+  return [];
 }

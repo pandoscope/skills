@@ -196,6 +196,32 @@
     font-family: ui-monospace, monospace;
     font-size: 0.85rem;
   }
+  .option-score {
+    margin-left: auto;
+    color: var(--accent);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    cursor: help;
+  }
+  .option-proposed {
+    margin: 0.3rem 0 0;
+    color: var(--accent);
+    font-size: 0.9rem;
+    font-style: italic;
+  }
+  .option-entails sup a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .lineage-rule-marker,
+  .lineage-rule-weight {
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  .lineage-rule:target {
+    background: var(--accent-soft);
+    border-radius: 6px;
+  }
   .why-block {
     background: var(--card);
     border: 1px solid var(--border);
@@ -285,6 +311,26 @@
  * out ViewModel fields, they never derive wording from the raw session.
  */
 /**
+ * Rank-order-centroid weights for an ordered list of n items: the item at
+ * 1-based rank i gets w_i = (1/n) * sum_{k=i..n} 1/k. The standard way to
+ * turn a pure priority ordering into weights when the items carry no
+ * scores of their own — earlier entries weigh more, later entries still
+ * count, weights sum to 1.
+ *
+ * @param n - Number of ranked items.
+ * @returns Weights indexed by rank-1.
+ */
+function rankOrderCentroid(n) {
+    const weights = [];
+    for (let i = 1; i <= n; i++) {
+        let sum = 0;
+        for (let k = i; k <= n; k++)
+            sum += 1 / k;
+        weights.push(sum / n);
+    }
+    return weights;
+}
+/**
  * Build the display form of a grilling session.
  *
  * @param session - A validated version-2 grilling session.
@@ -294,7 +340,7 @@
 function buildViewModel(session) {
     return {
         title: `Grilling S${session.session}`,
-        questions: session.questions.map((q) => buildQuestion(q, session.session)),
+        questions: session.questions.map((q) => buildQuestion(q, session.session, session.preferences ?? [])),
         answerHint: 'Reply in chat with the answer id ("S1Q2A1" or just "1"), or "N, but actually because …" ("N, BAB …") to accept an option while overriding its stated reason. In the artifact page: click your answers, then use "Copy answers as JSON" and paste the result into chat.',
     };
 }
@@ -303,24 +349,69 @@ function buildViewModel(session) {
  *
  * @param q - The question.
  * @param session - The session number (for the S«s»Q«q» id).
+ * @param preferences - The session's ordered preference names.
  * @returns The question view model.
  */
-function buildQuestion(q, session) {
+function buildQuestion(q, session, preferences) {
     const id = `S${session}Q${q.seq}`;
+    const weights = rankOrderCentroid(preferences.length);
+    const topWeight = weights[0] ?? 1;
+    // Footnotes: one entry per preference matched by any option, ordered by
+    // preference rank, anchored so entails prose can reference them.
+    const matchedNames = [...new Set(q.options.flatMap((o) => o.matches ?? []))].sort((a, b) => preferences.indexOf(a) - preferences.indexOf(b));
+    const footnotes = matchedNames.map((name, i) => {
+        const rank = preferences.indexOf(name) + 1;
+        return {
+            marker: i + 1,
+            anchorId: `${id}-pref-${i + 1}`,
+            name,
+            rank,
+            weightPct: Math.round(weights[rank - 1] * 100),
+            disposition: q.lineage.rulesConsidered.find((r) => r.name === name)?.disposition,
+        };
+    });
+    // Raw score per listed option: matched preference weights plus the
+    // agent's own term, capped by the top preference weight so agent
+    // judgment can never outvote the user's highest-ranked preference.
+    const raw = q.options.map((o) => (o.matches ?? []).reduce((sum, name) => sum + weights[preferences.indexOf(name)], 0) +
+        (o.agentScore ?? 0) * topWeight);
+    const total = raw.reduce((a, b) => a + b, 0);
     const options = q.options.map((option, i) => ({
         number: i + 1,
         id: `A${i + 1}`,
         label: option.label,
-        badge: badgeFor(option.kind, q.lineage.cold),
+        badges: badgesFor(option.kind, q.lineage.cold, option.matches?.length ?? 0),
         ifClause: option.ifClause,
         entails: option.entails,
+        footnotes: (option.matches ?? []).map((name) => {
+            const note = footnotes.find((f) => f.name === name);
+            return { marker: note.marker, anchorId: note.anchorId };
+        }),
+        score: total > 0 && raw[i] > 0
+            ? {
+                pct: Math.round((raw[i] / total) * 100),
+                breakdown: [
+                    ...(option.matches ?? []).map((name) => ({
+                        label: name,
+                        pct: Math.round((weights[preferences.indexOf(name)] / total) * 100),
+                    })),
+                    ...(option.agentScore
+                        ? [{ label: "my judgment", pct: Math.round(((option.agentScore * topWeight) / total) * 100) }]
+                        : []),
+                ],
+            }
+            : undefined,
+        proposedPreferences: option.proposedPreferences ?? [],
         whyNotRecommended: option.whyNotRecommended,
     }));
     options.push({
         number: options.length + 1,
         id: `A${options.length + 1}`,
         label: "Free text",
+        badges: [],
         entails: "custom choice or custom rejection reasoning",
+        footnotes: [],
+        proposedPreferences: [],
         freeText: true,
     });
     return {
@@ -333,7 +424,10 @@ function buildQuestion(q, session) {
             : undefined,
         lineage: {
             coldNote: q.lineage.cold ? "Cold: no active preference rule applies." : undefined,
-            rules: q.lineage.rulesConsidered.map((rule) => ({ name: rule.name, disposition: rule.disposition })),
+            footnotes,
+            rules: q.lineage.rulesConsidered
+                .filter((rule) => !matchedNames.includes(rule.name))
+                .map((rule) => ({ name: rule.name, disposition: rule.disposition })),
         },
         candidateReasons: q.options.flatMap((option, i) => (option.ifClause ? [{ slot: `A${i + 1}`, reason: option.ifClause }] : [])),
         answered: q.answer ? buildAnswered(q.answer, id, options) : undefined,
@@ -360,20 +454,25 @@ function buildAnswered(answer, id, options) {
     };
 }
 /**
- * Annotation text for a slot kind.
+ * Annotation texts for a slot kind — a merged usual-and-pick slot carries
+ * both the prediction and the recommendation badge.
  *
  * @param kind - The slot kind from the decision question.
  * @param cold - Whether the question's recommendation is cold.
- * @returns The badge text shown next to the option label, if any.
+ * @param matchCount - Number of preferences the slot matches.
+ * @returns The badge texts shown next to the option label.
  */
-function badgeFor(kind, cold) {
-    if (kind === "usual" || kind === "usual-and-pick")
-        return "prediction — matches your usual";
+function badgesFor(kind, cold, matchCount) {
+    const prediction = `prediction — matches ${matchCount} of your preferences`;
+    if (kind === "usual")
+        return [prediction];
+    if (kind === "usual-and-pick")
+        return [prediction, "recommendation — my pick"];
     if (kind === "pick")
-        return cold ? "recommendation — my pick (cold)" : "recommendation — my pick";
+        return [cold ? "recommendation — my pick (cold)" : "recommendation — my pick"];
     if (kind === "wildcard")
-        return "wildcard";
-    return undefined;
+        return ["wildcard"];
+    return [];
 }
 
 /**
@@ -502,14 +601,33 @@ class GrillingPage {
             const head = el("div", "option-head");
             head.append(el("span", "option-number", option.id));
             head.append(el("span", "option-label", option.label));
-            if (option.badge)
-                head.append(el("span", "option-badge", option.badge));
+            for (const badge of option.badges)
+                head.append(el("span", "option-badge", badge));
+            if (option.score) {
+                const chip = el("span", "option-score", `${option.score.pct}%`);
+                // Hover reveals which contribution gave how much (title tooltip;
+                // the breakdown is also in the markdown fallback verbatim).
+                chip.title = option.score.breakdown.map((b) => `${b.label}: ${b.pct}%`).join("\n");
+                head.append(chip);
+            }
             item.append(head);
             if (option.ifClause)
                 item.append(el("p", "option-if", `if ${option.ifClause}`));
             const entails = el("p", "option-entails");
             appendWithInlineCode(entails, option.entails);
+            for (const note of option.footnotes) {
+                const sup = document.createElement("sup");
+                const link = document.createElement("a");
+                link.href = `#${note.anchorId}`;
+                link.textContent = `[${note.marker}]`;
+                link.onclick = (e) => e.stopPropagation();
+                sup.append(link);
+                entails.append(" ", sup);
+            }
             item.append(entails);
+            for (const proposed of option.proposedPreferences) {
+                item.append(el("p", "option-proposed", `proposed preference: ${proposed}`));
+            }
             if (option.whyNotRecommended) {
                 item.append(el("p", "option-why-not", `why not recommended: ${option.whyNotRecommended}`));
             }
@@ -550,6 +668,16 @@ class GrillingPage {
         if (q.lineage.coldNote)
             lineage.append(el("p", "lineage-cold", q.lineage.coldNote));
         const rules = el("ul", "lineage-rules");
+        for (const note of q.lineage.footnotes) {
+            const item = el("li", "lineage-rule");
+            item.id = note.anchorId;
+            item.append(el("span", "lineage-rule-marker", `[${note.marker}] `));
+            item.append(el("span", "lineage-rule-name", note.name));
+            item.append(el("span", "lineage-rule-weight", ` (rank ${note.rank}, weight ${note.weightPct}%)`));
+            if (note.disposition)
+                item.append(el("span", "lineage-rule-disposition", ` — ${note.disposition}`));
+            rules.append(item);
+        }
         for (const rule of q.lineage.rules) {
             const item = el("li", "lineage-rule");
             item.append(el("span", "lineage-rule-name", rule.name));

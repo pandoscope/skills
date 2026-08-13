@@ -23,6 +23,13 @@ export interface GrillingSession {
    * state carried forward.
    */
   questions: DecisionQuestion[];
+  /**
+   * The active preference set considered this session, in preference-file
+   * order — earlier entries rank higher. Ranks turn into scoring weights
+   * via rank-order-centroid (see view-model.ts). Required whenever any
+   * option matches a preference.
+   */
+  preferences?: string[];
 }
 
 /** One decision put to the user, with full provenance and answer state. */
@@ -66,16 +73,29 @@ export interface DecisionOption {
   /** Condition under which this option beats the recommendation. */
   ifClause?: string;
   /**
-   * What choosing this option entails. Cite the preference rules the
-   * reasoning draws on inline, verbatim, in backticks — rendered as
-   * monospace in the artifact page and kept as code spans in markdown.
+   * What choosing this option entails. Matched preferences are appended
+   * as footnote refs by the renderer — do not restate them here.
    */
   entails: string;
   /**
-   * Names of active preference rules this slot cites. Required non-empty
-   * for "usual" and "usual-and-pick" slots.
+   * Names of preferences (entries of session.preferences) this option
+   * satisfies — one option may match several. Required non-empty for
+   * "usual" and "usual-and-pick" slots. Rendered as footnote refs
+   * anchored to the ranked lineage entries, and drives the option's
+   * preference score.
    */
-  citesRules?: string[];
+  matches?: string[];
+  /**
+   * The agent's own leaning toward this option, 0..1. Contributes to the
+   * score capped by the top preference weight so agent judgment can
+   * never outvote the user's highest-ranked preference.
+   */
+  agentScore?: number;
+  /**
+   * Preferences the agent formulates as inspiration — candidate rules
+   * not (yet) in the preference file, listed separately with the option.
+   */
+  proposedPreferences?: string[];
   /**
    * Why this option is not recommended — only when the reason differs
    * from the negated if-clause.
@@ -149,9 +169,17 @@ export function validateGrillingSession(value: unknown): GrillingSession {
   if (!Array.isArray(session.questions) || session.questions.length === 0) {
     throw new Error(`questions must be a non-empty array, got: ${JSON.stringify(session.questions)}`);
   }
+  let preferences: string[] = [];
+  if (session.preferences !== undefined) {
+    if (!Array.isArray(session.preferences) || session.preferences.length === 0) {
+      throw new Error(`preferences must be a non-empty array when present, got: ${JSON.stringify(session.preferences)}`);
+    }
+    session.preferences.forEach((name, i) => requireNonEmptyString(name, `preferences[${i}]`));
+    preferences = session.preferences as string[];
+  }
   const seen = new Set<number>();
   session.questions.forEach((question, i) => {
-    const q = validateQuestion(question, `questions[${i}]`);
+    const q = validateQuestion(question, `questions[${i}]`, preferences);
     if (seen.has(q.seq)) {
       throw new Error(`questions[${i}].seq duplicates an earlier question: ${q.seq}`);
     }
@@ -165,10 +193,11 @@ export function validateGrillingSession(value: unknown): GrillingSession {
  *
  * @param value - Untyped question entry.
  * @param path - Field path for error messages, e.g. "questions[0]".
+ * @param preferences - The session's ordered preference names.
  * @returns The question, typed.
  * @throws Error naming the offending field and value.
  */
-function validateQuestion(value: unknown, path: string): DecisionQuestion {
+function validateQuestion(value: unknown, path: string, preferences: string[]): DecisionQuestion {
   const q = requireRecord(value, path);
   requirePositiveInteger(q.seq, `${path}.seq`);
   requireNonEmptyString(q.question, `${path}.question`);
@@ -177,7 +206,7 @@ function validateQuestion(value: unknown, path: string): DecisionQuestion {
   if (!Array.isArray(q.options) || q.options.length < 1 || q.options.length > 3) {
     throw new Error(`${path}.options must list 1-3 slots (free text is appended automatically), got: ${JSON.stringify(q.options)}`);
   }
-  const options = q.options.map((option, i) => validateOption(option, `${path}.options[${i}]`));
+  const options = q.options.map((option, i) => validateOption(option, `${path}.options[${i}]`, preferences));
 
   const lineage = requireRecord(q.lineage, `${path}.lineage`);
   if (typeof lineage.cold !== "boolean") {
@@ -251,10 +280,11 @@ function validateAnswer(value: unknown, listedCount: number, path: string): void
  *
  * @param value - Untyped option entry.
  * @param path - Field path for error messages, e.g. "questions[0].options[0]".
+ * @param preferences - The session's ordered preference names.
  * @returns The option, typed.
  * @throws Error naming the offending field and value.
  */
-function validateOption(value: unknown, path: string): DecisionOption {
+function validateOption(value: unknown, path: string, preferences: string[]): DecisionOption {
   const option = requireRecord(value, path);
   requireNonEmptyString(option.label, `${path}.label`);
   requireNonEmptyString(option.entails, `${path}.entails`);
@@ -262,10 +292,29 @@ function validateOption(value: unknown, path: string): DecisionOption {
   if (typeof option.kind !== "string" || !kinds.includes(option.kind)) {
     throw new Error(`${path}.kind must be one of ${kinds.join("|")}, got: ${JSON.stringify(option.kind)}`);
   }
-  if (option.kind === "usual" || option.kind === "usual-and-pick") {
-    if (!Array.isArray(option.citesRules) || option.citesRules.length === 0) {
-      throw new Error(`${path}.citesRules must name at least one preference rule for a "${option.kind}" slot, got: ${JSON.stringify(option.citesRules)}`);
+  if (option.matches !== undefined) {
+    if (!Array.isArray(option.matches) || option.matches.length === 0) {
+      throw new Error(`${path}.matches must be a non-empty array when present, got: ${JSON.stringify(option.matches)}`);
     }
+    for (const name of option.matches) {
+      if (typeof name !== "string" || !preferences.includes(name)) {
+        throw new Error(`${path}.matches names a preference not in session.preferences: ${JSON.stringify(name)}`);
+      }
+    }
+  }
+  if ((option.kind === "usual" || option.kind === "usual-and-pick") && !option.matches) {
+    throw new Error(`${path}.matches must name at least one preference for a "${option.kind}" slot, got: ${JSON.stringify(option.matches)}`);
+  }
+  if (option.agentScore !== undefined) {
+    if (typeof option.agentScore !== "number" || option.agentScore < 0 || option.agentScore > 1) {
+      throw new Error(`${path}.agentScore must be a number in 0..1, got: ${JSON.stringify(option.agentScore)}`);
+    }
+  }
+  if (option.proposedPreferences !== undefined) {
+    if (!Array.isArray(option.proposedPreferences)) {
+      throw new Error(`${path}.proposedPreferences must be an array, got: ${JSON.stringify(option.proposedPreferences)}`);
+    }
+    option.proposedPreferences.forEach((p, i) => requireNonEmptyString(p, `${path}.proposedPreferences[${i}]`));
   }
   if (option.ifClause !== undefined) requireNonEmptyString(option.ifClause, `${path}.ifClause`);
   if (option.whyNotRecommended !== undefined) requireNonEmptyString(option.whyNotRecommended, `${path}.whyNotRecommended`);

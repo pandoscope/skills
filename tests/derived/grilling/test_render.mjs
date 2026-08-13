@@ -79,7 +79,7 @@ function validSession() {
   return JSON.parse(readFileSync(join(FIXTURES, "session.json"), "utf8"));
 }
 
-red.fails("valid session renders artifact html with injected JSON and a text fallback", () => {
+test("valid session renders artifact html with injected JSON and a text fallback", () => {
   const fixture = join(FIXTURES, "session.json");
   const { status, stderr, outDir } = render(fixture);
   assert.equal(status, 0, `renderer failed: ${stderr}`);
@@ -98,7 +98,7 @@ red.fails("valid session renders artifact html with injected JSON and a text fal
   assert.match(md, /^A3\. \*\*Free text\*\*/m, "renderer must append the free-text slot itself");
 });
 
-red.fails("slots carry count badges, the merged slot shows the recommendation badge too", () => {
+test("slots carry count badges, the merged slot shows the recommendation badge too", () => {
   const { status, stderr, outDir } = render(join(FIXTURES, "session.json"));
   assert.equal(status, 0, `renderer failed: ${stderr}`);
   const md = readFileSync(join(outDir, "session.md"), "utf8");
@@ -114,7 +114,7 @@ red.fails("slots carry count badges, the merged slot shows the recommendation ba
   assert.match(md, /"N, BAB …"/, "answer hint must offer the BAB shorthand");
 });
 
-red.fails("matched preferences become footnote refs resolving to ranked lineage entries", () => {
+test("matched preferences become footnote refs resolving to ranked lineage entries", () => {
   const { status, stderr, outDir } = render(join(FIXTURES, "session.json"));
   assert.equal(status, 0, `renderer failed: ${stderr}`);
   const md = readFileSync(join(outDir, "session.md"), "utf8");
@@ -127,7 +127,7 @@ red.fails("matched preferences become footnote refs resolving to ranked lineage 
   assert.doesNotMatch(md, /`tools-travel-with-their-skill`/, "full rule text must no longer be inlined in the prose");
 });
 
-red.fails("options carry normalized scores with a per-contribution breakdown", () => {
+test("options carry normalized scores with a per-contribution breakdown", () => {
   const { status, stderr, outDir } = render(join(FIXTURES, "session.json"));
   assert.equal(status, 0, `renderer failed: ${stderr}`);
   const md = readFileSync(join(outDir, "session.md"), "utf8");
@@ -140,7 +140,7 @@ red.fails("options carry normalized scores with a per-contribution breakdown", (
   assert.match(md, /proposed preference: a renderer used by two skills graduates to its own package/, "proposed preference missing");
 });
 
-red.fails("answer state is displayed: chosen free text with rejection reasons, and skips", () => {
+test("answer state is displayed: chosen free text with rejection reasons, and skips", () => {
   const { status, stderr, outDir } = render(join(FIXTURES, "session.json"));
   assert.equal(status, 0, `renderer failed: ${stderr}`);
   const md = readFileSync(join(outDir, "session.md"), "utf8");
@@ -149,7 +149,7 @@ red.fails("answer state is displayed: chosen free text with rejection reasons, a
   assert.match(md, /S1Q3: skipped/, "skip state missing");
 });
 
-red.fails("rejects sessions violating the schema, naming the offending field", () => {
+test("rejects sessions violating the schema, naming the offending field", () => {
   const cases = [
     ["version 1 document", (s) => (s.version = 1), /version.*1/],
     ["missing session number", (s) => delete s.session, /session/],
