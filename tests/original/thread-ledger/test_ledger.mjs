@@ -3428,3 +3428,115 @@ describe("RenderPullsTheStoreFirst", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 });
+
+// The writer and the checker must touch one clone. `resolveRoot`
+// consults neither SESSION_ROOT nor session.env, so in any environment
+// whose session root is not /workspace it resolves past a perfectly
+// good harness clone and mints a second one — after which every
+// heartbeat claim is judged against a copy nobody writes (#122).
+//
+// DECISION: the clone attempt is made observable rather than
+// performed — a git shim on PATH refuses any clone targeting outside
+// the sandbox. Asserting on the real side effect would have the test
+// write /workspace on whatever machine runs it, and the defect is
+// proven either way: the shim's log names the attempt, and where a
+// store already sits at the hardcoded default the origin check refuses
+// first. Measured while writing this test: with the shim's first
+// version inspecting only $1, the clone went through and landed a real
+// second store — the caller passes `-C <dir>` before the subcommand.
+describe("OneCloneForWriterAndChecker", () => {
+  function sh(dir, ...args) {
+    const result = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8" });
+    assert.equal(result.status, 0, `git ${args.join(" ")} failed:\n${result.stderr}`);
+    return result.stdout;
+  }
+
+  /** PATH entry whose `git` logs and refuses clones aimed outside `sandbox`. */
+  function gitShim(sandbox) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ledger-shim-"));
+    const log = path.join(dir, "clones.log");
+    const real = spawnSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).stdout.trim();
+    fs.writeFileSync(
+      path.join(dir, "git"),
+      [
+        "#!/bin/sh",
+        // `clone` is not necessarily $1: the caller passes `-C <dir>`
+        // ahead of the subcommand. Scanning every argument is what
+        // makes the refusal hold — a shim that only inspected $1 let
+        // the very clone it existed to prevent through, and the test
+        // wrote /workspace on the machine running it.
+        'for arg in "$@"; do [ "$arg" = "clone" ] && is_clone=1; done',
+        'if [ -n "${is_clone:-}" ]; then',
+        `  printf '%s\\n' "$*" >> ${JSON.stringify(log)}`,
+        '  for arg in "$@"; do',
+        `    case "$arg" in ${sandbox}|${sandbox}/*) ;; /*) echo "shim: refused clone outside sandbox: $arg" >&2; exit 3;; esac`,
+        "  done",
+        "fi",
+        `exec ${JSON.stringify(real)} "$@"`,
+      ].join("\n"),
+      { mode: 0o755 },
+    );
+    return { dir, log };
+  }
+
+  /** A session root as the harness leaves it: one store clone, session.env beside it. */
+  function harnessSession() {
+    const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "ledger-session-"));
+    const origin = path.join(sandbox, "remote.git");
+    spawnSync("git", ["init", "-q", "--bare", "-b", "main", origin], { encoding: "utf8" });
+
+    const store = path.join(sandbox, "session-memory");
+    assert.equal(spawnSync("git", ["clone", "-q", origin, store], { encoding: "utf8" }).status, 0);
+    sh(store, "config", "user.email", "t@example.test");
+    sh(store, "config", "user.name", "t");
+    fs.mkdirSync(path.join(store, "ledger"), { recursive: true });
+    fs.writeFileSync(path.join(store, "ledger", ".keep"), "");
+    sh(store, "add", "-A");
+    sh(store, "commit", "-q", "-m", "seed");
+    sh(store, "push", "-q", "-u", "origin", "main");
+
+    const home = path.join(sandbox, "home");
+    fs.mkdirSync(path.join(home, ".claude"), { recursive: true });
+    fs.writeFileSync(path.join(home, ".claude", "session.env"), `SESSION_ROOT=${sandbox}\n`);
+    return { sandbox, origin, store, home };
+  }
+
+  it("an append with no --root writes the harness clone the heartbeat folds", () => {
+    const { sandbox, origin, store, home } = harnessSession();
+    const shim = gitShim(sandbox);
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        path.join(SKILL, "ledger.mjs"), "append",
+        "--ev", "opened", "--thread", "t", "--title", "t", "--ticket", "o/r#1",
+        "--session-url", "https://x.test/code/session_1", "--no-push",
+      ],
+      {
+        encoding: "utf8",
+        cwd: sandbox,
+        env: {
+          PATH: `${shim.dir}:${process.env.PATH}`,
+          HOME: home,
+          SESSION_MEMORY_URL: origin,
+        },
+      },
+    );
+
+    // The checker folds $SESSION_ROOT/session-memory (sk56-sentinel.sh
+    // computes exactly that), so the writer's event has to be there.
+    const log = path.join(store, "ledger", "session_1.jsonl");
+    assert.ok(
+      fs.existsSync(log),
+      `append did not write the harness clone.\nstdout: ${result.stdout}\nstderr: ${result.stderr}`,
+    );
+    // And it must get there without minting clone №2 (meta#67).
+    assert.equal(
+      fs.existsSync(shim.log) ? fs.readFileSync(shim.log, "utf8") : "",
+      "",
+      "the writer cloned a second store instead of resolving the harness clone",
+    );
+    fs.rmSync(sandbox, { recursive: true, force: true });
+    fs.rmSync(shim.dir, { recursive: true, force: true });
+  });
+});
