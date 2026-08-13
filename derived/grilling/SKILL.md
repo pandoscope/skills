@@ -21,24 +21,27 @@ Do not act until user confirms shared understanding.
 
 Every decision point = multiple choice. Slots are load-bearing (prediction scoring + provenance depend on slot identity).
 
-NEVER hand-format a question. Author ONLY decision-context JSON (contract + field docs: `render/decision-context.ts` in this skill's directory), then derive both user-facing forms:
+Naming: question `S«s»Q«q»` (grilling session, question), answer `S«s»Q«q»A«n»`.
+
+NEVER hand-format a question. Author ONLY grilling-session JSON (contract + field docs: `render/decision-context.ts` in this skill's directory) holding every question asked so far plus recorded answer state, then derive both user-facing forms:
 
 ```bash
-node --experimental-strip-types <skill-dir>/render/render.ts <context.json> --out <dir>
+node --experimental-strip-types <skill-dir>/render/render.ts <session.json> --out <dir>
 ```
 
-- `question.html` — publish as artifact (per-session URL: publish the first question, redeploy the same artifact for each next one). Full context, lineage panel, no dialog size limits.
-- `question.md` — pure-text fallback; paste verbatim when artifact publishing is unavailable.
+- `session.html` — publish as artifact, redeploying the same artifact URL as the session grows. Interactive: previous/next navigation across questions, clickable slots whose state persists while navigating, rejection-reason checkboxes once the choice diverges from A1 (several may apply), a free-text box, per-question skip, and "Copy answers as JSON".
+- `session.md` — pure-text fallback; paste verbatim when artifact publishing is unavailable.
+- Follow-up loop: when an answer spawns follow-up questions, append them to the session JSON together with the answers received so far and re-render — recorded state is carried forward into the page.
 - Validation failure names the offending field — fix the JSON, re-run. The renderer appends the free-text slot itself; never list it.
 
-Answers arrive as plain chat replies (slot number, or the correction affordance below). Do not use timed question dialogs — they close while the user is still typing and cannot hold the full context.
+Answers arrive either as the page's copied answer JSON pasted into chat, or as plain chat replies: answer id ("S1Q2A1" or just "1"), correction via "N, but actually because …" — shorthand "N, BAB …". Do not use timed question dialogs — they close while the user is still typing and cannot hold the full context.
 
-Slot semantics (the JSON `kind` field):
+Slot semantics (the JSON `kind` field; badges are rendered from it — `prediction — matches your usual`, `recommendation — my pick`, `wildcard`):
 
-- `usual` exploitative — what the active preference set predicts user picks, iff an active preference rule applies, cited by name in `citesRules` — never from vibes. No citable rule → slots 1/2 merge into a cold `pick`; the "no active rule applies" claim is itself recorded via `lineage.cold` (records carry the injected preference set — replay flags matching-but-uncited rules, so a false cold claim is a detectable provenance defect). Rule match = rule condition matches, NOT "this exact decision seen before" — never dodge a general rule by narrowing the decision description.
-- `pick` = agent's independent best, formed on merits, not preferences. Coincides with the usual (common case) → merge into one `usual-and-pick` slot; runner-up becomes a plain `alternative`.
+- `usual` exploitative — what the active preference set predicts user picks, iff an active preference rule applies, cited by name in `citesRules` — never from vibes. Weave the verbatim rule into the `entails` prose in backticks (rendered monospace). No citable rule → slots 1/2 merge into a cold `pick`; the "no active rule applies" claim is itself recorded via `lineage.cold` (records carry the injected preference set — replay flags matching-but-uncited rules, so a false cold claim is a detectable provenance defect). Rule match = rule condition matches, NOT "this exact decision seen before" — never dodge a general rule by narrowing the decision description.
+- `pick` = agent's independent best, formed on merits, not preferences. Diverging from the usual → its `ifClause` argues against the prediction: the condition under which it beats A1. Coincides with the usual (common case) → merge into one `usual-and-pick` slot; runner-up becomes a plain `alternative`.
 - `wildcard` exploratory — ONLY when a genuinely plausible unexplored branch exists; else omit. Mandatory wildcards → filler → user stops reading the slot, exploration channel dies.
-- Free text — always; appended by the renderer.
+- Free text — always; appended by the renderer, with a text box in the artifact page.
 
 Rules:
 
