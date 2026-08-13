@@ -79,7 +79,7 @@ function validContext() {
   return JSON.parse(readFileSync(join(FIXTURES, "valid-cold.json"), "utf8"));
 }
 
-red.fails("rejects contexts violating the schema, naming the offending field", () => {
+test("rejects contexts violating the schema, naming the offending field", () => {
   const cases = [
     ["question", (ctx) => delete ctx.question, /question/],
     ["version", (ctx) => (ctx.version = 2), /version.*2/],
