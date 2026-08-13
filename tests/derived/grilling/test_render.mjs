@@ -110,6 +110,17 @@ test("rejects contexts violating the schema, naming the offending field", () => 
   }
 });
 
+red.fails("script-closing sequences in context text cannot break out of the data tag", () => {
+  const ctx = validContext();
+  ctx.options[0].entails = 'renders literally: </script><script>alert("x")</script>';
+  const { status, stderr, outDir } = render(contextFile(ctx));
+  assert.equal(status, 0, `renderer failed: ${stderr}`);
+  const html = readFileSync(join(outDir, "question.html"), "utf8");
+  const raw = embeddedJson(html);
+  assert.ok(!raw.includes("</script"), "injected JSON contains a literal script-closing sequence");
+  assert.deepEqual(JSON.parse(raw), ctx, "escaped JSON must still round-trip to the input context");
+});
+
 test("valid context renders artifact html with injected JSON and a text fallback", () => {
   const fixture = join(FIXTURES, "valid-cold.json");
   const { status, stderr, outDir } = render(fixture);
