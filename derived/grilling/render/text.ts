@@ -1,37 +1,54 @@
 /**
- * Markdown projection of the grilling view model — the pure-text fallback
- * used when publishing an artifact is not possible.
+ * Markdown projection of the grilling session view model — the pure-text
+ * fallback used when publishing an artifact is not possible.
  */
 
-import type { ViewModel, OptionView } from "./view-model.ts";
+import type { SessionViewModel, QuestionViewModel, OptionView } from "./view-model.ts";
 
 /**
- * Render a view model as markdown.
+ * Render a session view model as markdown.
  *
- * @param vm - The view model of one grilling question.
+ * @param vm - The view model of one grilling session.
  * @returns Markdown text ending in a newline.
  */
-export function renderMarkdown(vm: ViewModel): string {
-  const lines: string[] = [`## ${vm.heading} — ${vm.question}`, ""];
-  if (vm.context) lines.push(vm.context, "");
-  for (const option of vm.options) lines.push(optionLine(option));
-  if (vm.nearTieNote) lines.push("", vm.nearTieNote);
-  lines.push("", "### Lineage", "");
-  if (vm.lineage.coldNote) lines.push(vm.lineage.coldNote);
-  for (const rule of vm.lineage.rules) lines.push(`- ${rule.name} — ${rule.disposition}`);
-  lines.push("", `*${vm.answerHint}*`, "");
+export function renderMarkdown(vm: SessionViewModel): string {
+  const lines: string[] = [`# ${vm.title}`, ""];
+  for (const question of vm.questions) lines.push(...questionLines(question));
+  lines.push(`*${vm.answerHint}*`, "");
   return lines.join("\n");
 }
 
 /**
- * Format one slot as a numbered markdown list line.
+ * Format one question as markdown lines.
+ *
+ * @param q - The question view model.
+ * @returns Lines for the question section, trailing blank line included.
+ */
+function questionLines(q: QuestionViewModel): string[] {
+  const lines: string[] = [`## ${q.id} — ${q.question}`, ""];
+  if (q.context) lines.push(q.context, "");
+  for (const option of q.options) lines.push(optionLine(option));
+  if (q.nearTieNote) lines.push("", q.nearTieNote);
+  lines.push("", "### Lineage", "");
+  if (q.lineage.coldNote) lines.push(q.lineage.coldNote);
+  for (const rule of q.lineage.rules) lines.push(`- ${rule.name} — ${rule.disposition}`);
+  if (q.answered) {
+    lines.push("", `> ${q.answered.line}`);
+    for (const rejected of q.answered.rejected) lines.push(`> ${rejected}`);
+  }
+  lines.push("");
+  return lines;
+}
+
+/**
+ * Format one slot as an A-numbered markdown list line.
  *
  * @param option - The slot to format.
- * @returns One line, e.g. "2. **SQLite** (wildcard, if ...) — zero ops".
+ * @returns One line, e.g. "A2. **SQLite** (wildcard, if ...) — zero ops".
  */
 function optionLine(option: OptionView): string {
   const annotations = [option.badge, option.ifClause ? `if ${option.ifClause}` : undefined].filter(Boolean);
   const paren = annotations.length ? ` (${annotations.join(", ")})` : "";
   const whyNot = option.whyNotRecommended ? ` — why not recommended: ${option.whyNotRecommended}` : "";
-  return `${option.number}. **${option.label}**${paren} — ${option.entails}${whyNot}`;
+  return `${option.id}. **${option.label}**${paren} — ${option.entails}${whyNot}`;
 }

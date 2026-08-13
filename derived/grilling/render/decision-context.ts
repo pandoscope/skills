@@ -1,19 +1,33 @@
 /**
- * Decision context — the JSON contract between the grilling model and the
+ * Grilling session — the JSON contract between the grilling model and the
  * renderers. The model authors ONLY this data; every user-facing form
- * (artifact HTML, text fallback) is derived from it mechanically, so the
- * question format cannot drift.
+ * (interactive artifact page, text fallback) is derived from it
+ * mechanically, so the question format cannot drift.
  *
  * This module is the single authority for the schema: types define the
- * shape, `validateDecisionContext` enforces it. There is no separate
+ * shape, `validateGrillingSession` enforces it. There is no separate
  * JSON-Schema file to keep in sync.
+ *
+ * Naming: question `S«session»Q«seq»`, answer `S«session»Q«seq»A«slot»`.
  */
 
-/** One grilling question put to the user, with full provenance. */
-export interface DecisionContext {
-  /** Schema version; this module implements version 1. */
-  version: 1;
-  /** 1-based sequence number of the question within the session. */
+/** One grilling session: every question asked so far, with answer state. */
+export interface GrillingSession {
+  /** Schema version; this module implements version 2. */
+  version: 2;
+  /** 1-based grilling session number (the S in S1Q1). */
+  session: number;
+  /**
+   * Questions in the order they were asked, unique `seq` each. Follow-up
+   * questions are appended and the session re-rendered with the answer
+   * state carried forward.
+   */
+  questions: DecisionQuestion[];
+}
+
+/** One decision put to the user, with full provenance and answer state. */
+export interface DecisionQuestion {
+  /** 1-based question number within the session (the Q in S1Q1). */
   seq: number;
   /** The decision being put to the user, phrased as a question. */
   question: string;
@@ -23,14 +37,17 @@ export interface DecisionContext {
    */
   context?: string;
   /**
-   * Listed options, slot 1..N in order (1-3 entries). The free-text slot
-   * is appended by the renderers automatically and must not be listed.
+   * Listed options, slot A1..AN in order (1-3 entries). The free-text
+   * slot is appended by the renderers automatically and must not be
+   * listed.
    */
   options: DecisionOption[];
   /** Near-tie between listed slots (1-based) and what they differ on. */
   nearTie?: NearTie;
   /** Which preference rules were considered — the lineage display. */
   lineage: Lineage;
+  /** The user's answer, once given; absent while open. */
+  answer?: AnswerState;
 }
 
 /** A listed option (slot) of a grilling question. */
@@ -48,7 +65,11 @@ export interface DecisionOption {
   kind: "usual" | "pick" | "usual-and-pick" | "wildcard" | "alternative";
   /** Condition under which this option beats the recommendation. */
   ifClause?: string;
-  /** What choosing this option entails. */
+  /**
+   * What choosing this option entails. Cite the preference rules the
+   * reasoning draws on inline, verbatim, in backticks — rendered as
+   * monospace in the artifact page and kept as code spans in markdown.
+   */
   entails: string;
   /**
    * Names of active preference rules this slot cites. Required non-empty
@@ -87,67 +108,149 @@ export interface ConsideredRule {
 }
 
 /**
- * Validate an untyped value as a version-1 DecisionContext.
+ * The user's answer to one question — mirrors the interactive page's
+ * exported state so a copied answer JSON can be re-injected verbatim on
+ * re-render.
+ */
+export interface AnswerState {
+  /** Chosen slot number, free-text slot included; absent when skipped. */
+  chosen?: number;
+  /** The free-text ruling, when the free-text slot was chosen. */
+  freeText?: string;
+  /**
+   * Rejection reasons confirmed for the non-chosen options (checkbox
+   * selections — several may apply), recorded verbatim.
+   */
+  rejectionReasons?: string[];
+  /**
+   * Correction affordance ("N, but actually because …" / "N, BAB …"):
+   * the chosen option accepted, its stated if-clause overridden by this
+   * text. Highest-signal event type.
+   */
+  correction?: string;
+  /** True when the user skipped the question. */
+  skipped?: boolean;
+}
+
+/**
+ * Validate an untyped value as a version-2 GrillingSession.
  *
  * @param value - Parsed JSON of unknown shape.
  * @returns The same value, typed, when it satisfies the schema.
  * @throws Error naming the offending field and its value on the first
  *   violation found.
  */
-export function validateDecisionContext(value: unknown): DecisionContext {
-  const ctx = requireRecord(value, "decision context");
-  if (ctx.version !== 1) {
-    throw new Error(`version must be 1, got: ${JSON.stringify(ctx.version)}`);
+export function validateGrillingSession(value: unknown): GrillingSession {
+  const session = requireRecord(value, "grilling session");
+  if (session.version !== 2) {
+    throw new Error(`version must be 2, got: ${JSON.stringify(session.version)}`);
   }
-  if (typeof ctx.seq !== "number" || !Number.isInteger(ctx.seq) || ctx.seq < 1) {
-    throw new Error(`seq must be a positive integer, got: ${JSON.stringify(ctx.seq)}`);
+  requirePositiveInteger(session.session, "session");
+  if (!Array.isArray(session.questions) || session.questions.length === 0) {
+    throw new Error(`questions must be a non-empty array, got: ${JSON.stringify(session.questions)}`);
   }
-  requireNonEmptyString(ctx.question, "question");
-  if (ctx.context !== undefined) requireNonEmptyString(ctx.context, "context");
+  const seen = new Set<number>();
+  session.questions.forEach((question, i) => {
+    const q = validateQuestion(question, `questions[${i}]`);
+    if (seen.has(q.seq)) {
+      throw new Error(`questions[${i}].seq duplicates an earlier question: ${q.seq}`);
+    }
+    seen.add(q.seq);
+  });
+  return value as GrillingSession;
+}
 
-  if (!Array.isArray(ctx.options) || ctx.options.length < 1 || ctx.options.length > 3) {
-    throw new Error(`options must list 1-3 slots (free text is appended automatically), got: ${JSON.stringify(ctx.options)}`);
-  }
-  const options = ctx.options.map((option, i) => validateOption(option, `options[${i}]`));
+/**
+ * Validate one question.
+ *
+ * @param value - Untyped question entry.
+ * @param path - Field path for error messages, e.g. "questions[0]".
+ * @returns The question, typed.
+ * @throws Error naming the offending field and value.
+ */
+function validateQuestion(value: unknown, path: string): DecisionQuestion {
+  const q = requireRecord(value, path);
+  requirePositiveInteger(q.seq, `${path}.seq`);
+  requireNonEmptyString(q.question, `${path}.question`);
+  if (q.context !== undefined) requireNonEmptyString(q.context, `${path}.context`);
 
-  const lineage = requireRecord(ctx.lineage, "lineage");
+  if (!Array.isArray(q.options) || q.options.length < 1 || q.options.length > 3) {
+    throw new Error(`${path}.options must list 1-3 slots (free text is appended automatically), got: ${JSON.stringify(q.options)}`);
+  }
+  const options = q.options.map((option, i) => validateOption(option, `${path}.options[${i}]`));
+
+  const lineage = requireRecord(q.lineage, `${path}.lineage`);
   if (typeof lineage.cold !== "boolean") {
-    throw new Error(`lineage.cold must be a boolean, got: ${JSON.stringify(lineage.cold)}`);
+    throw new Error(`${path}.lineage.cold must be a boolean, got: ${JSON.stringify(lineage.cold)}`);
   }
   if (!Array.isArray(lineage.rulesConsidered)) {
-    throw new Error(`lineage.rulesConsidered must be an array, got: ${JSON.stringify(lineage.rulesConsidered)}`);
+    throw new Error(`${path}.lineage.rulesConsidered must be an array, got: ${JSON.stringify(lineage.rulesConsidered)}`);
   }
   lineage.rulesConsidered.forEach((rule, i) => {
-    const record = requireRecord(rule, `lineage.rulesConsidered[${i}]`);
-    requireNonEmptyString(record.name, `lineage.rulesConsidered[${i}].name`);
-    requireNonEmptyString(record.disposition, `lineage.rulesConsidered[${i}].disposition`);
+    const record = requireRecord(rule, `${path}.lineage.rulesConsidered[${i}]`);
+    requireNonEmptyString(record.name, `${path}.lineage.rulesConsidered[${i}].name`);
+    requireNonEmptyString(record.disposition, `${path}.lineage.rulesConsidered[${i}].disposition`);
   });
 
   const usualSlots = options.filter((o) => o.kind === "usual" || o.kind === "usual-and-pick");
   if (lineage.cold && usualSlots.length > 0) {
-    throw new Error(`lineage.cold is true but slot "${usualSlots[0].label}" claims a usual kind — a cold recommendation has no applying rule`);
+    throw new Error(`${path}.lineage.cold is true but slot "${usualSlots[0].label}" claims a usual kind — a cold recommendation has no applying rule`);
   }
 
-  if (ctx.nearTie !== undefined) {
-    const nearTie = requireRecord(ctx.nearTie, "nearTie");
+  if (q.nearTie !== undefined) {
+    const nearTie = requireRecord(q.nearTie, `${path}.nearTie`);
     if (
       !Array.isArray(nearTie.slots) ||
       nearTie.slots.length < 2 ||
       nearTie.slots.some((s) => typeof s !== "number" || s < 1 || s > options.length)
     ) {
-      throw new Error(`nearTie.slots must name at least two listed slots (1-${options.length}), got: ${JSON.stringify(nearTie.slots)}`);
+      throw new Error(`${path}.nearTie.slots must name at least two listed slots (1-${options.length}), got: ${JSON.stringify(nearTie.slots)}`);
     }
-    requireNonEmptyString(nearTie.differsOn, "nearTie.differsOn");
+    requireNonEmptyString(nearTie.differsOn, `${path}.nearTie.differsOn`);
   }
 
-  return value as DecisionContext;
+  if (q.answer !== undefined) validateAnswer(q.answer, options.length, `${path}.answer`);
+  return value as DecisionQuestion;
+}
+
+/**
+ * Validate one answer state.
+ *
+ * @param value - Untyped answer entry.
+ * @param listedCount - Number of listed options (free-text slot is
+ *   listedCount + 1).
+ * @param path - Field path for error messages.
+ * @throws Error naming the offending field and value.
+ */
+function validateAnswer(value: unknown, listedCount: number, path: string): void {
+  const answer = requireRecord(value, path);
+  const freeTextSlot = listedCount + 1;
+  if (answer.chosen !== undefined) {
+    if (typeof answer.chosen !== "number" || !Number.isInteger(answer.chosen) || answer.chosen < 1 || answer.chosen > freeTextSlot) {
+      throw new Error(`${path}.chosen must be a slot number 1-${freeTextSlot}, got: ${JSON.stringify(answer.chosen)}`);
+    }
+  }
+  if (answer.skipped !== undefined && typeof answer.skipped !== "boolean") {
+    throw new Error(`${path}.skipped must be a boolean, got: ${JSON.stringify(answer.skipped)}`);
+  }
+  if (answer.chosen === undefined && answer.skipped !== true) {
+    throw new Error(`${path} must either choose a slot or be skipped, got: ${JSON.stringify(answer)}`);
+  }
+  if (answer.freeText !== undefined) requireNonEmptyString(answer.freeText, `${path}.freeText`);
+  if (answer.correction !== undefined) requireNonEmptyString(answer.correction, `${path}.correction`);
+  if (answer.rejectionReasons !== undefined) {
+    if (!Array.isArray(answer.rejectionReasons)) {
+      throw new Error(`${path}.rejectionReasons must be an array, got: ${JSON.stringify(answer.rejectionReasons)}`);
+    }
+    answer.rejectionReasons.forEach((reason, i) => requireNonEmptyString(reason, `${path}.rejectionReasons[${i}]`));
+  }
 }
 
 /**
  * Validate one listed option.
  *
  * @param value - Untyped option entry.
- * @param path - Field path for error messages, e.g. "options[0]".
+ * @param path - Field path for error messages, e.g. "questions[0].options[0]".
  * @returns The option, typed.
  * @throws Error naming the offending field and value.
  */
@@ -182,6 +285,19 @@ function requireRecord(value: unknown, path: string): Record<string, unknown> {
     throw new Error(`${path} must be an object, got: ${JSON.stringify(value)}`);
   }
   return value as Record<string, unknown>;
+}
+
+/**
+ * Require a value to be a positive integer.
+ *
+ * @param value - The value to check.
+ * @param path - Field path for error messages.
+ * @throws Error naming the field and value otherwise.
+ */
+function requirePositiveInteger(value: unknown, path: string): void {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
+    throw new Error(`${path} must be a positive integer, got: ${JSON.stringify(value)}`);
+  }
 }
 
 /**

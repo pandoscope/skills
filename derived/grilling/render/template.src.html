@@ -43,6 +43,45 @@
     flex-direction: column;
     gap: 1.25rem;
   }
+  .session-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+  .session-title {
+    color: var(--muted);
+    font-weight: 700;
+    font-size: 0.85rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .question-nav {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+  .nav-position {
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  button {
+    font: inherit;
+    color: var(--fg);
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.35rem 0.9rem;
+    cursor: pointer;
+  }
+  button:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+  button:not(:disabled):hover {
+    border-color: var(--accent);
+  }
   .question-header .question-seq {
     color: var(--accent);
     font-weight: 700;
@@ -111,6 +150,80 @@
   .option-why-not {
     margin: 0.4rem 0 0;
     color: var(--muted);
+  }
+  .option {
+    cursor: pointer;
+  }
+  .option:hover {
+    border-color: var(--accent);
+  }
+  .option.selected {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+  .option-entails code,
+  .why-reason-text code {
+    font-family: ui-monospace, monospace;
+    font-size: 0.9em;
+    background: var(--accent-soft);
+    border-radius: 4px;
+    padding: 0 0.25em;
+  }
+  .free-text-input,
+  .correction-input,
+  .export-box {
+    font: inherit;
+    color: var(--fg);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.5rem 0.7rem;
+    width: 100%;
+    box-sizing: border-box;
+    margin-top: 0.5rem;
+  }
+  .free-text-input,
+  .export-box {
+    min-height: 4.5rem;
+    resize: vertical;
+  }
+  .export-box {
+    font-family: ui-monospace, monospace;
+    font-size: 0.85rem;
+  }
+  .why-block {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.9rem 1.1rem;
+  }
+  .why-reason {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin: 0.25rem 0;
+    cursor: pointer;
+  }
+  .question-controls {
+    display: flex;
+    justify-content: flex-end;
+  }
+  .skip-button,
+  .copy-button {
+    color: var(--muted);
+  }
+  .copy-button {
+    color: var(--accent);
+    font-weight: 650;
+  }
+  .copy-note {
+    margin: 0.4rem 0 0;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  .session-footer {
+    border-top: 1px solid var(--border);
+    padding-top: 1rem;
   }
   .near-tie {
     margin: 0;
