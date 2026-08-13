@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, existsSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -60,6 +60,55 @@ function embeddedJson(html) {
   assert.ok(m, "question.html carries no decision-context data script tag");
   return m[1];
 }
+
+/**
+ * Write a decision-context object to a temp file.
+ *
+ * @param {object} ctx - The context to serialize.
+ * @returns {string} Path of the written JSON file.
+ */
+function contextFile(ctx) {
+  const dir = mkdtempSync(join(tmpdir(), "grilling-ctx-"));
+  const path = join(dir, "context.json");
+  writeFileSync(path, JSON.stringify(ctx));
+  return path;
+}
+
+/** A minimal valid cold context to mutate in validation tests. */
+function validContext() {
+  return JSON.parse(readFileSync(join(FIXTURES, "valid-cold.json"), "utf8"));
+}
+
+red.fails("rejects contexts violating the schema, naming the offending field", () => {
+  const cases = [
+    ["question", (ctx) => delete ctx.question, /question/],
+    ["version", (ctx) => (ctx.version = 2), /version.*2/],
+    ["empty options", (ctx) => (ctx.options = []), /options/],
+    ["too many options", (ctx) => (ctx.options = Array(4).fill(ctx.options[0])), /options/],
+    ["unknown kind", (ctx) => (ctx.options[0].kind = "maybe"), /kind.*maybe/],
+    ["missing lineage", (ctx) => delete ctx.lineage, /lineage/],
+    [
+      "cold contradicted by a usual slot",
+      (ctx) => {
+        ctx.options[0].kind = "usual";
+        ctx.options[0].citesRules = ["prefer-boring-tech"];
+      },
+      /cold/,
+    ],
+    ["usual slot without cited rules", (ctx) => {
+      ctx.lineage.cold = false;
+      ctx.options[0].kind = "usual";
+    }, /citesRules/],
+    ["near-tie pointing at a missing slot", (ctx) => (ctx.nearTie = { slots: [1, 7], differsOn: "ops" }), /nearTie/],
+  ];
+  for (const [name, mutate, expected] of cases) {
+    const ctx = validContext();
+    mutate(ctx);
+    const { status, stderr } = render(contextFile(ctx));
+    assert.equal(status, 1, `${name}: expected rejection, got exit ${status}`);
+    assert.match(stderr, expected, `${name}: error does not name the field/value`);
+  }
+});
 
 test("valid context renders artifact html with injected JSON and a text fallback", () => {
   const fixture = join(FIXTURES, "valid-cold.json");
