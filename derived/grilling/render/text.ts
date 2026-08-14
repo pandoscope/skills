@@ -39,6 +39,7 @@ function questionLines(q: QuestionViewModel): string[] {
   if (q.answered) {
     lines.push("", `> ${q.answered.line}`);
     for (const rejected of q.answered.rejected) lines.push(`> ${rejected}`);
+    for (const disconfirmed of q.answered.disconfirmed) lines.push(`> ${disconfirmed}`);
   }
   lines.push("");
   return lines;

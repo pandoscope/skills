@@ -43,6 +43,13 @@ Slot semantics (the JSON `kind` field; badges are rendered from it — `predicti
 - `wildcard` exploratory — ONLY when a genuinely plausible unexplored branch exists; else omit. Mandatory wildcards → filler → user stops reading the slot, exploration channel dies.
 - Free text — always; appended by the renderer, with a text box in the artifact page.
 
+Citation rules (decision-memory format split, agentic-engineering-template#163/#164):
+
+- Cite per option, not only on the prediction slot: every option a current preference genuinely supports names that rule in its own `matches` — this maps to the record's `options[].rules_cited` and is what makes rule-vs-rule contests recordable (chosen option's cited rules beat the declined options'). One rule per string.
+- Cite with resolvable text: each entry of `preferences` (and thus each match) must be a verbatim-enough fragment of the rule's line in `preferences.txt` — the extraction tally maps citations by normalized containment, and paraphrases silently drop out.
+- Disconfirmed rules: when the decider says a presented rule isn't relevant ("not relevant here" toggle in the page, `disconfirmedPreferences` in the answer state), record it distinctly — record-level `rules_disconfirmed` — so it counts as neither a win nor a loss.
+- Invariants: exactly one option carries the prediction role (validated); `prediction_stream` is `preference-driven` iff the prediction slot cites rules; recommendations are never back-filled.
+
 Scoring: the session-level `preferences` list is the active set in preference-file order (earlier = higher priority); ranks become weights via rank-order-centroid. An option's score = its matched preference weights + `agentScore` (0..1, the agent's own leaning) capped by the top preference weight so agent judgment never outvotes the user's highest-ranked preference. Rendered as percent of the question total; hover (page) or the parenthetical (markdown) shows which preference — or the agent's judgment — contributed how much.
 
 Rules:

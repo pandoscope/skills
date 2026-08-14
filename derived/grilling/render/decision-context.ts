@@ -148,6 +148,12 @@ export interface AnswerState {
    * text. Highest-signal event type.
    */
   correction?: string;
+  /**
+   * Cited preferences the decider disconfirms ("that rule isn't relevant
+   * here") — recorded distinctly so the extraction tally counts them as
+   * neither a win nor a loss (record-level rules_disconfirmed).
+   */
+  disconfirmedPreferences?: string[];
   /** True when the user skipped the question. */
   skipped?: boolean;
 }
@@ -225,6 +231,9 @@ function validateQuestion(value: unknown, path: string, preferences: string[]): 
   if (lineage.cold && usualSlots.length > 0) {
     throw new Error(`${path}.lineage.cold is true but slot "${usualSlots[0].label}" claims a usual kind — a cold recommendation has no applying rule`);
   }
+  if (usualSlots.length > 1) {
+    throw new Error(`${path} carries ${usualSlots.length} prediction-role slots — exactly one option may carry the prediction role`);
+  }
 
   if (q.nearTie !== undefined) {
     const nearTie = requireRecord(q.nearTie, `${path}.nearTie`);
@@ -238,7 +247,7 @@ function validateQuestion(value: unknown, path: string, preferences: string[]): 
     requireNonEmptyString(nearTie.differsOn, `${path}.nearTie.differsOn`);
   }
 
-  if (q.answer !== undefined) validateAnswer(q.answer, options.length, `${path}.answer`);
+  if (q.answer !== undefined) validateAnswer(q.answer, options.length, `${path}.answer`, preferences);
   return value as DecisionQuestion;
 }
 
@@ -249,9 +258,10 @@ function validateQuestion(value: unknown, path: string, preferences: string[]): 
  * @param listedCount - Number of listed options (free-text slot is
  *   listedCount + 1).
  * @param path - Field path for error messages.
+ * @param preferences - The session's ordered preference names.
  * @throws Error naming the offending field and value.
  */
-function validateAnswer(value: unknown, listedCount: number, path: string): void {
+function validateAnswer(value: unknown, listedCount: number, path: string, preferences: string[]): void {
   const answer = requireRecord(value, path);
   const freeTextSlot = listedCount + 1;
   if (answer.chosen !== undefined) {
@@ -272,6 +282,16 @@ function validateAnswer(value: unknown, listedCount: number, path: string): void
       throw new Error(`${path}.rejectionReasons must be an array, got: ${JSON.stringify(answer.rejectionReasons)}`);
     }
     answer.rejectionReasons.forEach((reason, i) => requireNonEmptyString(reason, `${path}.rejectionReasons[${i}]`));
+  }
+  if (answer.disconfirmedPreferences !== undefined) {
+    if (!Array.isArray(answer.disconfirmedPreferences)) {
+      throw new Error(`${path}.disconfirmedPreferences must be an array, got: ${JSON.stringify(answer.disconfirmedPreferences)}`);
+    }
+    for (const name of answer.disconfirmedPreferences) {
+      if (typeof name !== "string" || !preferences.includes(name)) {
+        throw new Error(`${path}.disconfirmedPreferences names a preference not in session.preferences: ${JSON.stringify(name)}`);
+      }
+    }
   }
 }
 

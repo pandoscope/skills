@@ -140,7 +140,7 @@ test("options carry normalized scores with a per-contribution breakdown", () => 
   assert.match(md, /proposed preference: a renderer used by two skills graduates to its own package/, "proposed preference missing");
 });
 
-red.fails("answer state is displayed: chosen free text with rejection reasons, and skips", () => {
+test("answer state is displayed: chosen free text with rejection reasons, and skips", () => {
   const { status, stderr, outDir } = render(join(FIXTURES, "session.json"));
   assert.equal(status, 0, `renderer failed: ${stderr}`);
   const md = readFileSync(join(outDir, "session.md"), "utf8");
@@ -150,7 +150,7 @@ red.fails("answer state is displayed: chosen free text with rejection reasons, a
   assert.match(md, /Disconfirmed: prefer-boring-tech/, "disconfirmed-rule display missing");
 });
 
-red.fails("rejects sessions violating the schema, naming the offending field", () => {
+test("rejects sessions violating the schema, naming the offending field", () => {
   const cases = [
     ["version 1 document", (s) => (s.version = 1), /version.*1/],
     ["missing session number", (s) => delete s.session, /session/],

@@ -213,16 +213,44 @@ class GrillingPage {
       item.append(el("span", "lineage-rule-name", note.name));
       item.append(el("span", "lineage-rule-weight", ` (rank ${note.rank}, weight ${note.weightPct}%)`));
       if (note.disposition) item.append(el("span", "lineage-rule-disposition", ` — ${note.disposition}`));
+      item.append(this.disconfirmToggle(note.name, state));
       rules.append(item);
     }
     for (const rule of q.lineage.rules) {
       const item = el("li", "lineage-rule");
       item.append(el("span", "lineage-rule-name", rule.name));
       item.append(el("span", "lineage-rule-disposition", ` — ${rule.disposition}`));
+      item.append(this.disconfirmToggle(rule.name, state));
       rules.append(item);
     }
     lineage.append(rules);
     this.root.append(lineage);
+  }
+
+  /**
+   * "Not relevant here" toggle for a presented rule — records the rule as
+   * disconfirmed: it counts as neither a win nor a loss in extraction.
+   *
+   * @param name - The preference name as presented.
+   * @param state - The current question's answer state.
+   * @returns The toggle element.
+   */
+  private disconfirmToggle(name: string, state: AnswerState): HTMLElement {
+    const label = el("label", "disconfirm-toggle");
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = (state.disconfirmedPreferences ?? []).includes(name);
+    box.onchange = () => {
+      const names = new Set(state.disconfirmedPreferences ?? []);
+      if (box.checked) {
+        names.add(name);
+      } else {
+        names.delete(name);
+      }
+      state.disconfirmedPreferences = names.size ? [...names] : undefined;
+    };
+    label.append(box, el("span", "disconfirm-text", "not relevant here"));
+    return label;
   }
 
   /**
@@ -313,6 +341,7 @@ class GrillingPage {
         ...(state.freeText && { freeText: state.freeText }),
         ...(state.rejectionReasons?.length && { rejectionReasons: state.rejectionReasons }),
         ...(state.correction && { correction: state.correction }),
+        ...(state.disconfirmedPreferences?.length && { disconfirmedPreferences: state.disconfirmedPreferences }),
         ...(state.skipped && { skipped: true }),
       };
     });

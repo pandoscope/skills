@@ -120,6 +120,8 @@ export interface AnsweredView {
   line: string;
   /** Confirmed rejection reasons, one line each, prefixed "Rejected:". */
   rejected: string[];
+  /** Disconfirmed cited rules, one line each, prefixed "Disconfirmed:". */
+  disconfirmed: string[];
 }
 
 /**
@@ -248,8 +250,9 @@ function buildQuestion(q: DecisionQuestion, session: number, preferences: string
  * @returns The answered view.
  */
 function buildAnswered(answer: AnswerState, id: string, options: OptionView[]): AnsweredView {
+  const disconfirmed = (answer.disconfirmedPreferences ?? []).map((name) => `Disconfirmed: ${name}`);
   if (answer.chosen === undefined) {
-    return { line: `${id}: skipped`, rejected: [] };
+    return { line: `${id}: skipped`, rejected: [], disconfirmed };
   }
   const chosen = options[answer.chosen - 1];
   const ruling = chosen.freeText && answer.freeText ? answer.freeText : chosen.label;
@@ -257,6 +260,7 @@ function buildAnswered(answer: AnswerState, id: string, options: OptionView[]): 
   return {
     line: `${id}${chosen.id}: ${ruling}${correction}`,
     rejected: (answer.rejectionReasons ?? []).map((reason) => `Rejected: ${reason}`),
+    disconfirmed,
   };
 }
 
