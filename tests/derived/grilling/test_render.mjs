@@ -140,16 +140,17 @@ test("options carry normalized scores with a per-contribution breakdown", () => 
   assert.match(md, /proposed preference: a renderer used by two skills graduates to its own package/, "proposed preference missing");
 });
 
-test("answer state is displayed: chosen free text with rejection reasons, and skips", () => {
+red.fails("answer state is displayed: chosen free text with rejection reasons, and skips", () => {
   const { status, stderr, outDir } = render(join(FIXTURES, "session.json"));
   assert.equal(status, 0, `renderer failed: ${stderr}`);
   const md = readFileSync(join(outDir, "session.md"), "utf8");
   assert.match(md, /S1Q1A3: DuckDB, we already embed it elsewhere/, "free-text ruling missing");
   assert.match(md, /Rejected: single-writer stays guaranteed/, "rejection reason missing");
   assert.match(md, /S1Q3: skipped/, "skip state missing");
+  assert.match(md, /Disconfirmed: prefer-boring-tech/, "disconfirmed-rule display missing");
 });
 
-test("rejects sessions violating the schema, naming the offending field", () => {
+red.fails("rejects sessions violating the schema, naming the offending field", () => {
   const cases = [
     ["version 1 document", (s) => (s.version = 1), /version.*1/],
     ["missing session number", (s) => delete s.session, /session/],
@@ -178,6 +179,19 @@ test("rejects sessions violating the schema, naming the offending field", () => 
       "match naming an unknown preference",
       (s) => (s.questions[1].options[0].matches = ["no-such-preference"]),
       /matches.*no-such-preference/,
+    ],
+    [
+      "second prediction-role slot",
+      (s) => {
+        s.questions[1].options[1].kind = "usual";
+        s.questions[1].options[1].matches = ["prefer-boring-tech"];
+      },
+      /prediction/,
+    ],
+    [
+      "disconfirming an unknown preference",
+      (s) => (s.questions[0].answer.disconfirmedPreferences = ["no-such-rule"]),
+      /disconfirmedPreferences.*no-such-rule/,
     ],
     [
       "agent score out of range",

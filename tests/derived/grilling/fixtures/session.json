@@ -35,6 +35,9 @@
         "freeText": "DuckDB, we already embed it elsewhere",
         "rejectionReasons": [
           "single-writer stays guaranteed"
+        ],
+        "disconfirmedPreferences": [
+          "prefer-boring-tech"
         ]
       }
     },
