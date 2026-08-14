@@ -134,8 +134,13 @@ class GrillingPage {
     for (const option of q.options) {
       const item = el("li", "option" + (state.chosen === option.number ? " selected" : ""));
       item.onclick = () => {
-        state.chosen = option.number;
-        delete state.skipped;
+        // Clicking the selected option again unselects it.
+        if (state.chosen === option.number) {
+          delete state.chosen;
+        } else {
+          state.chosen = option.number;
+          delete state.skipped;
+        }
         this.render();
       };
       const head = el("div", "option-head");
@@ -191,11 +196,13 @@ class GrillingPage {
     skip.onclick = () => {
       if (state.skipped) {
         delete state.skipped;
+        this.render();
       } else {
         state.skipped = true;
         delete state.chosen;
+        // Skipping moves straight on to the next question.
+        this.goto(this.current + 1);
       }
-      this.render();
     };
     controls.append(skip);
     this.root.append(controls);
