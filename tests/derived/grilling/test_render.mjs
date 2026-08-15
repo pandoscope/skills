@@ -111,14 +111,14 @@ test("every slot carries at least one compact tag", () => {
   assert.match(md, /"N, BAB …"/, "answer hint must offer the BAB shorthand");
 });
 
-test("matched preferences become footnote refs resolving to ranked lineage entries", () => {
+red.fails("matched preferences become footnote refs resolving to ranked lineage entries", () => {
   const { status, stderr, outDir } = render(join(FIXTURES, "session.json"));
   assert.equal(status, 0, `renderer failed: ${stderr}`);
   const md = readFileSync(join(outDir, "session.md"), "utf8");
   assert.match(md, /ships to consumers via skills update, no extra install \[1\]/, "footnote marker missing after entails");
   assert.match(
     md,
-    /\[1\] \[tools-travel-with-their-skill\]\([^)]+\) \(rank 1, weight 75%\) — matched: renderer is skill-local tooling/,
+    /\[1\] \[tools-travel-with-their-skill\]\([^)]+\) \(rank 1, weight 67%\) — matched: renderer is skill-local tooling/,
     "footnote entry must carry rank, ROC weight, and the lineage disposition",
   );
   assert.doesNotMatch(md, /`tools-travel-with-their-skill`/, "full rule text must no longer be inlined in the prose");
@@ -144,13 +144,13 @@ test("options carry normalized scores with a per-contribution breakdown", () => 
   );
 });
 
-test("preference doc links render in the lineage footnotes", () => {
+red.fails("preference doc links render in the lineage footnotes", () => {
   const { status, stderr, outDir } = render(join(FIXTURES, "session.json"));
   assert.equal(status, 0, `renderer failed: ${stderr}`);
   const md = readFileSync(join(outDir, "session.md"), "utf8");
   assert.match(
     md,
-    /\[1\] \[tools-travel-with-their-skill\]\(https:\/\/github\.com\/pandoscope\/decision-memory\/blob\/main\/proposals\/tools-travel-with-their-skill\.md\) \(rank 1, weight 75%\)/,
+    /\[1\] \[tools-travel-with-their-skill\]\(https:\/\/github\.com\/pandoscope\/decision-memory\/blob\/main\/proposals\/tools-travel-with-their-skill\.md\) \(rank 1, weight 67%\)/,
     "footnote must link the preference's promotion doc when a link is recorded",
   );
 });
