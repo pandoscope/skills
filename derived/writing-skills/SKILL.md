@@ -61,6 +61,18 @@ A [context pointer](glossary/context-pointer.md)'s *wording*, not its target, de
 
 Keep a concept's definition, rules and caveats under one heading, so reading one part brings its neighbors.
 
+## The check script
+
+A skill ships `check.sh` beside its `SKILL.md`, and its last step runs it — the ladder, mechanized.
+
+- Rung-1 criteria run directly; a failure exits non-zero naming what is wrong.
+- Everything below rung 1 prints as the residue: what the agent still verifies, or what to hand the human. The residue is named, never remembered.
+- [Self-containment](glossary/self-containment.md) binds the script too: it needs nothing outside the folder.
+
+A skill cannot install a hook for this: hook registration is captured at CLI startup from settings a skill folder never reaches. The last-step invocation is the portable wiring; a consuming project may enforce it from an end-of-turn hook, and the skill must work where none exists.
+
+Authoring or reviewing a skill ends with this folder's own `check.sh <skill-folder>`: it verifies mechanically that the skill under work carries its check script — present, executable, run by its `SKILL.md` — and prints the residue no script can check.
+
 ## Leading words
 
 A [leading word](glossary/leading-word.md) is a compact concept already in the model's pretraining that the agent thinks with —
