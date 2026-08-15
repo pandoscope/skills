@@ -98,19 +98,16 @@ test("valid session renders artifact html with injected JSON and a text fallback
   assert.match(md, /^A3\. \*\*Free text\*\*/m, "renderer must append the free-text slot itself");
 });
 
-test("slots carry count badges, the merged slot shows the recommendation badge too", () => {
+red.fails("every slot carries at least one compact tag", () => {
   const { status, stderr, outDir } = render(join(FIXTURES, "session.json"));
   assert.equal(status, 0, `renderer failed: ${stderr}`);
   const md = readFileSync(join(outDir, "session.md"), "utf8");
-  assert.match(md, /prediction — matches 1 of your preferences/, "count-based prediction badge missing");
-  assert.match(
-    md,
-    /prediction — matches 1 of your preferences, recommendation — my pick/,
-    "merged slot must carry the recommendation badge alongside the prediction badge",
-  );
-  assert.match(md, /recommendation — my pick \(cold\)/, "cold recommendation badge missing");
-  assert.match(md, /\(wildcard, if single-writer stays guaranteed\)/, "wildcard badge missing");
-  assert.doesNotMatch(md, /matches your usual/, "old badge wording must be gone");
+  assert.match(md, /\(matches 1, my pick\)/, "merged slot must tag matches count and my pick");
+  assert.match(md, /\(my pick, cold\)/, "cold pick must tag my pick and cold");
+  assert.match(md, /\(wildcard, if single-writer stays guaranteed\)/, "wildcard tag missing");
+  assert.match(md, /\(alternative, if other skills need the renderer too\)/, "untagged runner-up must tag alternative");
+  assert.match(md, /\*\*Free text\*\* \(free text\)/, "free-text slot must carry its tag");
+  assert.doesNotMatch(md, /prediction — |recommendation — /, "verbose badge wording must be gone");
   assert.match(md, /"N, BAB …"/, "answer hint must offer the BAB shorthand");
 });
 
@@ -150,7 +147,7 @@ test("answer state is displayed: chosen free text with rejection reasons, and sk
   assert.match(md, /Disconfirmed: prefer-boring-tech/, "disconfirmed-rule display missing");
 });
 
-test("rejects sessions violating the schema, naming the offending field", () => {
+red.fails("rejects sessions violating the schema, naming the offending field", () => {
   const cases = [
     ["version 1 document", (s) => (s.version = 1), /version.*1/],
     ["missing session number", (s) => delete s.session, /session/],
@@ -174,6 +171,19 @@ test("rejects sessions violating the schema, naming the offending field", () => 
         s.questions[0].options[0].kind = "usual";
       },
       /matches/,
+    ],
+    [
+      "cold question with a matching option",
+      (s) => (s.questions[0].options[1].matches = ["prefer-boring-tech"]),
+      /cold/,
+    ],
+    [
+      "wildcard citing matches",
+      (s) => {
+        s.questions[1].options[1].kind = "wildcard";
+        s.questions[1].options[1].matches = ["prefer-boring-tech"];
+      },
+      /wildcard/,
     ],
     [
       "match naming an unknown preference",
