@@ -23,6 +23,13 @@ SEEDED=2020-01-01T00:00:00Z
 
 set -eu
 
+# Fixture identity rides in the environment, never in a clone's local
+# config: a local `user.email` is the override the clone-config check
+# exists to catch, so a fixture that wrote one would make every kata
+# red for a state production forbids.
+export GIT_AUTHOR_NAME=kata GIT_AUTHOR_EMAIL=kata@example.test
+export GIT_COMMITTER_NAME=kata GIT_COMMITTER_EMAIL=kata@example.test
+
 kata_repo() {
     name=$1
     state=$2
@@ -42,8 +49,6 @@ kata_repo() {
     mkdir -p "$PWD/.origins" "$(dirname "$work")"
     git init -q --bare "$origin"
     git init -q -b claude/kata "$work"
-    git -C "$work" config user.email kata@example.test
-    git -C "$work" config user.name kata
     git -C "$work" remote add origin "$origin"
 
     echo "seed" > "$work/README.md"
