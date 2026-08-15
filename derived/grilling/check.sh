@@ -18,10 +18,10 @@ trap 'rm -rf "$out"' EXIT
 
 node --experimental-strip-types --disable-warning=ExperimentalWarning \
     "$HERE/render/render.ts" "$session" --out "$out"
-[ -s "$out/session.html" ] && [ -s "$out/session.md" ] || {
+if [ ! -s "$out/session.html" ] || [ ! -s "$out/session.md" ]; then
     echo "check: renderer produced empty output" >&2
     exit 1
-}
+fi
 echo "check: session JSON valid; session.html and session.md rendered."
 
 cat <<'RESIDUE'
