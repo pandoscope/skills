@@ -79,7 +79,7 @@ function validSession() {
   return JSON.parse(readFileSync(join(FIXTURES, "session.json"), "utf8"));
 }
 
-test("valid session renders artifact html with injected JSON and a text fallback", () => {
+red.fails("valid session renders artifact html with injected JSON and a text fallback", () => {
   const fixture = join(FIXTURES, "session.json");
   const { status, stderr, outDir } = render(fixture);
   assert.equal(status, 0, `renderer failed: ${stderr}`);
@@ -95,10 +95,10 @@ test("valid session renders artifact html with injected JSON and a text fallback
   assert.match(md, /^## S1Q1 — Which database backs the session store\?$/m, "SxQy question heading missing");
   assert.match(md, /^## S1Q2 — Where does the grilling renderer live\?$/m, "second question missing");
   assert.match(md, /^A1\. \*\*Postgres\*\*/m, "A-numbered slot line missing");
-  assert.match(md, /^A3\. \*\*Other\*\*/m, "renderer must append the free-text slot itself, labeled Other");
+  assert.match(md, /^A3\. \*\*Something else…\*\*/m, "renderer must append the free-text slot itself, labeled Something else…");
 });
 
-test("every slot carries at least one compact tag", () => {
+red.fails("every slot carries at least one compact tag", () => {
   const { status, stderr, outDir } = render(join(FIXTURES, "session.json"));
   assert.equal(status, 0, `renderer failed: ${stderr}`);
   const md = readFileSync(join(outDir, "session.md"), "utf8");
@@ -106,7 +106,7 @@ test("every slot carries at least one compact tag", () => {
   assert.match(md, /\(my pick, cold\)/, "cold pick must tag my pick and cold");
   assert.match(md, /\(wildcard, if single-writer stays guaranteed\)/, "wildcard tag missing");
   assert.match(md, /\(alternative, if other skills need the renderer too\)/, "untagged runner-up must tag alternative");
-  assert.match(md, /\*\*Other\*\* \(free text\)/, "free-text slot label must not duplicate its tag");
+  assert.match(md, /\*\*Something else…\*\* \(free text\)/, "free-text slot label must not duplicate its tag");
   assert.doesNotMatch(md, /prediction — |recommendation — /, "verbose badge wording must be gone");
   assert.match(md, /"N, BAB …"/, "answer hint must offer the BAB shorthand");
 });
