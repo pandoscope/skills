@@ -59,10 +59,12 @@ Per agentic-engineering-template#163/#164:
   record's `options[].rules_cited`, which is what makes rule-vs-rule
   contests recordable (chosen option's cited rules beat declined
   options'). One rule per string.
-- Cite with resolvable text: each `preferences` entry must be
-  verbatim-enough fragment of rule's line in `preferences.txt` —
-  extraction tally matches by normalized containment, paraphrases
-  silently drop out.
+- Cite the store line verbatim — whole line, punctuation included.
+  Inject mechanically: `resolve-store.sh preferences` emits the active
+  set as the JSON array to paste into `preferences`. Retyping loses a
+  trailing period, extraction matches nothing, and the citation scores
+  silently as zero. `check.sh` fails any entry that is not a verbatim
+  line of the store's `preferences.txt`.
 - Disconfirmed rules ("not relevant here" toggle,
   `disconfirmedPreferences`) are recorded distinctly — record-level
   `rules_disconfirmed` — counting as neither win nor loss.
@@ -75,20 +77,5 @@ docs; lineage footnotes link them. Fill from store's `preferences.json`
 provenance data (same verbatim-rule-text identity) — never by guessing
 from rule line.
 
-## Prediction vs recommendation
-
-Prediction = slot 1 (preference-driven, or cold); hit/miss scored in
-separate streams. Recommendation = agent's honest best — slot 2 when
-they diverge, and divergence is stated explicitly: it is echo-chamber
-gauge. Cold misses don't count against preference model (there was
-none) — pure judgment calibration, prime seeds for new rule proposals.
-
-Selection events are typed: picks 1 → weak confirmation
-(preference-driven, see provenance); picks 2 over 1 → cited rule
-weakened in favor of fresh judgment; picks 3 → gap in preference model,
-highest learning value; picks free text → new branch. Choosing listed
-option N confirms its if-clause as operative rejection reason —
-recorded verbatim, no inference; non-chosen options' if-clauses are
-recorded presumed-false, confirmed in one line only if record would
-otherwise be ambiguous. Affirmative if-clause ("if you value Z over W")
-is fine — never force alternatives into X-failure framing.
+Interpreting returned answers — selection events, hit-rate streams,
+score meaning — is [reading.md](reading.md), not this file.

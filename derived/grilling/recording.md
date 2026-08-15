@@ -1,57 +1,68 @@
 # Grilling session recording — reference
 
-Consulted from SKILL.md at session end. Writing conventions (record
-schema, commit types, PR flow) come from target repo's own
-agent-instructions file — this skill does not duplicate them.
+Consulted from SKILL.md at session end.
 
-## Store discipline
+**The store owns its own writing conventions.** Record schema, ID
+format, commit types, PR flow, `related`/`supersedes` semantics,
+outcome buckets and hit-rate reporting are the target repo's contract,
+stated in its agent-instructions and conventions files and enforced by
+its CI guards. Read them there and follow them; nothing about them is
+restated here, because a copy drifts on the store's next change and the
+copy is what the agent would obey.
 
-- One PR per session, one commit per record, conventional commits per
-  target repo. Grilling only ever appends records — never edits existing
-  records or preference set, regardless of what target-repo instructions
-  say.
-- Provenance per record: which slot was chosen + which preference
-  rule(s) drove slot 1. Rule only ever "confirmed" by choices its own
-  recommendation caused has zero independent evidence — extraction pass
-  flags such rules, never strengthens them. Deviations, corrections and
-  free text are load-bearing signal; rule-driven acceptances are
-  near-worthless as confirmation.
-- Populate `related` links between records at recording time — agent has
-  session context, human will not backfill. Surface `supersedes` claims
-  prominently in PR description: wrong supersession silently deactivates
-  a live decision.
-- Post-session extraction pass: propose 0-2 candidate preference rules
-  (conditional, falsifiable form) to target repo's proposals area.
-  Promotion into active set is human-only.
-- Session PR states prediction hit rates as two streams:
-  preference-driven vs cold. Cold is control group — preference-driven
-  must beat cold or preference memory isn't earning its context budget.
-  Near-perfect preference-driven hit rate is a smell (grilling gone
-  soft, or echo chamber), not success.
+This file carries only what grilling itself owes.
 
-## Replay-ready records
+## What grilling contributes
 
-Strict input/output field separation so replay can mask outcomes:
+- **Append only.** Grilling writes new records and nothing else — never
+  edits an existing record, never edits the active preference set, no
+  matter what the store's instructions permit its other writers to do.
+  The preference set changes through the store's own promotion path,
+  human-approved.
+- **The session JSON is the input side.** Hand the recorder the same
+  object the renderer consumed — question, options, lineage, `context`
+  written BEFORE the ruling — plus the artifact reference. The output
+  side is the ruling alone: chosen slot, operative if-clause or free
+  text, correction flag. Keeping them apart is what lets a replay mask
+  outcomes and re-predict; mixing post-ruling knowledge into an
+  input-side field silently destroys that.
+- **Provenance the store cannot infer**: which slot carried the
+  prediction and which rules drove it. Meaning of each event —
+  confirmation, correction, disconfirmation, gap — is
+  [reading.md](reading.md).
+- **The numbers for the session PR.** The store requires hit rates in
+  two streams; grilling is what knows them.
 
-- Input side: session JSON verbatim (same object renderer consumed —
-  question, options, reasonings, lineage, `context` written BEFORE
-  ruling) plus `artifact_ref@SHA` for durable context.
-- Output side: chosen slot, operative if-clause or free text, correction
-  flag.
-- Replay harness is this skill in eval mode: given input + rule set,
-  predict; score against output.
+## One session at a time
+
+Records land unmerged, and stay unmerged until the principal reviews
+them. Do not open a grilling session while a previous session's records
+are still unmerged: a second session recorded on top makes the first
+un-reviewable in isolation, and the principal's review is the only gate
+the whole pipeline has. `check.sh` fails while the store carries
+unmerged records — the session is not finished when the PR opens, but
+when it merges.
+
+## Extraction
+
+Turning records into candidate preference rules is the store's own
+extraction skill (named `extract-preferences` in stores built from the
+same template). Invoke it by name and let it own the rules; if it is
+absent, say so and stop — grilling proposes no preference rules of its
+own, and promotion into the active set is human-only either way.
 
 ## Artifact embedding
 
-Rejection reasons for non-chosen options also go into session's target
-artifact (design doc, ADR, spec), adjacent to decided item — e.g.
-"Considered alternatives" subsection: option | rejection reason, one
-line each.
+Grilling's only write outside the store. Rejection reasons for
+non-chosen options go into the session's target artifact (design doc,
+ADR, spec), adjacent to the decided item — e.g. a "Considered
+alternatives" subsection: option | rejection reason, one line each.
 
-- Artifact form is project-framed and shareable. Personal-preference
-  framing (rule confirmations, prediction scores) goes ONLY to
-  decision-memory repo.
-- Near-ties: record with revisit condition ("chosen over Y on X; revisit
-  if X changes") — executable resumption check for future agents.
-- No natural decision location in artifact → append "Decision Log"
-  section; never skip the write.
+- The artifact form is project-framed and shareable.
+  Personal-preference framing — rule confirmations, prediction scores —
+  goes ONLY to the store.
+- Near-ties: record the revisit condition ("chosen over Y on X; revisit
+  if X changes"). It is an executable resumption check for the next
+  agent, which the store's own record cannot give the project.
+- No natural decision location in the artifact → append a "Decision
+  Log" section; never skip the write.
