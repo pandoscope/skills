@@ -99,6 +99,42 @@ function scoreDonut(score: {
 }
 
 /**
+ * Build the corner marker for the free-text slot — a muted ringed "+"
+ * occupying the same corner slot a scored option's donut sits in, so the
+ * "Something else…" card is not left visually bare.
+ *
+ * @returns An inline SVG element.
+ */
+function writeMarker(): SVGSVGElement {
+  const NS = "http://www.w3.org/2000/svg";
+  const size = 34;
+  const c = size / 2;
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("width", String(size));
+  svg.setAttribute("height", String(size));
+  svg.setAttribute("viewBox", `0 0 ${size} ${size}`);
+  svg.setAttribute("class", "write-marker");
+  const ring = document.createElementNS(NS, "circle");
+  ring.setAttribute("cx", String(c));
+  ring.setAttribute("cy", String(c));
+  ring.setAttribute("r", "14");
+  ring.setAttribute("fill", "none");
+  ring.setAttribute("stroke", "var(--muted)");
+  ring.setAttribute("stroke-width", "1.5");
+  ring.setAttribute("stroke-dasharray", "2.5 2.5");
+  svg.append(ring);
+  const plus = document.createElementNS(NS, "text");
+  plus.setAttribute("x", String(c));
+  plus.setAttribute("y", String(c));
+  plus.setAttribute("class", "write-marker-glyph");
+  plus.setAttribute("text-anchor", "middle");
+  plus.setAttribute("dominant-baseline", "central");
+  plus.textContent = "+";
+  svg.append(plus);
+  return svg;
+}
+
+/**
  * Append text that may carry `backtick` spans, rendering them as <code>.
  *
  * @param parent - Element to append into.
@@ -211,25 +247,32 @@ class GrillingPage {
         }
         this.render();
       };
+      // Row 1: the slot id and its tags sit together, closest to the eye;
+      // the title drops onto its own line underneath.
       const head = el("div", "option-head");
       head.append(el("span", "option-number", option.id));
-      head.append(el("span", "option-label", option.label));
+      if (option.badges.length) {
+        const tags = el("div", "option-tags");
+        for (const badge of option.badges) tags.append(el("span", "option-badge", badge));
+        head.append(tags);
+      }
+      item.append(head);
+      item.append(el("div", "option-label", option.label));
+      // Corner marker: the score donut for scored slots, else a "write
+      // your own" ring on the free-text slot so it is never left bare.
       if (option.score) {
-        const chip = el("span", "option-score", "");
+        const chip = el("span", "option-mark", "");
         // Hover still reveals each contribution as percent of the
         // QUESTION total; the donut segments show each contribution's
         // share of THIS option's score.
         chip.title = option.score.breakdown.map((b) => `${b.label}: ${b.pct}% of total`).join("\n");
         chip.append(scoreDonut(option.score));
-        head.append(chip);
-      }
-      item.append(head);
-      // Tags live on their own row below the title so they never fight
-      // the label or the score donut for horizontal space.
-      if (option.badges.length) {
-        const tags = el("div", "option-tags");
-        for (const badge of option.badges) tags.append(el("span", "option-badge", badge));
-        item.append(tags);
+        item.append(chip);
+      } else if (option.freeText) {
+        const chip = el("span", "option-mark", "");
+        chip.title = "Write your own answer";
+        chip.append(writeMarker());
+        item.append(chip);
       }
       if (option.ifClause) item.append(el("p", "option-if", `if ${option.ifClause}`));
       const entails = el("p", "option-entails");

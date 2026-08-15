@@ -124,8 +124,8 @@
   }
   .option-head {
     display: flex;
-    align-items: baseline;
-    gap: 0.6rem;
+    align-items: center;
+    gap: 0.4rem;
     flex-wrap: wrap;
   }
   .option-number {
@@ -137,12 +137,12 @@
   }
   .option-label {
     font-weight: 650;
+    margin-top: 0.2rem;
   }
   .option-tags {
     display: flex;
     flex-wrap: wrap;
     gap: 0.3rem;
-    margin-top: 0.25rem;
   }
   .option-badge {
     color: var(--accent);
@@ -168,7 +168,7 @@
     cursor: pointer;
     position: relative;
   }
-  .option:has(.option-score) {
+  .option:has(.option-mark) {
     padding-right: 3.1rem;
   }
   .option:hover {
@@ -208,7 +208,7 @@
     font-family: ui-monospace, monospace;
     font-size: 0.85rem;
   }
-  .option-score {
+  .option-mark {
     position: absolute;
     top: 0.45rem;
     right: 0.55rem;
@@ -220,6 +220,11 @@
     font-size: 10px;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
+  }
+  .write-marker-glyph {
+    fill: var(--muted);
+    font-size: 16px;
+    font-weight: 400;
   }
   .option-proposed {
     margin: 0.15rem 0 0;
