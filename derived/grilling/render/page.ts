@@ -214,7 +214,6 @@ class GrillingPage {
       const head = el("div", "option-head");
       head.append(el("span", "option-number", option.id));
       head.append(el("span", "option-label", option.label));
-      for (const badge of option.badges) head.append(el("span", "option-badge", badge));
       if (option.score) {
         const chip = el("span", "option-score", "");
         // Hover still reveals each contribution as percent of the
@@ -225,6 +224,13 @@ class GrillingPage {
         head.append(chip);
       }
       item.append(head);
+      // Tags live on their own row below the title so they never fight
+      // the label or the score donut for horizontal space.
+      if (option.badges.length) {
+        const tags = el("div", "option-tags");
+        for (const badge of option.badges) tags.append(el("span", "option-badge", badge));
+        item.append(tags);
+      }
       if (option.ifClause) item.append(el("p", "option-if", `if ${option.ifClause}`));
       const entails = el("p", "option-entails");
       appendWithInlineCode(entails, option.entails);

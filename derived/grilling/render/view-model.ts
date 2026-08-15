@@ -230,7 +230,7 @@ function buildQuestion(q: DecisionQuestion, session: number, preferences: string
   options.push({
     number: options.length + 1,
     id: `A${options.length + 1}`,
-    label: "Free text",
+    label: "Other",
     badges: ["free text"],
     entails: "custom choice or custom rejection reasoning",
     footnotes: [],
