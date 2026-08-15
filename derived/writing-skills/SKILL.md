@@ -17,6 +17,7 @@ metadata.derivation-note: >
   drift, cold-verified invocations, sibling-reference discipline,
   environment-variable contracts, and handoff-carrying outputs.
   Condensed throughout.
+metadata.token-budget-approved: 2500
 ---
 
 # Writing Skills
