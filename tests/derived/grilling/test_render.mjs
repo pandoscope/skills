@@ -79,7 +79,7 @@ function validSession() {
   return JSON.parse(readFileSync(join(FIXTURES, "session.json"), "utf8"));
 }
 
-test("valid session renders artifact html with injected JSON and a text fallback", () => {
+red.fails("valid session renders artifact html with injected JSON and a text fallback", () => {
   const fixture = join(FIXTURES, "session.json");
   const { status, stderr, outDir } = render(fixture);
   assert.equal(status, 0, `renderer failed: ${stderr}`);
@@ -94,19 +94,19 @@ test("valid session renders artifact html with injected JSON and a text fallback
   const md = readFileSync(join(outDir, "session.md"), "utf8");
   assert.match(md, /^## S1Q1 — Which database backs the session store\?$/m, "SxQy question heading missing");
   assert.match(md, /^## S1Q2 — Where does the grilling renderer live\?$/m, "second question missing");
-  assert.match(md, /^A1\. \*\*Postgres\*\*/m, "A-numbered slot line missing");
-  assert.match(md, /^A3\. \*\*Something else…\*\*/m, "renderer must append the free-text slot itself, labeled Something else…");
+  assert.match(md, /^- \*\*A1 · Postgres\*\*/m, "A-numbered slot header missing");
+  assert.match(md, /^- \*\*A3 · Something else…\*\*/m, "renderer must append the free-text slot itself, labeled Something else…");
 });
 
-test("every slot carries at least one compact tag", () => {
+red.fails("every slot carries at least one compact tag", () => {
   const { status, stderr, outDir } = render(join(FIXTURES, "session.json"));
   assert.equal(status, 0, `renderer failed: ${stderr}`);
   const md = readFileSync(join(outDir, "session.md"), "utf8");
-  assert.match(md, /\(matches 1, my pick\)/, "merged slot must tag matches count and my pick");
-  assert.match(md, /\(my pick, cold\)/, "cold pick must tag my pick and cold");
-  assert.match(md, /\(wildcard, if single-writer stays guaranteed\)/, "wildcard tag missing");
-  assert.match(md, /\(alternative, if other skills need the renderer too\)/, "untagged runner-up must tag alternative");
-  assert.match(md, /\*\*Something else…\*\* \(free text\)/, "free-text slot label must not duplicate its tag");
+  assert.match(md, /\(`matches 1` `my pick`\)/, "merged slot must tag matches count and my pick");
+  assert.match(md, /\(`my pick` `cold`\)/, "cold pick must tag my pick and cold");
+  assert.match(md, /\(`wildcard`\)[\s\S]{0,40}\*if single-writer stays guaranteed\*/, "wildcard tag or its if-line missing");
+  assert.match(md, /\(`alternative`\)[\s\S]{0,40}\*if other skills need the renderer too\*/, "alternative tag or its if-line missing");
+  assert.match(md, /\*\*A\d · Something else…\*\* \(`free text`\)/, "free-text slot label must not duplicate its tag");
   assert.doesNotMatch(md, /prediction — |recommendation — /, "verbose badge wording must be gone");
   assert.match(md, /"N, BAB …"/, "answer hint must offer the BAB shorthand");
 });
@@ -124,22 +124,22 @@ test("matched preferences become footnote refs resolving to ranked lineage entri
   assert.doesNotMatch(md, /`tools-travel-with-their-skill`/, "full rule text must no longer be inlined in the prose");
 });
 
-test("options carry normalized scores with a per-contribution breakdown", () => {
+red.fails("options carry normalized scores with a per-contribution breakdown", () => {
   const { status, stderr, outDir } = render(join(FIXTURES, "session.json"));
   assert.equal(status, 0, `renderer failed: ${stderr}`);
   const md = readFileSync(join(outDir, "session.md"), "utf8");
   // S1Q2: A1 matches rank-1 pref (ROC weight 0.75); A2 has agentScore 0.3
   // capped by the top weight (0.3 * 0.75) -> 77% vs 23%.
-  assert.match(md, /score 77% \(tools-travel-with-their-skill 77%\)/, "preference-driven score missing");
-  assert.match(md, /score 23% \(my judgment 23%\)/, "agent-judgment score missing");
+  assert.match(md, /— \*\*77%\*\*[\s\S]{0,200}score: tools-travel-with-their-skill 77%/, "preference-driven score missing");
+  assert.match(md, /— \*\*23%\*\*[\s\S]{0,200}score: my judgment 23%/, "agent-judgment score missing");
   // S1Q1 (cold): agent scores only, 0.6 vs 0.2 -> 75% / 25%.
-  assert.match(md, /score 75% \(my judgment 75%\)/, "cold agent score missing");
+  assert.match(md, /— \*\*75%\*\*[\s\S]{0,200}score: my judgment 75%/, "cold agent score missing");
   assert.match(md, /proposed preference: a renderer used by two skills graduates to its own package/, "proposed preference missing");
   // S1Q3: noneScore 0.3 is the only contribution, so the free-text slot
   // carries the full residual "none of the listed answers fit" score.
   assert.match(
     md,
-    /\*\*Something else…\*\* \(free text\) — custom choice or custom rejection reasoning — score 100% \(my judgment 100%\)/,
+    /\*\*A\d · Something else…\*\* \(`free text`\) — \*\*100%\*\*/,
     "noneScore must score the free-text slot",
   );
 });
