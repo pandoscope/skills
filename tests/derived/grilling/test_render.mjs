@@ -147,7 +147,7 @@ test("answer state is displayed: chosen free text with rejection reasons, and sk
   assert.match(md, /Disconfirmed: prefer-boring-tech/, "disconfirmed-rule display missing");
 });
 
-test("rejects sessions violating the schema, naming the offending field", () => {
+red.fails("rejects sessions violating the schema, naming the offending field", () => {
   const cases = [
     ["version 1 document", (s) => (s.version = 1), /version.*1/],
     ["missing session number", (s) => delete s.session, /session/],
@@ -214,6 +214,61 @@ test("rejects sessions violating the schema, naming the offending field", () => 
       /nearTie/,
     ],
     ["chosen slot out of range", (s) => (s.questions[0].answer.chosen = 9), /chosen.*9/],
+    ["unknown field (typo'd ifClause)", (s) => (s.questions[0].options[1].ifclause = "typo"), /ifclause/],
+    ["unknown top-level field", (s) => (s.decider = "me"), /decider/],
+    [
+      "skipped answer carrying a choice",
+      (s) => (s.questions[2].answer = { skipped: true, chosen: 1 }),
+      /skipped.*chosen|chosen.*skipped/,
+    ],
+    [
+      "free-text slot chosen without the text",
+      (s) => delete s.questions[0].answer.freeText,
+      /freeText/,
+    ],
+    [
+      "orphaned freeText on a listed slot",
+      (s) => (s.questions[0].answer.chosen = 1),
+      /freeText/,
+    ],
+    ["near-tie of a slot with itself", (s) => (s.questions[1].nearTie = { slots: [1, 1], differsOn: "x" }), /nearTie/],
+    ["seq gap", (s) => (s.questions[2].seq = 5), /seq.*3/],
+    [
+      "prediction-role slot not in slot 1",
+      (s) => s.questions[1].options.reverse(),
+      /slot 1/,
+    ],
+    [
+      "wildcard without an if-clause",
+      (s) => delete s.questions[0].options[1].ifClause,
+      /ifClause/,
+    ],
+    [
+      "duplicate option labels",
+      (s) => (s.questions[0].options[1].label = "Postgres"),
+      /label.*Postgres/,
+    ],
+    [
+      "duplicate matches entries",
+      (s) => (s.questions[1].options[0].matches = ["tools-travel-with-their-skill", "tools-travel-with-their-skill"]),
+      /matches/,
+    ],
+    ["duplicate preferences", (s) => s.preferences.push("prefer-boring-tech"), /preferences/],
+    [
+      "unbalanced backticks in entails",
+      (s) => (s.questions[0].options[0].entails = "reuse `ops tooling"),
+      /backtick/,
+    ],
+    [
+      "considered rule outside the active set",
+      (s) => (s.questions[0].lineage.rulesConsidered[0].name = "ghost-rule"),
+      /rulesConsidered.*ghost-rule/,
+    ],
+    [
+      "matched preference missing from rulesConsidered",
+      (s) => (s.questions[1].lineage.rulesConsidered = []),
+      /rulesConsidered/,
+    ],
   ];
   for (const [name, mutate, expected] of cases) {
     const session = validSession();
