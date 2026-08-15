@@ -13,10 +13,10 @@ metadata.derivation-note: >
   the first heading, cross-linked by basename so the terms form a graph;
   terms a model already knows are dropped rather than defined. Adds a
   completion-criterion ladder, self-containment, derivation (verbatim
-  baseline + pin, disclosed to deriving.md), and baseline testing.
-  Condensed throughout. Extended from the skills#44 review: audience
+  baseline + pin, disclosed to deriving.md), baseline testing, audience
   drift, cold-verified invocations, sibling-reference discipline,
   environment-variable contracts, and handoff-carrying outputs.
+  Condensed throughout.
 ---
 
 # Writing Skills
