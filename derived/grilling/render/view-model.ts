@@ -73,11 +73,9 @@ export interface OptionView {
   /** Short name of the option. */
   label: string;
   /**
-   * Slot annotations, possibly several: "prediction — matches N of your
-   * preferences", "recommendation — my pick", "recommendation — my pick
-   * (cold)", "wildcard". A merged usual-and-pick slot carries both the
-   * prediction and the recommendation badge. Empty for plain
-   * alternatives and the free-text slot.
+   * Compact slot tags, at least one per slot: "matches N" (cites N
+   * preferences), "my pick", "cold", "wildcard", "alternative",
+   * "free text". Excluded combinations are enforced by the schema.
    */
   badges: string[];
   /** Condition under which this option beats the recommendation. */
@@ -90,7 +88,16 @@ export interface OptionView {
    * Normalized option score as percent of the question total (rounded),
    * with the per-contribution breakdown; absent when nothing scores.
    */
-  score?: { pct: number; breakdown: { label: string; pct: number }[] };
+  score?: {
+    pct: number;
+    /**
+     * One entry per contribution: pct = share of the question total
+     * (hover display), ofOptionPct = share of this option's own score
+     * (donut segment size), source distinguishes preference segments
+     * from the agent-judgment segment.
+     */
+    breakdown: { label: string; pct: number; ofOptionPct: number; source: "preference" | "agent" }[];
+  };
   /** Agent-formulated candidate preferences, listed with the option. */
   proposedPreferences: string[];
   /** Why not recommended, when it differs from the negated if-clause. */
@@ -201,9 +208,18 @@ function buildQuestion(q: DecisionQuestion, session: number, preferences: string
               ...(option.matches ?? []).map((name) => ({
                 label: name,
                 pct: Math.round((weights[preferences.indexOf(name)] / total) * 100),
+                ofOptionPct: Math.round((weights[preferences.indexOf(name)] / raw[i]) * 100),
+                source: "preference" as const,
               })),
               ...(option.agentScore
-                ? [{ label: "my judgment", pct: Math.round(((option.agentScore * topWeight) / total) * 100) }]
+                ? [
+                    {
+                      label: "my judgment",
+                      pct: Math.round(((option.agentScore * topWeight) / total) * 100),
+                      ofOptionPct: Math.round(((option.agentScore * topWeight) / raw[i]) * 100),
+                      source: "agent" as const,
+                    },
+                  ]
                 : []),
             ],
           }
@@ -215,7 +231,7 @@ function buildQuestion(q: DecisionQuestion, session: number, preferences: string
     number: options.length + 1,
     id: `A${options.length + 1}`,
     label: "Free text",
-    badges: [],
+    badges: ["free text"],
     entails: "custom choice or custom rejection reasoning",
     footnotes: [],
     proposedPreferences: [],
@@ -265,19 +281,22 @@ function buildAnswered(answer: AnswerState, id: string, options: OptionView[]): 
 }
 
 /**
- * Annotation texts for a slot kind — a merged usual-and-pick slot carries
- * both the prediction and the recommendation badge.
+ * Compact tags for a slot — every slot gets at least one. Combinations
+ * that cannot co-occur ("cold" with "matches N", "wildcard" with
+ * "matches N" or "my pick") are excluded by the schema, so this mapping
+ * never has to resolve a contradiction.
  *
  * @param kind - The slot kind from the decision question.
  * @param cold - Whether the question's recommendation is cold.
  * @param matchCount - Number of preferences the slot matches.
- * @returns The badge texts shown next to the option label.
+ * @returns The tag texts shown next to the option label.
  */
 function badgesFor(kind: DecisionQuestion["options"][number]["kind"], cold: boolean, matchCount: number): string[] {
-  const prediction = `prediction — matches ${matchCount} of your preferences`;
-  if (kind === "usual") return [prediction];
-  if (kind === "usual-and-pick") return [prediction, "recommendation — my pick"];
-  if (kind === "pick") return [cold ? "recommendation — my pick (cold)" : "recommendation — my pick"];
-  if (kind === "wildcard") return ["wildcard"];
-  return [];
+  const tags: string[] = [];
+  if (matchCount > 0) tags.push(`matches ${matchCount}`);
+  if (kind === "pick" || kind === "usual-and-pick") tags.push("my pick");
+  if (kind === "pick" && cold) tags.push("cold");
+  if (kind === "wildcard") tags.push("wildcard");
+  if (tags.length === 0) tags.push("alternative");
+  return tags;
 }

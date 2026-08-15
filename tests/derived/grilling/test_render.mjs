@@ -98,7 +98,7 @@ test("valid session renders artifact html with injected JSON and a text fallback
   assert.match(md, /^A3\. \*\*Free text\*\*/m, "renderer must append the free-text slot itself");
 });
 
-red.fails("every slot carries at least one compact tag", () => {
+test("every slot carries at least one compact tag", () => {
   const { status, stderr, outDir } = render(join(FIXTURES, "session.json"));
   assert.equal(status, 0, `renderer failed: ${stderr}`);
   const md = readFileSync(join(outDir, "session.md"), "utf8");
@@ -147,7 +147,7 @@ test("answer state is displayed: chosen free text with rejection reasons, and sk
   assert.match(md, /Disconfirmed: prefer-boring-tech/, "disconfirmed-rule display missing");
 });
 
-red.fails("rejects sessions violating the schema, naming the offending field", () => {
+test("rejects sessions violating the schema, naming the offending field", () => {
   const cases = [
     ["version 1 document", (s) => (s.version = 1), /version.*1/],
     ["missing session number", (s) => delete s.session, /session/],

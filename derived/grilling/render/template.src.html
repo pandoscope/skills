@@ -8,6 +8,7 @@
     --border: #e0ddd6;
     --accent: #7752c4;
     --accent-soft: #efe9fb;
+    --accent2: #0d8a74;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
@@ -18,6 +19,7 @@
       --border: #34363d;
       --accent: #a487e8;
       --accent-soft: #2d2540;
+      --accent2: #3fbfa4;
     }
   }
   :root[data-theme="dark"] {
@@ -28,6 +30,7 @@
     --border: #34363d;
     --accent: #a487e8;
     --accent-soft: #2d2540;
+    --accent2: #3fbfa4;
   }
   body {
     background: var(--bg);
@@ -137,7 +140,11 @@
   }
   .option-badge {
     color: var(--accent);
-    font-size: 0.85rem;
+    background: var(--accent-soft);
+    border-radius: 999px;
+    padding: 0 0.45em;
+    font-size: 0.8rem;
+    white-space: nowrap;
   }
   .option-if {
     margin: 0.15rem 0 0;
@@ -193,10 +200,15 @@
   }
   .option-score {
     margin-left: auto;
-    color: var(--accent);
+    align-self: center;
+    line-height: 0;
+    cursor: help;
+  }
+  .score-donut-text {
+    fill: var(--fg);
+    font-size: 10px;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
-    cursor: help;
   }
   .option-proposed {
     margin: 0.15rem 0 0;

@@ -231,6 +231,14 @@ function validateQuestion(value: unknown, path: string, preferences: string[]): 
   if (lineage.cold && usualSlots.length > 0) {
     throw new Error(`${path}.lineage.cold is true but slot "${usualSlots[0].label}" claims a usual kind — a cold recommendation has no applying rule`);
   }
+  const matchingSlots = options.filter((o) => (o.matches ?? []).length > 0);
+  if (lineage.cold && matchingSlots.length > 0) {
+    throw new Error(`${path}.lineage.cold is true but slot "${matchingSlots[0].label}" carries matches — cold excludes "matches N" on every slot`);
+  }
+  const matchingWildcard = options.find((o) => o.kind === "wildcard" && (o.matches ?? []).length > 0);
+  if (matchingWildcard) {
+    throw new Error(`${path} slot "${matchingWildcard.label}" is a wildcard citing matches — wildcard excludes "matches N"`);
+  }
   if (usualSlots.length > 1) {
     throw new Error(`${path} carries ${usualSlots.length} prediction-role slots — exactly one option may carry the prediction role`);
   }

@@ -13,6 +13,7 @@
     --border: #e0ddd6;
     --accent: #7752c4;
     --accent-soft: #efe9fb;
+    --accent2: #0d8a74;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
@@ -23,6 +24,7 @@
       --border: #34363d;
       --accent: #a487e8;
       --accent-soft: #2d2540;
+      --accent2: #3fbfa4;
     }
   }
   :root[data-theme="dark"] {
@@ -33,6 +35,7 @@
     --border: #34363d;
     --accent: #a487e8;
     --accent-soft: #2d2540;
+    --accent2: #3fbfa4;
   }
   body {
     background: var(--bg);
@@ -142,7 +145,11 @@
   }
   .option-badge {
     color: var(--accent);
-    font-size: 0.85rem;
+    background: var(--accent-soft);
+    border-radius: 999px;
+    padding: 0 0.45em;
+    font-size: 0.8rem;
+    white-space: nowrap;
   }
   .option-if {
     margin: 0.15rem 0 0;
@@ -198,10 +205,15 @@
   }
   .option-score {
     margin-left: auto;
-    color: var(--accent);
+    align-self: center;
+    line-height: 0;
+    cursor: help;
+  }
+  .score-donut-text {
+    fill: var(--fg);
+    font-size: 10px;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
-    cursor: help;
   }
   .option-proposed {
     margin: 0.15rem 0 0;
@@ -406,9 +418,18 @@ function buildQuestion(q, session, preferences) {
                     ...(option.matches ?? []).map((name) => ({
                         label: name,
                         pct: Math.round((weights[preferences.indexOf(name)] / total) * 100),
+                        ofOptionPct: Math.round((weights[preferences.indexOf(name)] / raw[i]) * 100),
+                        source: "preference",
                     })),
                     ...(option.agentScore
-                        ? [{ label: "my judgment", pct: Math.round(((option.agentScore * topWeight) / total) * 100) }]
+                        ? [
+                            {
+                                label: "my judgment",
+                                pct: Math.round(((option.agentScore * topWeight) / total) * 100),
+                                ofOptionPct: Math.round(((option.agentScore * topWeight) / raw[i]) * 100),
+                                source: "agent",
+                            },
+                        ]
                         : []),
                 ],
             }
@@ -420,7 +441,7 @@ function buildQuestion(q, session, preferences) {
         number: options.length + 1,
         id: `A${options.length + 1}`,
         label: "Free text",
-        badges: [],
+        badges: ["free text"],
         entails: "custom choice or custom rejection reasoning",
         footnotes: [],
         proposedPreferences: [],
@@ -468,25 +489,29 @@ function buildAnswered(answer, id, options) {
     };
 }
 /**
- * Annotation texts for a slot kind — a merged usual-and-pick slot carries
- * both the prediction and the recommendation badge.
+ * Compact tags for a slot — every slot gets at least one. Combinations
+ * that cannot co-occur ("cold" with "matches N", "wildcard" with
+ * "matches N" or "my pick") are excluded by the schema, so this mapping
+ * never has to resolve a contradiction.
  *
  * @param kind - The slot kind from the decision question.
  * @param cold - Whether the question's recommendation is cold.
  * @param matchCount - Number of preferences the slot matches.
- * @returns The badge texts shown next to the option label.
+ * @returns The tag texts shown next to the option label.
  */
 function badgesFor(kind, cold, matchCount) {
-    const prediction = `prediction — matches ${matchCount} of your preferences`;
-    if (kind === "usual")
-        return [prediction];
-    if (kind === "usual-and-pick")
-        return [prediction, "recommendation — my pick"];
-    if (kind === "pick")
-        return [cold ? "recommendation — my pick (cold)" : "recommendation — my pick"];
+    const tags = [];
+    if (matchCount > 0)
+        tags.push(`matches ${matchCount}`);
+    if (kind === "pick" || kind === "usual-and-pick")
+        tags.push("my pick");
+    if (kind === "pick" && cold)
+        tags.push("cold");
     if (kind === "wildcard")
-        return ["wildcard"];
-    return [];
+        tags.push("wildcard");
+    if (tags.length === 0)
+        tags.push("alternative");
+    return tags;
 }
 
 /**
@@ -515,6 +540,68 @@ function el(tag, className, text) {
     if (text !== undefined)
         node.textContent = text;
     return node;
+}
+/**
+ * Build the segmented-donut score marker: one arc segment per
+ * contribution, sized by its share of THIS option's score (purple for
+ * the user's preferences, the second accent for agent judgment), with
+ * the option's share of the question total in the center.
+ *
+ * @param score - The option's score view (pct + breakdown).
+ * @returns An inline SVG element.
+ */
+function scoreDonut(score) {
+    const NS = "http://www.w3.org/2000/svg";
+    const size = 34;
+    const c = size / 2;
+    const r = 14;
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("width", String(size));
+    svg.setAttribute("height", String(size));
+    svg.setAttribute("viewBox", `0 0 ${size} ${size}`);
+    svg.setAttribute("class", "score-donut");
+    const colorFor = (source) => source === "preference" ? "var(--accent)" : "var(--accent2)";
+    const shares = score.breakdown.filter((b) => b.ofOptionPct > 0);
+    if (shares.length === 1) {
+        const ring = document.createElementNS(NS, "circle");
+        ring.setAttribute("cx", String(c));
+        ring.setAttribute("cy", String(c));
+        ring.setAttribute("r", String(r));
+        ring.setAttribute("fill", "none");
+        ring.setAttribute("stroke", colorFor(shares[0].source));
+        ring.setAttribute("stroke-width", "3.5");
+        svg.append(ring);
+    }
+    else {
+        // Segmented ring: proportional arcs with a fixed gap between them.
+        const totalShare = shares.reduce((sum, b) => sum + b.ofOptionPct, 0);
+        const gap = 0.16;
+        const available = 2 * Math.PI - gap * shares.length;
+        let angle = -Math.PI / 2;
+        for (const share of shares) {
+            const sweep = (share.ofOptionPct / totalShare) * available;
+            const x0 = c + r * Math.cos(angle);
+            const y0 = c + r * Math.sin(angle);
+            const x1 = c + r * Math.cos(angle + sweep);
+            const y1 = c + r * Math.sin(angle + sweep);
+            const path = document.createElementNS(NS, "path");
+            path.setAttribute("d", `M ${x0} ${y0} A ${r} ${r} 0 ${sweep > Math.PI ? 1 : 0} 1 ${x1} ${y1}`);
+            path.setAttribute("fill", "none");
+            path.setAttribute("stroke", colorFor(share.source));
+            path.setAttribute("stroke-width", "3.5");
+            svg.append(path);
+            angle += sweep + gap;
+        }
+    }
+    const text = document.createElementNS(NS, "text");
+    text.setAttribute("x", String(c));
+    text.setAttribute("y", String(c));
+    text.setAttribute("class", "score-donut-text");
+    text.setAttribute("text-anchor", "middle");
+    text.setAttribute("dominant-baseline", "central");
+    text.textContent = `${score.pct}`;
+    svg.append(text);
+    return svg;
 }
 /**
  * Append text that may carry `backtick` spans, rendering them as <code>.
@@ -624,10 +711,12 @@ class GrillingPage {
             for (const badge of option.badges)
                 head.append(el("span", "option-badge", badge));
             if (option.score) {
-                const chip = el("span", "option-score", `${option.score.pct}%`);
-                // Hover reveals which contribution gave how much (title tooltip;
-                // the breakdown is also in the markdown fallback verbatim).
-                chip.title = option.score.breakdown.map((b) => `${b.label}: ${b.pct}%`).join("\n");
+                const chip = el("span", "option-score", "");
+                // Hover still reveals each contribution as percent of the
+                // QUESTION total; the donut segments show each contribution's
+                // share of THIS option's score.
+                chip.title = option.score.breakdown.map((b) => `${b.label}: ${b.pct}% of total`).join("\n");
+                chip.append(scoreDonut(option.score));
                 head.append(chip);
             }
             item.append(head);

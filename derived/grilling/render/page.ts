@@ -31,6 +31,74 @@ function el(tag: string, className: string, text?: string): HTMLElement {
 }
 
 /**
+ * Build the segmented-donut score marker: one arc segment per
+ * contribution, sized by its share of THIS option's score (purple for
+ * the user's preferences, the second accent for agent judgment), with
+ * the option's share of the question total in the center.
+ *
+ * @param score - The option's score view (pct + breakdown).
+ * @returns An inline SVG element.
+ */
+function scoreDonut(score: {
+  pct: number;
+  breakdown: { label: string; pct: number; ofOptionPct: number; source: "preference" | "agent" }[];
+}): SVGSVGElement {
+  const NS = "http://www.w3.org/2000/svg";
+  const size = 34;
+  const c = size / 2;
+  const r = 14;
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("width", String(size));
+  svg.setAttribute("height", String(size));
+  svg.setAttribute("viewBox", `0 0 ${size} ${size}`);
+  svg.setAttribute("class", "score-donut");
+
+  const colorFor = (source: "preference" | "agent") =>
+    source === "preference" ? "var(--accent)" : "var(--accent2)";
+  const shares = score.breakdown.filter((b) => b.ofOptionPct > 0);
+  if (shares.length === 1) {
+    const ring = document.createElementNS(NS, "circle");
+    ring.setAttribute("cx", String(c));
+    ring.setAttribute("cy", String(c));
+    ring.setAttribute("r", String(r));
+    ring.setAttribute("fill", "none");
+    ring.setAttribute("stroke", colorFor(shares[0].source));
+    ring.setAttribute("stroke-width", "3.5");
+    svg.append(ring);
+  } else {
+    // Segmented ring: proportional arcs with a fixed gap between them.
+    const totalShare = shares.reduce((sum, b) => sum + b.ofOptionPct, 0);
+    const gap = 0.16;
+    const available = 2 * Math.PI - gap * shares.length;
+    let angle = -Math.PI / 2;
+    for (const share of shares) {
+      const sweep = (share.ofOptionPct / totalShare) * available;
+      const x0 = c + r * Math.cos(angle);
+      const y0 = c + r * Math.sin(angle);
+      const x1 = c + r * Math.cos(angle + sweep);
+      const y1 = c + r * Math.sin(angle + sweep);
+      const path = document.createElementNS(NS, "path");
+      path.setAttribute("d", `M ${x0} ${y0} A ${r} ${r} 0 ${sweep > Math.PI ? 1 : 0} 1 ${x1} ${y1}`);
+      path.setAttribute("fill", "none");
+      path.setAttribute("stroke", colorFor(share.source));
+      path.setAttribute("stroke-width", "3.5");
+      svg.append(path);
+      angle += sweep + gap;
+    }
+  }
+
+  const text = document.createElementNS(NS, "text");
+  text.setAttribute("x", String(c));
+  text.setAttribute("y", String(c));
+  text.setAttribute("class", "score-donut-text");
+  text.setAttribute("text-anchor", "middle");
+  text.setAttribute("dominant-baseline", "central");
+  text.textContent = `${score.pct}`;
+  svg.append(text);
+  return svg;
+}
+
+/**
  * Append text that may carry `backtick` spans, rendering them as <code>.
  *
  * @param parent - Element to append into.
@@ -148,10 +216,12 @@ class GrillingPage {
       head.append(el("span", "option-label", option.label));
       for (const badge of option.badges) head.append(el("span", "option-badge", badge));
       if (option.score) {
-        const chip = el("span", "option-score", `${option.score.pct}%`);
-        // Hover reveals which contribution gave how much (title tooltip;
-        // the breakdown is also in the markdown fallback verbatim).
-        chip.title = option.score.breakdown.map((b) => `${b.label}: ${b.pct}%`).join("\n");
+        const chip = el("span", "option-score", "");
+        // Hover still reveals each contribution as percent of the
+        // QUESTION total; the donut segments show each contribution's
+        // share of THIS option's score.
+        chip.title = option.score.breakdown.map((b) => `${b.label}: ${b.pct}% of total`).join("\n");
+        chip.append(scoreDonut(option.score));
         head.append(chip);
       }
       item.append(head);
