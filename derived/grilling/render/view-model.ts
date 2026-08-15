@@ -12,23 +12,20 @@
 import type { GrillingSession, DecisionQuestion, AnswerState } from "./decision-context.ts";
 
 /**
- * Rank-order-centroid weights for an ordered list of n items: the item at
- * 1-based rank i gets w_i = (1/n) * sum_{k=i..n} 1/k. The standard way to
- * turn a pure priority ordering into weights when the items carry no
- * scores of their own — earlier entries weigh more, later entries still
- * count, weights sum to 1.
+ * Lexicographic weights for an ordered list of n items: rank i gets
+ * 2^-i, normalized to sum 1. The one numeric encoding faithful to the
+ * preference set's earlier-rule-wins ordering (S1Q4 ruling): every rank
+ * strictly outweighs all lower ranks combined, so no coalition of later
+ * rules can outvote an earlier one — which rank-order-centroid allowed
+ * (ranks 4-6 beat rank 1 at n=14), silently repealing the convention.
  *
  * @param n - Number of ranked items.
  * @returns Weights indexed by rank-1.
  */
-export function rankOrderCentroid(n: number): number[] {
-  const weights: number[] = [];
-  for (let i = 1; i <= n; i++) {
-    let sum = 0;
-    for (let k = i; k <= n; k++) sum += 1 / k;
-    weights.push(sum / n);
-  }
-  return weights;
+export function lexicographicWeights(n: number): number[] {
+  const raw = Array.from({ length: n }, (_, i) => 2 ** -(i + 1));
+  const total = raw.reduce((a, b) => a + b, 0);
+  return raw.map((w) => w / total);
 }
 
 /** Display-ready form of one grilling session. */
@@ -167,7 +164,7 @@ export function buildViewModel(session: GrillingSession): SessionViewModel {
  */
 function buildQuestion(q: DecisionQuestion, session: number, preferences: string[], preferenceDocs: Record<string, string>): QuestionViewModel {
   const id = `S${session}Q${q.seq}`;
-  const weights = rankOrderCentroid(preferences.length);
+  const weights = lexicographicWeights(preferences.length);
   const topWeight = weights[0] ?? 1;
 
   // Footnotes: one entry per preference matched by any option, ordered by

@@ -111,7 +111,7 @@ test("every slot carries at least one compact tag", () => {
   assert.match(md, /"N, BAB …"/, "answer hint must offer the BAB shorthand");
 });
 
-red.fails("matched preferences become footnote refs resolving to ranked lineage entries", () => {
+test("matched preferences become footnote refs resolving to ranked lineage entries", () => {
   const { status, stderr, outDir } = render(join(FIXTURES, "session.json"));
   assert.equal(status, 0, `renderer failed: ${stderr}`);
   const md = readFileSync(join(outDir, "session.md"), "utf8");
@@ -144,7 +144,7 @@ test("options carry normalized scores with a per-contribution breakdown", () => 
   );
 });
 
-red.fails("preference doc links render in the lineage footnotes", () => {
+test("preference doc links render in the lineage footnotes", () => {
   const { status, stderr, outDir } = render(join(FIXTURES, "session.json"));
   assert.equal(status, 0, `renderer failed: ${stderr}`);
   const md = readFileSync(join(outDir, "session.md"), "utf8");
