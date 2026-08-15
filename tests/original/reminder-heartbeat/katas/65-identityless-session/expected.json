@@ -1,0 +1,9 @@
+{
+  "status": "backlog",
+  "stop_hook_active": false,
+  "summary_written_at": "2026-08-03T12:07:10.000Z",
+  "exit": 2,
+  "check": "session-identity",
+  "sealed": false,
+  "reason": []
+}
