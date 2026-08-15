@@ -79,7 +79,7 @@ function validSession() {
   return JSON.parse(readFileSync(join(FIXTURES, "session.json"), "utf8"));
 }
 
-red.fails("valid session renders artifact html with injected JSON and a text fallback", () => {
+test("valid session renders artifact html with injected JSON and a text fallback", () => {
   const fixture = join(FIXTURES, "session.json");
   const { status, stderr, outDir } = render(fixture);
   assert.equal(status, 0, `renderer failed: ${stderr}`);
@@ -98,7 +98,7 @@ red.fails("valid session renders artifact html with injected JSON and a text fal
   assert.match(md, /^A3\. \*\*Something else…\*\*/m, "renderer must append the free-text slot itself, labeled Something else…");
 });
 
-red.fails("every slot carries at least one compact tag", () => {
+test("every slot carries at least one compact tag", () => {
   const { status, stderr, outDir } = render(join(FIXTURES, "session.json"));
   assert.equal(status, 0, `renderer failed: ${stderr}`);
   const md = readFileSync(join(outDir, "session.md"), "utf8");
