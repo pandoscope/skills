@@ -97,11 +97,15 @@
       },
       "answer": {
         "skipped": true
-      }
+      },
+      "noneScore": 0.3
     }
   ],
   "preferences": [
     "tools-travel-with-their-skill",
     "prefer-boring-tech"
-  ]
+  ],
+  "preferenceDocs": {
+    "tools-travel-with-their-skill": "https://github.com/pandoscope/decision-memory/blob/main/proposals/tools-travel-with-their-skill.md"
+  }
 }

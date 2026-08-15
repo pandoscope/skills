@@ -79,7 +79,7 @@ function validSession() {
   return JSON.parse(readFileSync(join(FIXTURES, "session.json"), "utf8"));
 }
 
-test("valid session renders artifact html with injected JSON and a text fallback", () => {
+red.fails("valid session renders artifact html with injected JSON and a text fallback", () => {
   const fixture = join(FIXTURES, "session.json");
   const { status, stderr, outDir } = render(fixture);
   assert.equal(status, 0, `renderer failed: ${stderr}`);
@@ -98,7 +98,7 @@ test("valid session renders artifact html with injected JSON and a text fallback
   assert.match(md, /^A3\. \*\*Something else…\*\*/m, "renderer must append the free-text slot itself, labeled Something else…");
 });
 
-test("every slot carries at least one compact tag", () => {
+red.fails("every slot carries at least one compact tag", () => {
   const { status, stderr, outDir } = render(join(FIXTURES, "session.json"));
   assert.equal(status, 0, `renderer failed: ${stderr}`);
   const md = readFileSync(join(outDir, "session.md"), "utf8");
@@ -111,7 +111,7 @@ test("every slot carries at least one compact tag", () => {
   assert.match(md, /"N, BAB …"/, "answer hint must offer the BAB shorthand");
 });
 
-test("matched preferences become footnote refs resolving to ranked lineage entries", () => {
+red.fails("matched preferences become footnote refs resolving to ranked lineage entries", () => {
   const { status, stderr, outDir } = render(join(FIXTURES, "session.json"));
   assert.equal(status, 0, `renderer failed: ${stderr}`);
   const md = readFileSync(join(outDir, "session.md"), "utf8");
@@ -124,7 +124,7 @@ test("matched preferences become footnote refs resolving to ranked lineage entri
   assert.doesNotMatch(md, /`tools-travel-with-their-skill`/, "full rule text must no longer be inlined in the prose");
 });
 
-test("options carry normalized scores with a per-contribution breakdown", () => {
+red.fails("options carry normalized scores with a per-contribution breakdown", () => {
   const { status, stderr, outDir } = render(join(FIXTURES, "session.json"));
   assert.equal(status, 0, `renderer failed: ${stderr}`);
   const md = readFileSync(join(outDir, "session.md"), "utf8");
@@ -135,9 +135,27 @@ test("options carry normalized scores with a per-contribution breakdown", () => 
   // S1Q1 (cold): agent scores only, 0.6 vs 0.2 -> 75% / 25%.
   assert.match(md, /score 75% \(my judgment 75%\)/, "cold agent score missing");
   assert.match(md, /proposed preference: a renderer used by two skills graduates to its own package/, "proposed preference missing");
+  // S1Q3: noneScore 0.3 is the only contribution, so the free-text slot
+  // carries the full residual "none of the listed answers fit" score.
+  assert.match(
+    md,
+    /\*\*Something else…\*\* \(free text\) — custom choice or custom rejection reasoning — score 100% \(my judgment 100%\)/,
+    "noneScore must score the free-text slot",
+  );
 });
 
-test("answer state is displayed: chosen free text with rejection reasons, and skips", () => {
+red.fails("preference doc links render in the lineage footnotes", () => {
+  const { status, stderr, outDir } = render(join(FIXTURES, "session.json"));
+  assert.equal(status, 0, `renderer failed: ${stderr}`);
+  const md = readFileSync(join(outDir, "session.md"), "utf8");
+  assert.match(
+    md,
+    /\[1\] \[tools-travel-with-their-skill\]\(https:\/\/github\.com\/pandoscope\/decision-memory\/blob\/main\/proposals\/tools-travel-with-their-skill\.md\) \(rank 1, weight 75%\)/,
+    "footnote must link the preference's promotion doc when a link is recorded",
+  );
+});
+
+red.fails("answer state is displayed: chosen free text with rejection reasons, and skips", () => {
   const { status, stderr, outDir } = render(join(FIXTURES, "session.json"));
   assert.equal(status, 0, `renderer failed: ${stderr}`);
   const md = readFileSync(join(outDir, "session.md"), "utf8");
@@ -147,7 +165,7 @@ test("answer state is displayed: chosen free text with rejection reasons, and sk
   assert.match(md, /Disconfirmed: prefer-boring-tech/, "disconfirmed-rule display missing");
 });
 
-test("rejects sessions violating the schema, naming the offending field", () => {
+red.fails("rejects sessions violating the schema, naming the offending field", () => {
   const cases = [
     ["version 1 document", (s) => (s.version = 1), /version.*1/],
     ["missing session number", (s) => delete s.session, /session/],
@@ -263,6 +281,12 @@ test("rejects sessions violating the schema, naming the offending field", () => 
       "considered rule outside the active set",
       (s) => (s.questions[0].lineage.rulesConsidered[0].name = "ghost-rule"),
       /rulesConsidered.*ghost-rule/,
+    ],
+    ["noneScore out of range", (s) => (s.questions[0].noneScore = 1.5), /noneScore.*1\.5/],
+    [
+      "preference doc for an unknown preference",
+      (s) => (s.preferenceDocs = { "ghost-rule": "https://example.com" }),
+      /preferenceDocs.*ghost-rule/,
     ],
     [
       "matched preference missing from rulesConsidered",
