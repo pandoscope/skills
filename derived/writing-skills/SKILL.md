@@ -23,13 +23,13 @@ A skill buys predictability: the same *process* every run, not the same output.
 
 ## Invocation
 
-- **[Model-invoked](glossary/model-invoked.md)** — keeps `description`. The agent fires it unprompted and other skills can reach it, paid for in [context load](glossary/context-load.md): the description is resident every turn. Take it when the agent, or another skill, must reach this skill on its own.
-- **[User-invoked](glossary/user-invoked.md)** — `disable-model-invocation: true`. No context load, paid in [cognitive load](glossary/cognitive-load.md): the human is the index. Once they outnumber what a human remembers, one user-invoked skill names the rest.
+- **[Model-invoked](glossary/model-invoked.md)** — when the agent, or another skill, must reach this skill on its own. Paid in [context load](glossary/context-load.md).
+- **[User-invoked](glossary/user-invoked.md)** — `disable-model-invocation: true`; paid in [cognitive load](glossary/cognitive-load.md). Once they outnumber what a human remembers, one user-invoked skill names the rest.
 
 ## Description
 
 Triggers only — what fires the skill, rather than how it works.
-It is injected into every session whether or not the skill ever runs, which makes it the scarcest budget in the skill: prune it harder than the body.
+The skill's scarcest budget: prune it harder than the body.
 
 - Front-load the [leading word](glossary/leading-word.md). Invocation work happens there.
 - One trigger per branch. Synonyms renaming one branch are the same trigger twice: "build features using TDD … asks for test-first development".
@@ -44,22 +44,20 @@ It is injected into every session whether or not the skill ever runs, which make
 Each step ends on a [completion criterion](glossary/completion-criterion.md).
 Take the highest rung it can reach:
 
-1. Machine-checkable — CI, a pre-commit hook, or a command the agent runs. Costs no tokens at runtime and cannot be skimmed past.
+1. Machine-checkable — CI, a pre-commit hook, or a command the agent runs.
 2. Agent-checkable against a concrete criterion.
 3. Agent-checkable by interpretation.
 4. User-checkable against a concrete criterion.
 5. User-checkable by interpretation.
 
-Rungs 1 and 2 resist [premature completion](glossary/premature-completion.md); 3 and below rely on attention.
-Where it matters, make the criterion exhaustive — "every modified model accounted for" beats "produce a change list" — which is what drives [legwork](glossary/legwork.md).
-Exhaustiveness binds flat reference too: "every rule applied".
-
+Where it matters, make the criterion exhaustive: "every rule applied", not "rules reviewed".
 When a criterion is missed repeatedly, move it up a rung before rewording it.
 
 Disclose by branch: inline what every run needs, push out what only some runs reach.
 A [context pointer](glossary/context-pointer.md)'s *wording*, not its target, decides how reliably the agent follows it — sharpen the wording before pulling material back inline.
 
-Keep a concept's definition, rules and caveats under one heading, so reading one part brings its neighbors.
+One home per meaning, in either direction: the skill carries the instruction, the linked entry the explanation — never both. A sentence whose meaning the link already carries is [duplication](glossary/duplication.md).
+Keep a rule's caveats beside it, so reading one part brings its neighbors.
 
 ## The check script
 
@@ -75,11 +73,7 @@ Authoring or reviewing a skill ends with this folder's own `check.sh <skill-fold
 
 ## Leading words
 
-A [leading word](glossary/leading-word.md) is a compact concept already in the model's pretraining that the agent thinks with —
-*tracer bullet*, *fog of war*, *blast radius*, *red*.
-Repeated as a token, it accumulates a distributed definition and anchors a region of behavior in the fewest tokens.
-
-Hunt for passages that collapse into one:
+Hunt for passages that collapse into one [leading word](glossary/leading-word.md):
 
 - "fast, deterministic, low-overhead" → *tight* — one quality restated across a phase.
 - "a loop you believe in" → *red* — a fuzzy gate becomes a binary observable state.
@@ -87,18 +81,17 @@ Hunt for passages that collapse into one:
 ## Splitting
 
 - **By invocation** — a distinct leading word should trigger it on its own, or another skill must reach it. Pays context load for a new description.
-- **By sequence** — [post-completion steps](glossary/post-completion-steps.md) tempt the agent to rush the step in front of them. Hiding them works only across a real context boundary; an inline call leaves them in context.
+- **By sequence** — to put [post-completion steps](glossary/post-completion-steps.md) behind a real context boundary. An inline call leaves them in context.
 
 ## Pruning
 
-- Hunt [no-ops](glossary/no-op.md) sentence by sentence: does this change behavior versus the default? Delete the whole sentence rather than trimming words from it.
-- Prompt the positive. [Negation](glossary/negation.md) names the elephant: state the target behavior so the banned one is never spoken. Keep a prohibition only as a guardrail that cannot be phrased positively, and pair it with what to do instead.
+- Hunt [no-ops](glossary/no-op.md) sentence by sentence. Delete the whole sentence rather than trimming words from it.
+- Prompt the positive. A prohibition survives only as a [negation](glossary/negation.md) guardrail that cannot be phrased positively, paired with what to do instead.
 - Instruct; give a reason only where the reason changes what the agent does. A paragraph defending the design argues with a reader who is already trying to follow it.
 
 ## Ship self-contained
 
-[Self-containment](glossary/self-containment.md): everything the skill needs sits in its folder, and nothing outside it ships alongside.
-A skill is installed individually, into a project that may use none of the tooling its authors assume.
+[Self-containment](glossary/self-containment.md) bounds what a skill may name:
 
 - Name no project-specific document paths. State the rule as a principle and use your own project as the worked example.
 - Name no tool or CLI the installing project need not have — "view the issue", not a command.
@@ -107,11 +100,9 @@ A skill is installed individually, into a project that may use none of the tooli
 
 ## Grading
 
-Run the scenario against an agent that does *not* have the skill, before writing it — the [baseline test](glossary/baseline-test.md).
-Whatever that agent already does is the default the skill has to beat, so rules that restate it surface as [no-ops](glossary/no-op.md).
-
+Run the [baseline test](glossary/baseline-test.md) before writing the skill.
 Every run where the skill went wrong becomes a scenario, and the set doubles as regression tests.
-Record the agent harness and model version with each: both move the default the skill is measured against, so a scenario without them cannot be compared across time.
+Record the agent harness and model version with each.
 
 Keep scenarios outside the skill folder so they never ship with it.
 
