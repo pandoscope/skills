@@ -226,11 +226,6 @@
     font-weight: 700;
     font-variant-numeric: tabular-nums;
   }
-  .write-marker-glyph {
-    fill: var(--muted);
-    font-size: 16px;
-    font-weight: 400;
-  }
   .option-proposed {
     margin: 0.15rem 0 0;
     color: var(--accent);
@@ -321,6 +316,10 @@
   .lineage-rule-name {
     font-weight: 650;
     color: var(--accent);
+    text-decoration: none;
+  }
+  a.lineage-rule-name:hover {
+    text-decoration: underline;
   }
   .lineage-rule-disposition {
     color: var(--muted);
@@ -378,7 +377,7 @@ function rankOrderCentroid(n) {
 function buildViewModel(session) {
     return {
         title: `Grilling S${session.session}`,
-        questions: session.questions.map((q) => buildQuestion(q, session.session, session.preferences ?? [])),
+        questions: session.questions.map((q) => buildQuestion(q, session.session, session.preferences ?? [], session.preferenceDocs ?? {})),
         answerHint: 'Reply in chat with the answer id ("S1Q2A1" or just "1"), or "N, but actually because …" ("N, BAB …") to accept an option while overriding its stated reason. In the artifact page: click your answers, then use "Copy answers as JSON" and paste the result into chat.',
     };
 }
@@ -388,9 +387,10 @@ function buildViewModel(session) {
  * @param q - The question.
  * @param session - The session number (for the S«s»Q«q» id).
  * @param preferences - The session's ordered preference names.
+ * @param preferenceDocs - Promotion-doc URLs per preference name.
  * @returns The question view model.
  */
-function buildQuestion(q, session, preferences) {
+function buildQuestion(q, session, preferences, preferenceDocs) {
     const id = `S${session}Q${q.seq}`;
     const weights = rankOrderCentroid(preferences.length);
     const topWeight = weights[0] ?? 1;
@@ -406,6 +406,7 @@ function buildQuestion(q, session, preferences) {
             rank,
             weightPct: Math.round(weights[rank - 1] * 100),
             disposition: q.lineage.rulesConsidered.find((r) => r.name === name)?.disposition,
+            url: preferenceDocs[name],
         };
     });
     // Raw score per listed option: matched preference weights plus the
@@ -413,7 +414,10 @@ function buildQuestion(q, session, preferences) {
     // judgment can never outvote the user's highest-ranked preference.
     const raw = q.options.map((o) => (o.matches ?? []).reduce((sum, name) => sum + weights[preferences.indexOf(name)], 0) +
         (o.agentScore ?? 0) * topWeight);
-    const total = raw.reduce((a, b) => a + b, 0);
+    // The residual term: the agent's estimate that none of the listed
+    // options fit, scoring the free-text slot in the same pool.
+    const noneRaw = (q.noneScore ?? 0) * topWeight;
+    const total = raw.reduce((a, b) => a + b, 0) + noneRaw;
     const options = q.options.map((option, i) => ({
         number: i + 1,
         id: `A${i + 1}`,
@@ -460,6 +464,14 @@ function buildQuestion(q, session, preferences) {
         badges: ["free text"],
         entails: "custom choice or custom rejection reasoning",
         footnotes: [],
+        score: noneRaw > 0
+            ? {
+                pct: Math.round((noneRaw / total) * 100),
+                breakdown: [
+                    { label: "my judgment", pct: Math.round((noneRaw / total) * 100), ofOptionPct: 100, source: "agent" },
+                ],
+            }
+            : undefined,
         proposedPreferences: [],
         freeText: true,
     });
@@ -635,19 +647,23 @@ function writeMarker() {
     svg.setAttribute("height", String(size));
     svg.setAttribute("viewBox", `0 0 ${size} ${size}`);
     svg.setAttribute("class", "write-marker");
+    // Same geometry and stroke weight as the score donut, dotted, in the
+    // soft secondary accent; the + uses the donut's own text style so the
+    // two corner marks read as one family.
     const ring = document.createElementNS(NS, "circle");
     ring.setAttribute("cx", String(c));
     ring.setAttribute("cy", String(c));
     ring.setAttribute("r", "14");
     ring.setAttribute("fill", "none");
-    ring.setAttribute("stroke", "var(--muted)");
-    ring.setAttribute("stroke-width", "1.5");
-    ring.setAttribute("stroke-dasharray", "2.5 2.5");
+    ring.setAttribute("stroke", "var(--accent-soft)");
+    ring.setAttribute("stroke-width", "3.5");
+    ring.setAttribute("stroke-dasharray", "1 4");
+    ring.setAttribute("stroke-linecap", "round");
     svg.append(ring);
     const plus = document.createElementNS(NS, "text");
     plus.setAttribute("x", String(c));
     plus.setAttribute("y", String(c));
-    plus.setAttribute("class", "write-marker-glyph");
+    plus.setAttribute("class", "score-donut-text");
     plus.setAttribute("text-anchor", "middle");
     plus.setAttribute("dominant-baseline", "central");
     plus.textContent = "+";
@@ -848,7 +864,18 @@ class GrillingPage {
             const item = el("li", "lineage-rule");
             item.id = note.anchorId;
             item.append(el("span", "lineage-rule-marker", `[${note.marker}] `));
-            item.append(el("span", "lineage-rule-name", note.name));
+            if (note.url) {
+                const link = document.createElement("a");
+                link.className = "lineage-rule-name";
+                link.href = note.url;
+                link.target = "_blank";
+                link.rel = "noopener";
+                link.textContent = note.name;
+                item.append(link);
+            }
+            else {
+                item.append(el("span", "lineage-rule-name", note.name));
+            }
             item.append(el("span", "lineage-rule-weight", ` (rank ${note.rank}, weight ${note.weightPct}%)`));
             if (note.disposition)
                 item.append(el("span", "lineage-rule-disposition", ` — ${note.disposition}`));

@@ -114,19 +114,23 @@ function writeMarker(): SVGSVGElement {
   svg.setAttribute("height", String(size));
   svg.setAttribute("viewBox", `0 0 ${size} ${size}`);
   svg.setAttribute("class", "write-marker");
+  // Same geometry and stroke weight as the score donut, dotted, in the
+  // soft secondary accent; the + uses the donut's own text style so the
+  // two corner marks read as one family.
   const ring = document.createElementNS(NS, "circle");
   ring.setAttribute("cx", String(c));
   ring.setAttribute("cy", String(c));
   ring.setAttribute("r", "14");
   ring.setAttribute("fill", "none");
-  ring.setAttribute("stroke", "var(--muted)");
-  ring.setAttribute("stroke-width", "1.5");
-  ring.setAttribute("stroke-dasharray", "2.5 2.5");
+  ring.setAttribute("stroke", "var(--accent-soft)");
+  ring.setAttribute("stroke-width", "3.5");
+  ring.setAttribute("stroke-dasharray", "1 4");
+  ring.setAttribute("stroke-linecap", "round");
   svg.append(ring);
   const plus = document.createElementNS(NS, "text");
   plus.setAttribute("x", String(c));
   plus.setAttribute("y", String(c));
-  plus.setAttribute("class", "write-marker-glyph");
+  plus.setAttribute("class", "score-donut-text");
   plus.setAttribute("text-anchor", "middle");
   plus.setAttribute("dominant-baseline", "central");
   plus.textContent = "+";
@@ -336,7 +340,17 @@ class GrillingPage {
       const item = el("li", "lineage-rule");
       item.id = note.anchorId;
       item.append(el("span", "lineage-rule-marker", `[${note.marker}] `));
-      item.append(el("span", "lineage-rule-name", note.name));
+      if (note.url) {
+        const link = document.createElement("a");
+        link.className = "lineage-rule-name";
+        link.href = note.url;
+        link.target = "_blank";
+        link.rel = "noopener";
+        link.textContent = note.name;
+        item.append(link);
+      } else {
+        item.append(el("span", "lineage-rule-name", note.name));
+      }
       item.append(el("span", "lineage-rule-weight", ` (rank ${note.rank}, weight ${note.weightPct}%)`));
       if (note.disposition) item.append(el("span", "lineage-rule-disposition", ` — ${note.disposition}`));
       item.append(this.disconfirmToggle(note.name, state));

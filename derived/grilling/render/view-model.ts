@@ -116,7 +116,16 @@ export interface LineageView {
    * session's preference order, ROC weight as percent, and the lineage
    * disposition when the rule was explicitly considered.
    */
-  footnotes: { marker: number; anchorId: string; name: string; rank: number; weightPct: number; disposition?: string }[];
+  footnotes: {
+    marker: number;
+    anchorId: string;
+    name: string;
+    rank: number;
+    weightPct: number;
+    disposition?: string;
+    /** Promotion-doc URL, when the session records one for this rule. */
+    url?: string;
+  }[];
   /** Rules considered but not matched by any option (e.g. set aside). */
   rules: { name: string; disposition: string }[];
 }
@@ -141,7 +150,7 @@ export interface AnsweredView {
 export function buildViewModel(session: GrillingSession): SessionViewModel {
   return {
     title: `Grilling S${session.session}`,
-    questions: session.questions.map((q) => buildQuestion(q, session.session, session.preferences ?? [])),
+    questions: session.questions.map((q) => buildQuestion(q, session.session, session.preferences ?? [], session.preferenceDocs ?? {})),
     answerHint:
       'Reply in chat with the answer id ("S1Q2A1" or just "1"), or "N, but actually because …" ("N, BAB …") to accept an option while overriding its stated reason. In the artifact page: click your answers, then use "Copy answers as JSON" and paste the result into chat.',
   };
@@ -153,9 +162,10 @@ export function buildViewModel(session: GrillingSession): SessionViewModel {
  * @param q - The question.
  * @param session - The session number (for the S«s»Q«q» id).
  * @param preferences - The session's ordered preference names.
+ * @param preferenceDocs - Promotion-doc URLs per preference name.
  * @returns The question view model.
  */
-function buildQuestion(q: DecisionQuestion, session: number, preferences: string[]): QuestionViewModel {
+function buildQuestion(q: DecisionQuestion, session: number, preferences: string[], preferenceDocs: Record<string, string>): QuestionViewModel {
   const id = `S${session}Q${q.seq}`;
   const weights = rankOrderCentroid(preferences.length);
   const topWeight = weights[0] ?? 1;
@@ -174,6 +184,7 @@ function buildQuestion(q: DecisionQuestion, session: number, preferences: string
       rank,
       weightPct: Math.round(weights[rank - 1] * 100),
       disposition: q.lineage.rulesConsidered.find((r) => r.name === name)?.disposition,
+      url: preferenceDocs[name],
     };
   });
 
@@ -185,7 +196,10 @@ function buildQuestion(q: DecisionQuestion, session: number, preferences: string
       (o.matches ?? []).reduce((sum, name) => sum + weights[preferences.indexOf(name)], 0) +
       (o.agentScore ?? 0) * topWeight,
   );
-  const total = raw.reduce((a, b) => a + b, 0);
+  // The residual term: the agent's estimate that none of the listed
+  // options fit, scoring the free-text slot in the same pool.
+  const noneRaw = (q.noneScore ?? 0) * topWeight;
+  const total = raw.reduce((a, b) => a + b, 0) + noneRaw;
 
   const options: OptionView[] = q.options.map((option, i) => ({
     number: i + 1,
@@ -234,6 +248,15 @@ function buildQuestion(q: DecisionQuestion, session: number, preferences: string
     badges: ["free text"],
     entails: "custom choice or custom rejection reasoning",
     footnotes: [],
+    score:
+      noneRaw > 0
+        ? {
+            pct: Math.round((noneRaw / total) * 100),
+            breakdown: [
+              { label: "my judgment", pct: Math.round((noneRaw / total) * 100), ofOptionPct: 100, source: "agent" as const },
+            ],
+          }
+        : undefined,
     proposedPreferences: [],
     freeText: true,
   });

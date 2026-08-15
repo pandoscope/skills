@@ -33,7 +33,8 @@ function questionLines(q: QuestionViewModel): string[] {
   if (q.lineage.coldNote) lines.push(q.lineage.coldNote);
   for (const note of q.lineage.footnotes) {
     const disposition = note.disposition ? ` — ${note.disposition}` : "";
-    lines.push(`- [${note.marker}] ${note.name} (rank ${note.rank}, weight ${note.weightPct}%)${disposition}`);
+    const name = note.url ? `[${note.name}](${note.url})` : note.name;
+    lines.push(`- [${note.marker}] ${name} (rank ${note.rank}, weight ${note.weightPct}%)${disposition}`);
   }
   for (const rule of q.lineage.rules) lines.push(`- ${rule.name} — ${rule.disposition}`);
   if (q.answered) {

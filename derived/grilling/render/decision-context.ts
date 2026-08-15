@@ -30,6 +30,14 @@ export interface GrillingSession {
    * option matches a preference.
    */
   preferences?: string[];
+  /**
+   * Promotion docs per preference: maps a preference name (an entry of
+   * `preferences`) to the URL of the doc that promoted it (e.g. its
+   * proposal file in the decision-memory repo). Not deducible from the
+   * preference line itself — looked up when the set is injected and
+   * recorded here explicitly. Lineage footnotes link it when present.
+   */
+  preferenceDocs?: Record<string, string>;
 }
 
 /** One decision put to the user, with full provenance and answer state. */
@@ -51,6 +59,13 @@ export interface DecisionQuestion {
   options: DecisionOption[];
   /** Near-tie between listed slots (1-based) and what they differ on. */
   nearTie?: NearTie;
+  /**
+   * The agent's estimate (0..1) that NONE of the listed options is the
+   * right answer — the residual "none of the above" mass. Scores the
+   * renderer-appended free-text slot through the same normalization,
+   * capped by the top preference weight like agentScore.
+   */
+  noneScore?: number;
   /** Which preference rules were considered — the lineage display. */
   lineage: Lineage;
   /** The user's answer, once given; absent while open. */
@@ -168,7 +183,7 @@ export interface AnswerState {
  */
 export function validateGrillingSession(value: unknown): GrillingSession {
   const session = requireRecord(value, "grilling session");
-  requireKnownKeys(session, ["version", "session", "questions", "preferences"], "grilling session");
+  requireKnownKeys(session, ["version", "session", "questions", "preferences", "preferenceDocs"], "grilling session");
   if (session.version !== 2) {
     throw new Error(`version must be 2, got: ${JSON.stringify(session.version)}`);
   }
@@ -184,6 +199,15 @@ export function validateGrillingSession(value: unknown): GrillingSession {
     session.preferences.forEach((name, i) => requireNonEmptyString(name, `preferences[${i}]`));
     preferences = session.preferences as string[];
     requireUnique(preferences, "preferences");
+  }
+  if (session.preferenceDocs !== undefined) {
+    const docs = requireRecord(session.preferenceDocs, "preferenceDocs");
+    for (const [name, url] of Object.entries(docs)) {
+      if (!preferences.includes(name)) {
+        throw new Error(`preferenceDocs names a preference not in session.preferences: ${JSON.stringify(name)}`);
+      }
+      requireNonEmptyString(url, `preferenceDocs[${JSON.stringify(name)}]`);
+    }
   }
   session.questions.forEach((question, i) => {
     const q = validateQuestion(question, `questions[${i}]`, preferences);
@@ -207,7 +231,7 @@ export function validateGrillingSession(value: unknown): GrillingSession {
  */
 function validateQuestion(value: unknown, path: string, preferences: string[]): DecisionQuestion {
   const q = requireRecord(value, path);
-  requireKnownKeys(q, ["seq", "question", "context", "options", "nearTie", "lineage", "answer"], path);
+  requireKnownKeys(q, ["seq", "question", "context", "options", "nearTie", "lineage", "answer", "noneScore"], path);
   requirePositiveInteger(q.seq, `${path}.seq`);
   requireNonEmptyString(q.question, `${path}.question`);
   if (q.context !== undefined) requireNonEmptyString(q.context, `${path}.context`);
@@ -218,6 +242,11 @@ function validateQuestion(value: unknown, path: string, preferences: string[]): 
   const options = q.options.map((option, i) => validateOption(option, `${path}.options[${i}]`, preferences));
   requireUnique(options.map((o) => `label ${o.label}`), `${path}.options`);
 
+  if (q.noneScore !== undefined) {
+    if (typeof q.noneScore !== "number" || q.noneScore < 0 || q.noneScore > 1) {
+      throw new Error(`${path}.noneScore must be a number in 0..1, got: ${JSON.stringify(q.noneScore)}`);
+    }
+  }
   const lineage = requireRecord(q.lineage, `${path}.lineage`);
   if (typeof lineage.cold !== "boolean") {
     throw new Error(`${path}.lineage.cold must be a boolean, got: ${JSON.stringify(lineage.cold)}`);
