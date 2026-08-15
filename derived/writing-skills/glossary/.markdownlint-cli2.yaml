@@ -1,0 +1,6 @@
+# Glossary entries start with `##` per the Disambiguate definition,
+# so the first-line-h1 rule does not apply here. The `_Avoid_:` label is
+# part of that same definition, so the emphasis-style rule does not either.
+config:
+  MD041: false
+  MD049: false
