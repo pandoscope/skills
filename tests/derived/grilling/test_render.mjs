@@ -147,7 +147,7 @@ test("answer state is displayed: chosen free text with rejection reasons, and sk
   assert.match(md, /Disconfirmed: prefer-boring-tech/, "disconfirmed-rule display missing");
 });
 
-red.fails("rejects sessions violating the schema, naming the offending field", () => {
+test("rejects sessions violating the schema, naming the offending field", () => {
   const cases = [
     ["version 1 document", (s) => (s.version = 1), /version.*1/],
     ["missing session number", (s) => delete s.session, /session/],

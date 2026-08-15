@@ -168,6 +168,7 @@ export interface AnswerState {
  */
 export function validateGrillingSession(value: unknown): GrillingSession {
   const session = requireRecord(value, "grilling session");
+  requireKnownKeys(session, ["version", "session", "questions", "preferences"], "grilling session");
   if (session.version !== 2) {
     throw new Error(`version must be 2, got: ${JSON.stringify(session.version)}`);
   }
@@ -182,14 +183,15 @@ export function validateGrillingSession(value: unknown): GrillingSession {
     }
     session.preferences.forEach((name, i) => requireNonEmptyString(name, `preferences[${i}]`));
     preferences = session.preferences as string[];
+    requireUnique(preferences, "preferences");
   }
-  const seen = new Set<number>();
   session.questions.forEach((question, i) => {
     const q = validateQuestion(question, `questions[${i}]`, preferences);
-    if (seen.has(q.seq)) {
-      throw new Error(`questions[${i}].seq duplicates an earlier question: ${q.seq}`);
+    // Contiguity subsumes uniqueness: seqs are exactly 1..N in order, so
+    // a re-authored session cannot silently drop or renumber a question.
+    if (q.seq !== i + 1) {
+      throw new Error(`questions[${i}].seq must be ${i + 1} (seqs are contiguous 1..N in order), got: ${q.seq}`);
     }
-    seen.add(q.seq);
   });
   return value as GrillingSession;
 }
@@ -205,6 +207,7 @@ export function validateGrillingSession(value: unknown): GrillingSession {
  */
 function validateQuestion(value: unknown, path: string, preferences: string[]): DecisionQuestion {
   const q = requireRecord(value, path);
+  requireKnownKeys(q, ["seq", "question", "context", "options", "nearTie", "lineage", "answer"], path);
   requirePositiveInteger(q.seq, `${path}.seq`);
   requireNonEmptyString(q.question, `${path}.question`);
   if (q.context !== undefined) requireNonEmptyString(q.context, `${path}.context`);
@@ -213,6 +216,7 @@ function validateQuestion(value: unknown, path: string, preferences: string[]): 
     throw new Error(`${path}.options must list 1-3 slots (free text is appended automatically), got: ${JSON.stringify(q.options)}`);
   }
   const options = q.options.map((option, i) => validateOption(option, `${path}.options[${i}]`, preferences));
+  requireUnique(options.map((o) => `label ${o.label}`), `${path}.options`);
 
   const lineage = requireRecord(q.lineage, `${path}.lineage`);
   if (typeof lineage.cold !== "boolean") {
@@ -223,9 +227,14 @@ function validateQuestion(value: unknown, path: string, preferences: string[]): 
   }
   lineage.rulesConsidered.forEach((rule, i) => {
     const record = requireRecord(rule, `${path}.lineage.rulesConsidered[${i}]`);
+    requireKnownKeys(record, ["name", "disposition"], `${path}.lineage.rulesConsidered[${i}]`);
     requireNonEmptyString(record.name, `${path}.lineage.rulesConsidered[${i}].name`);
     requireNonEmptyString(record.disposition, `${path}.lineage.rulesConsidered[${i}].disposition`);
+    if (!preferences.includes(record.name as string)) {
+      throw new Error(`${path}.lineage.rulesConsidered[${i}] names a rule outside the active preference set: ${JSON.stringify(record.name)}`);
+    }
   });
+  requireUnique(lineage.rulesConsidered.map((r) => (r as { name: string }).name), `${path}.lineage.rulesConsidered`);
 
   const usualSlots = options.filter((o) => o.kind === "usual" || o.kind === "usual-and-pick");
   if (lineage.cold && usualSlots.length > 0) {
@@ -242,15 +251,25 @@ function validateQuestion(value: unknown, path: string, preferences: string[]): 
   if (usualSlots.length > 1) {
     throw new Error(`${path} carries ${usualSlots.length} prediction-role slots — exactly one option may carry the prediction role`);
   }
+  if (usualSlots.length === 1 && options[0].kind !== "usual" && options[0].kind !== "usual-and-pick") {
+    throw new Error(`${path} prediction-role slot "${usualSlots[0].label}" must sit in slot 1 — scoring and the why-block key off A1`);
+  }
+  for (const matched of new Set(options.flatMap((o) => o.matches ?? []))) {
+    if (!lineage.rulesConsidered.some((r) => (r as { name: string }).name === matched)) {
+      throw new Error(`${path}.lineage.rulesConsidered is missing matched preference ${JSON.stringify(matched)} — every match needs its disposition on record`);
+    }
+  }
 
   if (q.nearTie !== undefined) {
     const nearTie = requireRecord(q.nearTie, `${path}.nearTie`);
+    requireKnownKeys(nearTie, ["slots", "differsOn"], `${path}.nearTie`);
     if (
       !Array.isArray(nearTie.slots) ||
       nearTie.slots.length < 2 ||
-      nearTie.slots.some((s) => typeof s !== "number" || s < 1 || s > options.length)
+      nearTie.slots.some((s) => typeof s !== "number" || s < 1 || s > options.length) ||
+      new Set(nearTie.slots).size !== nearTie.slots.length
     ) {
-      throw new Error(`${path}.nearTie.slots must name at least two listed slots (1-${options.length}), got: ${JSON.stringify(nearTie.slots)}`);
+      throw new Error(`${path}.nearTie.slots must name at least two DISTINCT listed slots (1-${options.length}), got: ${JSON.stringify(nearTie.slots)}`);
     }
     requireNonEmptyString(nearTie.differsOn, `${path}.nearTie.differsOn`);
   }
@@ -271,6 +290,7 @@ function validateQuestion(value: unknown, path: string, preferences: string[]): 
  */
 function validateAnswer(value: unknown, listedCount: number, path: string, preferences: string[]): void {
   const answer = requireRecord(value, path);
+  requireKnownKeys(answer, ["chosen", "freeText", "rejectionReasons", "correction", "skipped", "disconfirmedPreferences"], path);
   const freeTextSlot = listedCount + 1;
   if (answer.chosen !== undefined) {
     if (typeof answer.chosen !== "number" || !Number.isInteger(answer.chosen) || answer.chosen < 1 || answer.chosen > freeTextSlot) {
@@ -282,6 +302,19 @@ function validateAnswer(value: unknown, listedCount: number, path: string, prefe
   }
   if (answer.chosen === undefined && answer.skipped !== true) {
     throw new Error(`${path} must either choose a slot or be skipped, got: ${JSON.stringify(answer)}`);
+  }
+  if (answer.skipped === true) {
+    for (const excluded of ["chosen", "freeText", "rejectionReasons", "correction"]) {
+      if (answer[excluded] !== undefined) {
+        throw new Error(`${path} is skipped but carries ${excluded} — a skipped answer records no choice`);
+      }
+    }
+  }
+  if (answer.chosen === freeTextSlot && answer.freeText === undefined) {
+    throw new Error(`${path}.freeText is required when the free-text slot (${freeTextSlot}) is chosen — an empty ruling records nothing`);
+  }
+  if (answer.chosen !== undefined && answer.chosen !== freeTextSlot && answer.freeText !== undefined) {
+    throw new Error(`${path}.freeText belongs only to the free-text slot (${freeTextSlot}), but slot ${answer.chosen} was chosen`);
   }
   if (answer.freeText !== undefined) requireNonEmptyString(answer.freeText, `${path}.freeText`);
   if (answer.correction !== undefined) requireNonEmptyString(answer.correction, `${path}.correction`);
@@ -314,8 +347,12 @@ function validateAnswer(value: unknown, listedCount: number, path: string, prefe
  */
 function validateOption(value: unknown, path: string, preferences: string[]): DecisionOption {
   const option = requireRecord(value, path);
+  requireKnownKeys(option, ["label", "kind", "ifClause", "entails", "matches", "agentScore", "proposedPreferences", "whyNotRecommended"], path);
   requireNonEmptyString(option.label, `${path}.label`);
   requireNonEmptyString(option.entails, `${path}.entails`);
+  if ((option.entails as string).split("`").length % 2 === 0) {
+    throw new Error(`${path}.entails has an unbalanced backtick — inline code spans must close`);
+  }
   const kinds = ["usual", "pick", "usual-and-pick", "wildcard", "alternative"];
   if (typeof option.kind !== "string" || !kinds.includes(option.kind)) {
     throw new Error(`${path}.kind must be one of ${kinds.join("|")}, got: ${JSON.stringify(option.kind)}`);
@@ -329,6 +366,10 @@ function validateOption(value: unknown, path: string, preferences: string[]): De
         throw new Error(`${path}.matches names a preference not in session.preferences: ${JSON.stringify(name)}`);
       }
     }
+  }
+  if (option.matches !== undefined) requireUnique(option.matches as string[], `${path}.matches`);
+  if ((option.kind === "wildcard" || option.kind === "alternative") && option.ifClause === undefined) {
+    throw new Error(`${path}.ifClause is required for a "${option.kind}" slot — the condition under which it beats the recommendation is what makes the rejection recordable`);
   }
   if ((option.kind === "usual" || option.kind === "usual-and-pick") && !option.matches) {
     throw new Error(`${path}.matches must name at least one preference for a "${option.kind}" slot, got: ${JSON.stringify(option.matches)}`);
@@ -347,6 +388,40 @@ function validateOption(value: unknown, path: string, preferences: string[]): De
   if (option.ifClause !== undefined) requireNonEmptyString(option.ifClause, `${path}.ifClause`);
   if (option.whyNotRecommended !== undefined) requireNonEmptyString(option.whyNotRecommended, `${path}.whyNotRecommended`);
   return value as DecisionOption;
+}
+
+/**
+ * Reject fields outside a level's declared key set — a typo'd optional
+ * field must fail loudly, not silently vanish from the page.
+ *
+ * @param record - The object to check.
+ * @param allowed - Every key this level may carry.
+ * @param path - Field path for error messages.
+ * @throws Error naming the first unknown key.
+ */
+function requireKnownKeys(record: Record<string, unknown>, allowed: string[], path: string): void {
+  for (const key of Object.keys(record)) {
+    if (!allowed.includes(key)) {
+      throw new Error(`${path} carries unknown field "${key}" — allowed: ${allowed.join(", ")}`);
+    }
+  }
+}
+
+/**
+ * Reject duplicate entries in a list of strings.
+ *
+ * @param values - The strings to check.
+ * @param path - Field path for error messages.
+ * @throws Error naming the first duplicate.
+ */
+function requireUnique(values: string[], path: string): void {
+  const seen = new Set<string>();
+  for (const value of values) {
+    if (seen.has(value)) {
+      throw new Error(`${path} carries a duplicate entry: ${JSON.stringify(value)}`);
+    }
+    seen.add(value);
+  }
 }
 
 /**

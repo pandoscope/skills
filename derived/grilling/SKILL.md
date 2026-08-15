@@ -32,7 +32,7 @@ node --experimental-strip-types <skill-dir>/render/render.ts <session.json> --ou
 - `session.html` — publish as artifact, redeploying the same artifact URL as the session grows. Interactive: previous/next navigation across questions, clickable slots whose state persists while navigating, rejection-reason checkboxes once the choice diverges from A1 (several may apply), a free-text box, per-question skip, and "Copy answers as JSON".
 - `session.md` — pure-text fallback; paste verbatim when artifact publishing is unavailable.
 - Follow-up loop: when an answer spawns follow-up questions, append them to the session JSON together with the answers received so far and re-render — recorded state is carried forward into the page.
-- Validation failure names the offending field — fix the JSON, re-run. The renderer appends the free-text slot itself; never list it.
+- Validation failure names the offending field — fix the JSON, re-run. The validator is strict: unknown fields are rejected (a typo fails loudly instead of silently vanishing), seqs are contiguous 1..N, the prediction-role slot sits in slot 1, every matched preference needs its rulesConsidered disposition, and answer state is consistency-checked (skipped excludes a choice; freeText exactly iff the free-text slot is chosen). The renderer appends the free-text slot itself; never list it.
 
 Answers arrive either as the page's copied answer JSON pasted into chat, or as plain chat replies: answer id ("S1Q2A1" or just "1"), correction via "N, but actually because …" — shorthand "N, BAB …". Do not use timed question dialogs — they close while the user is still typing and cannot hold the full context.
 
@@ -56,7 +56,7 @@ Rules:
 
 - Prediction vs recommendation are distinct. Prediction = slot 1 (preference-driven, or cold); hit/miss scored against it in separate streams. Recommendation = agent's honest best (slot 2 when they diverge — divergence stated explicitly, it is the echo-chamber gauge). Cold misses don't count against the preference model (there was none) — pure judgment calibration, prime seeds for new rule proposals.
 - Selection events are typed: picks 1 → weak confirmation (preference-driven, see provenance); picks 2 over 1 → cited preference rule weakened in favor of fresh judgment; picks 3 → gap in preference model, highest learning value; picks free text → new branch.
-- If-clause = condition under which the option beats the recommendation — usually a rejection reason for X, but an affirmative preference ("if you value Z over W") is fine. Never force alternatives into X-failure framing.
+- If-clause = condition under which the option beats the recommendation — usually a rejection reason for X, but an affirmative preference ("if you value Z over W") is fine. Required for wildcard and alternative slots (validated). Never force alternatives into X-failure framing.
 - Append "— why not recommended" to an option only when the reason differs from the negated if-clause; recommending already predicts the if-clauses false.
 - Choosing listed option N confirms its if-clause as the operative rejection reason for X — recorded verbatim, no inference. Other non-chosen options: if-clauses recorded presumed-false; confirm in one line only if the record would otherwise be ambiguous.
 - Correction affordance: "N, but actually because ..." — listed option accepted, stated if-clause overridden. Highest-signal event type — flag it in record.
