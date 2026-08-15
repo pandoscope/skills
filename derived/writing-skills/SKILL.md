@@ -100,6 +100,15 @@ Hunt for passages that collapse into one [leading word](glossary/leading-word.md
 - State no fact an adjacent structure maintains. A count above a table is a second copy of the table, already drifting.
 - Prompt the positive. A prohibition survives only as a [negation](glossary/negation.md) guardrail that cannot be phrased positively, paired with what to do instead.
 - Instruct; give a reason only where the reason changes what the agent does. A paragraph defending the design argues with a reader who is already trying to follow it.
+- Write compressed, the register the `caveman` skill defines: articles, filler and hedging dropped, fragments fine, technical terms and quoted strings exact. An edit that restores them is a regression — prose drifts back to conversational register on every pass unless the rule is stated.
+
+## Token budget
+
+`SKILL.md` costs its tokens on every run that loads it, so it holds the budget alone — a disclosed sibling is paid only by the runs that reach it.
+
+- 1000 tokens is the ceiling. Over it, disclose a branch or prune before anything else.
+- A skill that genuinely cannot fit asks the principal, and records the granted ceiling as `metadata.token-budget-approved: <ceiling>` in the frontmatter. Self-granted exceptions are how budgets die.
+- Growth past an approved ceiling asks again. `check.sh` enforces all three.
 
 ## Ship self-contained
 

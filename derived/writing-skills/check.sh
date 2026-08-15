@@ -27,6 +27,25 @@ while IFS= read -r target; do
     esac
 done < <(grep -o ']([^)]*\.md[^)]*)' "$md" | sed 's/^](//; s/)$//')
 
+# Token budget. SKILL.md is loaded every run, so it carries the budget
+# alone — disclosed sibling files are paid only by runs that read them.
+# Estimate is bytes/4, close enough on markdown prose to catch drift and
+# stable enough to approve against. Over budget is not a veto: the
+# principal may approve a ceiling, recorded in frontmatter, and growth
+# past that ceiling asks again.
+budget=1000
+est=$(( $(wc -c < "$md") / 4 ))
+approved=$(sed -n 's/^metadata\.token-budget-approved:[[:space:]]*\([0-9]\{1,\}\).*/\1/p' "$md" | head -1)
+if [ "$est" -gt "$budget" ]; then
+    if [ -z "$approved" ]; then
+        err "SKILL.md is ~$est tokens, over the $budget budget: disclose a branch to a sibling file, prune it, or record the principal's explicit approval as 'metadata.token-budget-approved: <ceiling>' in the frontmatter"
+    elif [ "$est" -gt "$approved" ]; then
+        err "SKILL.md is ~$est tokens, past its approved ceiling of $approved — shorten it, or ask the principal to approve the new size"
+    else
+        echo "note: SKILL.md is ~$est tokens, over the $budget budget under an approved ceiling of $approved"
+    fi
+fi
+
 # The skill under work carries its own wired check.
 chk=$(find "$skill_dir" -maxdepth 1 -name 'check.*' -type f | head -1)
 if [ -z "$chk" ]; then
