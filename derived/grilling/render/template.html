@@ -165,6 +165,10 @@
   }
   .option {
     cursor: pointer;
+    position: relative;
+  }
+  .option:has(.option-score) {
+    padding-right: 3.1rem;
   }
   .option:hover {
     border-color: var(--accent);
@@ -204,8 +208,9 @@
     font-size: 0.85rem;
   }
   .option-score {
-    margin-left: auto;
-    align-self: center;
+    position: absolute;
+    top: 0.45rem;
+    right: 0.55rem;
     line-height: 0;
     cursor: help;
   }
