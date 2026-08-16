@@ -12,11 +12,20 @@
 # from ~/.claude/session.env, then the URL's basename under it.
 set -euo pipefail
 
-die() { echo "$*" >&2; exit 1; }
+# Loud failure, the house shape (writing-skills, "Loud failures").
+die() {
+    local headline="$1"
+    shift
+    printf '\n⚠️  **GRILLING: %s**  ⚠️\n\n' "$headline" >&2
+    printf '    %s\n' "$@" >&2
+    printf '\n' >&2
+    exit 1
+}
 
 store_path() {
-    [ -n "${DECISION_MEMORY_URL:-}" ] || die \
-        "DECISION_MEMORY_URL is unset, so no decision store is named. Tell the user out loud and record nothing this session: a silent skip is indistinguishable from a successful record."
+    [ -n "${DECISION_MEMORY_URL:-}" ] || die "NO DECISION STORE IS NAMED" \
+        "DECISION_MEMORY_URL is unset, so nothing can be recorded this session." \
+        "Tell the user out loud: a silent skip is indistinguishable from a successful record."
     if [ -n "${DECISION_MEMORY_ROOT:-}" ]; then
         echo "$DECISION_MEMORY_ROOT"
         return
@@ -25,11 +34,15 @@ store_path() {
     # `|| true`: a missing session.env must reach the message below, not
     # kill the script through pipefail with nothing said.
     root=$( (sed -n 's/^SESSION_ROOT=//p' "$session_env" 2>/dev/null || true) | head -1 | tr -d '[:space:]')
-    [ -n "$root" ] || die \
-        "no SESSION_ROOT in $session_env, so the store clone cannot be resolved — ask the user to rerun the environment setup."
+    [ -n "$root" ] || die "STORE CLONE CANNOT BE RESOLVED" \
+        "No SESSION_ROOT in $session_env." \
+        "Ask the user to rerun the environment setup, and record nothing until it resolves."
     dir="$root/$(basename "$DECISION_MEMORY_URL" .git)"
-    [ -d "$dir/.git" ] || die \
-        "no harness clone of the decision store. Ask the user to add the store repo to this environment's session sources (name the variable, never its value) — this session does NOT clone stores itself."
+    [ -d "$dir/.git" ] || die "NO HARNESS CLONE OF THE DECISION STORE" \
+        "Expected it at $dir." \
+        "Ask the user to add the store repo to this environment's session sources" \
+        "(name the variable, never its value). This session does NOT clone stores itself:" \
+        "a second clone splits the store into a written copy and a read copy, silently."
     echo "$dir"
 }
 
@@ -52,7 +65,9 @@ unmerged_records() {
 preferences_json() {
     local dir
     dir=$(store_path)
-    [ -f "$dir/preferences.txt" ] || die "no preferences.txt in $dir — nothing to cite."
+    [ -f "$dir/preferences.txt" ] || die "NO PREFERENCES.TXT IN THE STORE" \
+        "Looked in $dir. There is no active set to cite." \
+        "Say so out loud rather than citing rules from memory."
     node -e '
         const fs = require("fs");
         const lines = fs.readFileSync(process.argv[1], "utf8")
@@ -65,5 +80,5 @@ case "${1:-path}" in
     path) store_path ;;
     unmerged) unmerged_records ;;
     preferences) preferences_json ;;
-    *) die "usage: resolve-store.sh [path|unmerged|preferences]" ;;
+    *) die "UNKNOWN SUBCOMMAND" "usage: resolve-store.sh [path|unmerged|preferences]" ;;
 esac

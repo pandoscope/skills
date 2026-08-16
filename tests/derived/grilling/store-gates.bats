@@ -95,7 +95,7 @@ mksession() {
             "Builds only what a concrete case demands."
   run "$SKILL/check.sh" "$TMP/s.json"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"verbatim"* ]]
+  [[ "$output" == *"verbatim"* || "$output" == *"DOES NOT MATCH THE STORE"* ]]
 }
 
 @test "check.sh fails while a previous session's records are unmerged" {
@@ -107,12 +107,28 @@ mksession() {
   git -C "$STORE" commit -qm "decision(x): x"
   run "$SKILL/check.sh" "$TMP/s.json"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"not merged"* ]]
+  [[ "$output" == *"NOT MERGED"* ]]
 }
 
 @test "an unresolved store skips the store checks out loud, without failing" {
   unset DECISION_MEMORY_URL DECISION_MEMORY_ROOT
   run "$SKILL/check.sh" "$REPO_ROOT/tests/derived/grilling/fixtures/session.json"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"skipped"* ]]
+  [[ "$output" == *"RECORDING SKIPPED"* ]]
+}
+
+# The loud shape is the convention, so it is pinned rather than trusted:
+# a failure nobody notices is a failure that did not happen. Asserted
+# against the raw stream -- bats trims $output, and the blank lines
+# around the banner are half of what makes it pop.
+@test "failures are loud: warning banner, bold headline, blank lines around" {
+  unset DECISION_MEMORY_URL DECISION_MEMORY_ROOT
+  run bash -c '"$1" path 2>"$2"' _ "$RESOLVE" "$TMP/err"
+  [ "$status" -ne 0 ]
+  grep -Fq '⚠️  **GRILLING: NO DECISION STORE IS NAMED**  ⚠️' "$TMP/err"
+  banner=$(grep -Fn '⚠️  **GRILLING' "$TMP/err" | head -1 | cut -d: -f1)
+  [ -z "$(sed -n "$((banner - 1))p" "$TMP/err")" ]
+  [ -z "$(sed -n "$((banner + 1))p" "$TMP/err")" ]
+  # The fix is indented under the banner, not jammed against it.
+  [[ "$(sed -n "$((banner + 2))p" "$TMP/err")" == "    "* ]]
 }
