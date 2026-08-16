@@ -112,10 +112,6 @@ Code-specific skills:
 | `tdd`                    | Test-driven-development for any implementation                                                     |
 | `to-tickets`             | Splitting approved work into tracer-bullet issues with blocking edges (reproducible-spec rules)    |
 
-### Repo-Local Skill Overrides
-
-- `grilling`: present questions via the platform's native question dialog (e.g. `AskUserQuestion` in Claude Code) when the platform provides one; fall back to plain text otherwise. (The multiple-choice question format itself is part of the skill — this override only covers presentation.)
-
 ### Skill Environment Variables
 
 - `DECISION_MEMORY_URL` — FULL git URL of the decision-memory repo the `grilling` skill records decisions to. A full URL rather than an owner/repo slug, so the hosting stays swappable. Recording requires this env var in the agent's execution environment; the recorder and the skill read exactly this name (shared contract — renaming either side breaks recording silently). Never hardcode, commit, or echo the value into artifacts. Unset → grilling still works, skips recording, and says so. Where to set it: local sessions → shell profile / user-level agent settings; remote or cloud sessions → the environment's configuration; CI → a repository secret. `scripts/doctor.sh` warns when it's unset and checks reachability when set.

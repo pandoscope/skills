@@ -1,0 +1,111 @@
+{
+  "version": 2,
+  "session": 1,
+  "questions": [
+    {
+      "seq": 1,
+      "question": "Which database backs the session store?",
+      "context": "Single-node deployment; existing ops tooling is Postgres-only.",
+      "options": [
+        {
+          "label": "Postgres",
+          "kind": "pick",
+          "entails": "reuse existing ops tooling, one more schema to migrate",
+          "agentScore": 0.6
+        },
+        {
+          "label": "SQLite",
+          "kind": "wildcard",
+          "ifClause": "single-writer stays guaranteed",
+          "entails": "zero ops, file-backed, no concurrent writers",
+          "agentScore": 0.2
+        }
+      ],
+      "lineage": {
+        "cold": true,
+        "rulesConsidered": [
+          {
+            "name": "prefer-boring-tech",
+            "disposition": "set aside: names languages, not datastores"
+          }
+        ]
+      },
+      "answer": {
+        "chosen": 3,
+        "freeText": "DuckDB, we already embed it elsewhere",
+        "rejectionReasons": [
+          "single-writer stays guaranteed"
+        ],
+        "disconfirmedPreferences": [
+          "prefer-boring-tech"
+        ]
+      }
+    },
+    {
+      "seq": 2,
+      "question": "Where does the grilling renderer live?",
+      "options": [
+        {
+          "label": "Inside the skill directory",
+          "kind": "usual-and-pick",
+          "entails": "ships to consumers via skills update, no extra install",
+          "matches": [
+            "tools-travel-with-their-skill"
+          ]
+        },
+        {
+          "label": "Separate npm package",
+          "kind": "alternative",
+          "ifClause": "other skills need the renderer too",
+          "entails": "own release cycle, consumers add a dependency",
+          "agentScore": 0.3,
+          "proposedPreferences": [
+            "a renderer used by two skills graduates to its own package"
+          ]
+        }
+      ],
+      "nearTie": {
+        "slots": [
+          1,
+          2
+        ],
+        "differsOn": "distribution overhead"
+      },
+      "lineage": {
+        "cold": false,
+        "rulesConsidered": [
+          {
+            "name": "tools-travel-with-their-skill",
+            "disposition": "matched: renderer is skill-local tooling"
+          }
+        ]
+      }
+    },
+    {
+      "seq": 3,
+      "question": "Rename the skill to interrogation?",
+      "options": [
+        {
+          "label": "Keep grilling",
+          "kind": "pick",
+          "entails": "no churn in trigger phrases or docs"
+        }
+      ],
+      "lineage": {
+        "cold": true,
+        "rulesConsidered": []
+      },
+      "answer": {
+        "skipped": true
+      },
+      "noneScore": 0.3
+    }
+  ],
+  "preferences": [
+    "tools-travel-with-their-skill",
+    "prefer-boring-tech"
+  ],
+  "preferenceDocs": {
+    "tools-travel-with-their-skill": "https://github.com/pandoscope/decision-memory/blob/main/proposals/tools-travel-with-their-skill.md"
+  }
+}
