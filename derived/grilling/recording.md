@@ -2,30 +2,18 @@
 
 Consulted from SKILL.md at session end.
 
-**The store owns its own writing conventions.** Record schema, ID
-format, commit types, PR flow, `related`/`supersedes` semantics,
-outcome buckets and hit-rate reporting are the target repo's contract,
-stated in its agent-instructions and conventions files and enforced by
-its CI guards. Read them there and follow them; nothing about them is
-restated here, because a copy drifts on the store's next change and the
-copy is what the agent would obey.
-
-This file carries only what grilling itself owes.
+**decision-memory owns writing conventions.** Read them there, this
+file carries only what grilling itself owes.
 
 ## What grilling contributes
 
-- **Append only.** Grilling writes new records and nothing else — never
-  edits an existing record, never edits the active preference set, no
-  matter what the store's instructions permit its other writers to do.
-  The preference set changes through the store's own promotion path,
-  human-approved.
+- **Append only.** Grilling never edits an existing record, or the
+  active preference set, it only changes through the store's own
+  promotion path, human-approved.
 - **The session JSON is the input side.** Hand the recorder the same
-  object the renderer consumed — question, options, lineage, `context`
-  written BEFORE the ruling — plus the artifact reference. The output
-  side is the ruling alone: chosen slot, operative if-clause or free
-  text, correction flag. Keeping them apart is what lets a replay mask
-  outcomes and re-predict; mixing post-ruling knowledge into an
-  input-side field silently destroys that.
+  object the renderer consumed, plus the artifact reference. The output
+  side is the ruling alone; mixing post-ruling knowledge into an
+  input-side field silently destroys replayability.
 - **Provenance the store cannot infer**: which slot carried the
   prediction and which rules drove it. Meaning of each event —
   confirmation, correction, disconfirmation, gap — is
