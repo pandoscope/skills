@@ -129,6 +129,19 @@ actually written and pushed. When one fails, the block reason states
 the completion criterion and the exact command — run it and end the
 turn; it is never a prompt to start new work.
 
+`threads:` is a **same-turn claim, not a topic list**: every slug named
+needs an event appended during this turn. Naming a thread the turn
+merely discussed fails `ledger-event`, correctly — the declaration says
+the ledger is current about that thread, and it is not. Append first,
+then declare what you appended.
+
+The hook blocks once per reason, not once per turn. A re-fire that
+fails a check the block never named earns one more block, up to three
+per turn, because that is a wall the model has not been told about
+rather than a reason it just ignored. Past that the turn is released
+**unsealed** and says so on stderr: a released turn is not a passed
+one, and the store's unsealed tail is the durable record of it.
+
 The `reviews:` line is the declared half of a standing habit: wherever
 a check has a blind spot, the model declares and the observer
 cross-checks. Its states are `none`, `read`, `persisted` and
@@ -253,6 +266,37 @@ fires, it names the canonical forms and the rewrite must contain them
 **verbatim** — deleting the offending refs is not correcting them, and
 the re-fire grades exactly that. No map in the store means the check
 reports `unconfigured` and declines, like every other check.
+
+### Preflight — the same checks as an in-turn linter
+
+Before ending a turn, run the heartbeat over the draft instead of
+waiting for the Stop hook to grade the posted reply:
+
+```sh
+node heartbeat.mjs --preflight --draft <file> [--fix] <<< '<hook JSON>'
+```
+
+Preflight runs every check against observed state with the draft
+standing in for the response, prints every verdict, and exits 1 when
+anything would fail — a report, never a gate. It does not seal, does
+not block, and writes no ledger events, summaries, or waivers:
+preflight reports, the agent does the work. Each round lands in the
+compliance log with outcome `preflight`, excluded from cycle counting,
+so lint runs neither spend the Stop hook's block budget nor displace
+the cycle-1 baseline; the dojo mines those traces for katas rather
+than any round auto-minting one. Iterate until clean or converged —
+same bound as the block cap — and on non-convergence post anyway,
+naming what is still failing.
+
+`--fix` is the one write preflight owns, and it edits notation only,
+in the draft file and nowhere else: bare refs become their canonical
+linked shortcode forms, and commit hashes resolve across the session's
+clones — a hash `git cat-file -e` finds in exactly one clone becomes a
+link to that repo's commit page via the shortcode map; anything else
+is left in place and reported. Inline code IS scanned for commit
+hashes — prose habitually backticks a SHA, so there the code-span
+exemption would be the escape hatch rather than the protection —
+while fenced blocks stay quoted material, exempt as everywhere else.
 
 ## Diligence
 

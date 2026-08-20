@@ -1332,6 +1332,23 @@ function checkResponseHygiene(ctx) {
     if (!response.includes(slug)) naming.push({ slug, expected: slug });
   }
 
+  // Preflight reports and repairs notation; the correction exercise is
+  // the Stop hook's pedagogy. A preflight that assigned or graded
+  // homework would turn the linter into the gate it is explicitly not.
+  if (ctx.preflight) {
+    if (!violations.length && !naming.length) {
+      return { verdict: "pass", detail: "response follows the reference style" };
+    }
+    return {
+      verdict: "fail",
+      detail: `${violations.length + naming.length} style violations in the draft`,
+      reason: [
+        ...violations.map((v) => `  ${v.token} — ${v.why}${v.canonical ? ` → ${v.canonical}` : ""}`),
+        ...naming.map((n) => `  ${n.slug} — write: ${n.expected}`),
+      ].join("\n"),
+    };
+  }
+
   // The pending exercise, before any new homework is assigned.
   const pendingFile = localFile("hygiene-corrections.json");
   let pending = null;
@@ -1542,6 +1559,15 @@ function checkCommitSigned(ctx) {
 // Priority order. First failure wins; the rest wait for the next turn.
 // push-blocklist sits ahead of pushed deliberately: a hit must block
 // BEFORE the turn is told to push, or the reminder itself publishes it.
+// At most this many blocks in one turn. Bounded because several checks
+// are not agent-actionable — a network fault under `pushed`, a
+// concurrent writer under `artifact-fresh`, a crash — and an unbounded
+// loop over those traps the session, which is the fear the crash path
+// already names. Bounded also because the checks that accept unverified
+// claims (waivers, `nothing-to-persist`) make a false claim the cheapest
+// exit from a loop: pressure past this point buys lies, not bookkeeping.
+const MAX_BLOCKS = 3;
+
 const CHECKS = [
   { check: "turn-summary", run: checkTurnSummary },
   { check: "push-blocklist", run: checkPushBlocklist },
@@ -1562,28 +1588,78 @@ const CHECKS = [
 
 // ------------------------------------------------------- compliance log
 
-/**
- * Which Stop of this turn this is, counted from the log itself.
- *
- * `stop_hook_active` only says "at least one block already happened",
- * so it cannot tell a second cycle from a fifth. The log can, and it is
- * the same file the answer has to be written to.
- */
-function cycleOf(file, ctx) {
-  if (!fs.existsSync(file)) return 1;
-  let seen = 0;
+/** Every compliance record for `session`, oldest first. */
+function recordsFor(file, session) {
+  if (!fs.existsSync(file)) return [];
+  const records = [];
   for (const line of fs.readFileSync(file, "utf8").split("\n")) {
     if (!line.trim()) continue;
     try {
       const record = JSON.parse(line);
-      if (record.session === ctx.session && record.msg === ctx.msg) seen += 1;
+      if (record.session === session) records.push(record);
     } catch {
       // A torn line is not a cycle. Counting one would be worse than
       // missing it: the cost of a real cycle would land on the wrong
       // turn, where nothing could ever contradict it.
     }
   }
-  return seen + 1;
+  return records;
+}
+
+/**
+ * Where this turn began — stable across the hook's own re-fires.
+ *
+ * Every check measures "this turn" from here, so a boundary that moves
+ * mid-turn silently rewrites all thirteen of them. It does move. The
+ * block feedback this hook writes is delivered to the model as a user
+ * turn carrying its own timestamp, so on the guarded fire both
+ * `countUserTurns` and `lastUserTurnAt` advance past it, and work the
+ * model did BEFORE it was blocked falls outside its own turn.
+ *
+ * Measured: `ledger-event` passed on a turn's first Stop ("1 threads
+ * recorded") and failed twelve seconds later on the re-fire ("no event
+ * this turn"), same store, same append — the append simply preceded the
+ * feedback that moved the boundary.
+ *
+ * So the UNGUARDED fire defines the turn: it is the first Stop after the
+ * principal spoke. A guarded fire inherits that boundary from the record
+ * the opening fire wrote rather than recomputing it from a transcript
+ * this hook has since added to.
+ */
+function turnBoundary(file, guarded, session, computed) {
+  if (!guarded) return computed;
+  const prior = recordsFor(file, session);
+  const last = prior[prior.length - 1];
+  return last?.turnKey ?? computed;
+}
+
+/**
+ * Which Stop of this turn this is, counted from the log itself.
+ *
+ * `stop_hook_active` only says "at least one block already happened",
+ * so it cannot tell a second cycle from a fifth. The log can, and it is
+ * the same file the answer has to be written to. Counted by `turnKey`
+ * rather than `msg`: `msg` advances on the re-fire (the feedback is a
+ * user turn), so a same-turn record never matched and the counter was
+ * pinned at 1 forever — measured across 24 records of one session.
+ */
+function cycleOf(file, ctx) {
+  // Preflight rounds share the turn's key but are not Stops: counting
+  // them would spend the block budget on lint runs the model asked for
+  // and shift cycle 1 — the unprompted baseline — off the first Stop.
+  return recordsFor(file, ctx.session)
+    .filter((record) => record.turnKey === ctx.turnKey && record.outcome !== "preflight")
+    .length + 1;
+}
+
+/** Checks already delivered as a block reason this turn. */
+function deliveredThisTurn(file, ctx) {
+  return new Set(
+    recordsFor(file, ctx.session)
+      .filter((record) => record.turnKey === ctx.turnKey && record.outcome === "blocked")
+      .map((record) => record.fired)
+      .filter(Boolean),
+  );
 }
 
 /**
@@ -1605,6 +1681,9 @@ function complianceRecord(file, ctx, verdicts, outcome, fired) {
     at: new Date().toISOString().replace(/\.\d+Z$/, "+00:00"),
     session: ctx.session,
     msg: ctx.msg,
+    // The turn's identity, written so the next fire of the same turn can
+    // inherit it instead of recomputing a boundary this hook has moved.
+    turnKey: ctx.turnKey,
     // Which Stop of this turn. Cycle 1 is the model's unprompted
     // attempt — it has not been reminded yet — so cycle-1 verdicts are
     // the no-reminder baseline, measured without a second arm to run.
@@ -1669,7 +1748,6 @@ function context(input) {
   const root = named || resolveRoot(null);
   const transcript = input.transcript_path ?? null;
   const text = transcript && fs.existsSync(transcript) ? fs.readFileSync(transcript, "utf8") : "";
-  const turnStart = lastUserTurnAt(text);
   // The conversation's URL is the log's identity, and the hook is not
   // told it — `session_id` is a platform-local id that matches no log
   // in the store. With one conversation recorded, guessing lands on the
@@ -1683,6 +1761,16 @@ function context(input) {
     input.session_id,
     transcript,
   );
+  const guarded = input.stop_hook_active === true;
+  // Resolved once, here, so all thirteen checks measure the same turn.
+  // Recomputed on the guarded fire it would land after this hook's own
+  // block feedback and shorten the turn to nothing.
+  const turnKey = turnBoundary(
+    localFile("reminder-compliance.jsonl"),
+    guarded,
+    session,
+    lastUserTurnAt(text),
+  );
   return {
     root,
     transcript,
@@ -1690,8 +1778,9 @@ function context(input) {
     sessionUrl,
     msg: countUserTurns(text),
     usage: transcriptUsage(text),
-    turnStart: turnStart ? new Date(turnStart) : null,
-    guarded: input.stop_hook_active === true,
+    turnKey,
+    turnStart: turnKey ? new Date(turnKey) : null,
+    guarded,
     namedItself: Boolean(process.env.LEDGER_SESSION_URL),
     // How many conversations this store logs. One is unambiguous
     // whatever the environment says; beyond that the hook needs telling.
@@ -1796,19 +1885,186 @@ export function run(input) {
 
   // The loop guard, read before blocking rather than before checking.
   // `stop_hook_active` is true when this hook already blocked the turn
-  // once; blocking again feeds the model the same reason it just acted
-  // on. The turn is released, unsealed — the honest record of a turn
-  // that did not finish — and every verdict is still logged, because
-  // this pass is the only place where whether the model complied with
-  // the reason it was given can be observed at all.
+  // once, and repeating a reason the model just acted on is how a Stop
+  // hook traps a session.
+  //
+  // But a re-fire commonly fails a DIFFERENT check: remediating one
+  // reveals the next. Measured over ten turns of one session, eight
+  // re-fires fired on a check the block had never named — the model had
+  // acted on what it was told and hit a new wall, silently, because the
+  // release wrote nothing. That is not the loop the guard protects
+  // against, so a reason never yet delivered this turn is worth one more
+  // block, up to MAX_BLOCKS.
+  //
+  // Everything else releases the turn unsealed — the honest record of a
+  // turn that did not finish — and says so on stderr. A released turn
+  // the model KNOWS is unsealed is a different thing from one it reads
+  // as success. Every verdict is still logged either way: this pass is
+  // the only place where whether the model complied with the reason it
+  // was given can be observed at all.
   if (ctx.guarded) {
+    const file = localFile("reminder-compliance.jsonl");
+    const delivered = deliveredThisTurn(file, ctx);
+    const unheard = delivered.size > 0 && !delivered.has(failed.check);
+    if (unheard && cycleOf(file, ctx) <= MAX_BLOCKS) {
+      logCompliance(ctx, reported, "blocked", failed.check);
+      process.stderr.write(`${failed.reason}\n`);
+      return 2;
+    }
     logCompliance(ctx, reported, "unsealed", failed.check);
+    process.stderr.write(
+      `The turn is released UNSEALED — ${failed.check} is still failing: ` +
+        `${failed.detail}. Not blocking again; the next turn begins with ` +
+        `this outstanding, and the store's tail shows it.\n`,
+    );
     return 0;
   }
 
   logCompliance(ctx, reported, "blocked", failed.check);
   process.stderr.write(`${failed.reason}\n`);
   return 2;
+}
+
+// ----------------------------------------------------------- preflight
+//
+// The same heartbeat, run as a linter before the turn ends (skills#126).
+// Invoked as a tool call — `node heartbeat.mjs --preflight --draft
+// <file> [--fix]` — it runs every check against observed state with the
+// draft standing in for the response, prints every verdict, and exits 1
+// when anything would fail. It never seals, never blocks, and never
+// writes ledger events, summaries, or waivers: preflight reports, the
+// agent does the work. `--fix` is the one write it owns, and it edits
+// notation only — refs to their canonical linked forms, commit hashes
+// to commit links — in the draft file and nowhere else.
+
+/** The shortcode map the store carries, or null when it carries none. */
+function readShortcodes(root) {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(root, "config", "shortcodes.json"), "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function escapeRe(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Resolve a commit hash across the session's clones.
+ *
+ * The formulation ruled on skills#126: unique hit → a link to that
+ * repo's commit page, built from the same shortcode map every other
+ * link uses; anything else → leave the token and report why. The map,
+ * not the clone's remote URL, names the repo — origin URLs come in
+ * shapes (ssh, local mirrors) that no link should be derived from.
+ */
+function resolveHash(clones, config, hash) {
+  const hits = clones.filter(
+    (repo) => gitOrNull(repo.path, "cat-file", "-e", `${hash}^{commit}`) !== null,
+  );
+  if (hits.length === 0) return { why: "resolves in no clone" };
+  if (hits.length > 1) return { why: `ambiguous — resolves in ${hits.length} clones` };
+  const [repo] = hits;
+  const repos = config.repos ?? config;
+  const fullName = Object.values(repos).find((name) => name.split("/").pop() === repo.name);
+  if (!fullName) return { why: `no shortcode maps to clone ${repo.name}` };
+  const full = gitOrNull(repo.path, "rev-parse", `${hash}^{commit}`);
+  const base = config.forge ?? "https://github.com";
+  return { link: `[${repo.name}@${hash}](${base}/${fullName}/commit/${full})` };
+}
+
+/**
+ * Lint the draft's notation, optionally repairing it.
+ *
+ * Fenced blocks are quoted material and stay untouched; existing
+ * markdown links are already spoken for. Inline code is scanned for
+ * commit hashes ONLY — prose habitually backticks a hash, so for this
+ * one rule the code-span exemption would be the escape hatch rather
+ * than the protection (skills#126, 2026-08-20 incident) — while ref
+ * style inside inline code stays exempt as everywhere else.
+ */
+function lintDraft(text, ctx, config, fix) {
+  const findings = [];
+  const violations = refViolations(stripCode(text), config, knownPrs(ctx.events)).filter(
+    (violation) => violation.canonical,
+  );
+  const fixRefs = (piece) => {
+    let out = piece;
+    for (const violation of violations) {
+      out = out.replace(
+        new RegExp(`(?<![\\w\\[/])${escapeRe(violation.token)}(?![\\w\\]])`, "g"),
+        violation.canonical,
+      );
+    }
+    return out;
+  };
+  const scanHashes = (piece) =>
+    piece.replace(/(`?)\b([0-9a-f]{7,40})\b(`?)/g, (whole, open, hash, close) => {
+      if (!/[a-f]/.test(hash) || open !== close) return whole;
+      const resolved = resolveHash(ctx.clones, config, hash);
+      if (!resolved.link) {
+        findings.push({ token: hash, why: resolved.why });
+        return whole;
+      }
+      if (!fix) {
+        findings.push({ token: hash, why: `bare commit hash → ${resolved.link}` });
+        return whole;
+      }
+      return resolved.link;
+    });
+  const out = text
+    .split(/(```[\s\S]*?```)/)
+    .map((block, fence) => {
+      if (fence % 2) return block;
+      return block
+        .split(/(\[[^\]\n]*\]\([^()\s]*\))/)
+        .map((part, link) => {
+          if (link % 2) return part;
+          return scanHashes(fix ? fixRefs(part) : part);
+        })
+        .join("");
+    })
+    .join("");
+  return { text: out, findings, changed: out !== text };
+}
+
+/** Run every check advisorily against the draft. Returns the exit code. */
+export function preflight(input, opts) {
+  const ctx = context(input);
+  ctx.preflight = true;
+  const config = readShortcodes(ctx.root);
+  const findings = [];
+  if (opts.draft) {
+    let draftText = fs.readFileSync(opts.draft, "utf8");
+    if (config) {
+      const linted = lintDraft(draftText, ctx, config, Boolean(opts.fix));
+      findings.push(...linted.findings);
+      if (opts.fix && linted.changed) {
+        fs.writeFileSync(opts.draft, linted.text, "utf8");
+        draftText = linted.text;
+      }
+    }
+    ctx.assistantText = draftText;
+  }
+  const verdicts = CHECKS.map((entry) => ({ check: entry.check, ...entry.run(ctx) }));
+  const failed = verdicts.filter((verdict) => verdict.verdict === "fail");
+  for (const verdict of verdicts) {
+    process.stdout.write(`${verdict.verdict.padEnd(12)} ${verdict.check} — ${verdict.detail}\n`);
+  }
+  for (const verdict of failed) {
+    if (verdict.reason) process.stdout.write(`\n${verdict.check}:\n${verdict.reason}\n`);
+  }
+  for (const finding of findings) {
+    process.stdout.write(`\ncommit-ref: ${finding.token} — ${finding.why}\n`);
+  }
+  logCompliance(
+    ctx,
+    verdicts.map(({ check, verdict, detail }) => ({ check, verdict, detail })),
+    "preflight",
+    failed[0]?.check ?? null,
+  );
+  return failed.length || findings.length ? 1 : 0;
 }
 
 function readStdin() {
@@ -1846,46 +2102,65 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
     if (err?.code === "EPIPE") process.exit(process.exitCode ?? 0);
     throw err;
   });
-  try {
-    process.exitCode = run(input);
-  } catch (err) {
-    const detail = err instanceof LedgerError ? err.message : (err.stack ?? String(err));
-    // The crash reaches the compliance log with no verdicts, because
-    // none were reached. An empty verdict list is the honest shape of
-    // "nothing was checked" — and a crash that logged nothing would be
-    // invisible to the one record built to observe this mechanism.
+  // Preflight is a tool call, not a Stop: a crash reports and exits 1
+  // — it must never block a turn it was asked to advise on.
+  if (process.argv.includes("--preflight")) {
+    const argAfter = (flag) => {
+      const at = process.argv.indexOf(flag);
+      return at > -1 ? process.argv[at + 1] : null;
+    };
     try {
-      logCompliance(
-        {
-          session: null,
-          msg: null,
-          usage: { model: null, input: 0, output: 0, cacheRead: 0, cacheCreation: 0 },
-          guarded: input.stop_hook_active === true,
-        },
-        [],
-        "crashed",
-        "heartbeat-crashed",
-      );
-    } catch {
-      // The log lives under HOME; if that is unwritable too, the stderr
-      // below is the only channel left and it still gets used.
+      process.exitCode = preflight(input, {
+        draft: argAfter("--draft"),
+        fix: process.argv.includes("--fix"),
+      });
+    } catch (err) {
+      const detail = err instanceof LedgerError ? err.message : (err.stack ?? String(err));
+      process.stderr.write(`preflight could not check the draft:\n${detail}\n`);
+      process.exitCode = 1;
     }
-    // A crashed heartbeat must never end the turn quietly: exiting 0
-    // would make a broken check indistinguishable from a passing one,
-    // and exit 1 is silently non-blocking. But it blocks ONCE — the
-    // guard applies to a crash exactly as it applies to a reason,
-    // because a fault the model cannot fix must not trap the session.
-    // On the guarded fire the reason is withheld like any other: it was
-    // already delivered in full, and stderr at exit 0 reaches only the
-    // diagnostics log anyway.
-    if (input.stop_hook_active === true) {
-      process.exitCode = 0;
-    } else {
-      process.stderr.write(
-        "The ledger heartbeat could not check this turn, so nothing verified " +
-          `its bookkeeping:\n\n${detail}\n`,
-      );
-      process.exitCode = 2;
+  } else {
+    try {
+      process.exitCode = run(input);
+    } catch (err) {
+      const detail = err instanceof LedgerError ? err.message : (err.stack ?? String(err));
+      // The crash reaches the compliance log with no verdicts, because
+      // none were reached. An empty verdict list is the honest shape of
+      // "nothing was checked" — and a crash that logged nothing would be
+      // invisible to the one record built to observe this mechanism.
+      try {
+        logCompliance(
+          {
+            session: null,
+            msg: null,
+            usage: { model: null, input: 0, output: 0, cacheRead: 0, cacheCreation: 0 },
+            guarded: input.stop_hook_active === true,
+          },
+          [],
+          "crashed",
+          "heartbeat-crashed",
+        );
+      } catch {
+        // The log lives under HOME; if that is unwritable too, the stderr
+        // below is the only channel left and it still gets used.
+      }
+      // A crashed heartbeat must never end the turn quietly: exiting 0
+      // would make a broken check indistinguishable from a passing one,
+      // and exit 1 is silently non-blocking. But it blocks ONCE — the
+      // guard applies to a crash exactly as it applies to a reason,
+      // because a fault the model cannot fix must not trap the session.
+      // On the guarded fire the reason is withheld like any other: it was
+      // already delivered in full, and stderr at exit 0 reaches only the
+      // diagnostics log anyway.
+      if (input.stop_hook_active === true) {
+        process.exitCode = 0;
+      } else {
+        process.stderr.write(
+          "The ledger heartbeat could not check this turn, so nothing verified " +
+            `its bookkeeping:\n\n${detail}\n`,
+        );
+        process.exitCode = 2;
+      }
     }
   }
 }
