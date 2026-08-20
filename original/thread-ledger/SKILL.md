@@ -267,6 +267,37 @@ fires, it names the canonical forms and the rewrite must contain them
 the re-fire grades exactly that. No map in the store means the check
 reports `unconfigured` and declines, like every other check.
 
+### Preflight — the same checks as an in-turn linter
+
+Before ending a turn, run the heartbeat over the draft instead of
+waiting for the Stop hook to grade the posted reply:
+
+```sh
+node heartbeat.mjs --preflight --draft <file> [--fix] <<< '<hook JSON>'
+```
+
+Preflight runs every check against observed state with the draft
+standing in for the response, prints every verdict, and exits 1 when
+anything would fail — a report, never a gate. It does not seal, does
+not block, and writes no ledger events, summaries, or waivers:
+preflight reports, the agent does the work. Each round lands in the
+compliance log with outcome `preflight`, excluded from cycle counting,
+so lint runs neither spend the Stop hook's block budget nor displace
+the cycle-1 baseline; the dojo mines those traces for katas rather
+than any round auto-minting one. Iterate until clean or converged —
+same bound as the block cap — and on non-convergence post anyway,
+naming what is still failing.
+
+`--fix` is the one write preflight owns, and it edits notation only,
+in the draft file and nowhere else: bare refs become their canonical
+linked shortcode forms, and commit hashes resolve across the session's
+clones — a hash `git cat-file -e` finds in exactly one clone becomes a
+link to that repo's commit page via the shortcode map; anything else
+is left in place and reported. Inline code IS scanned for commit
+hashes — prose habitually backticks a SHA, so there the code-span
+exemption would be the escape hatch rather than the protection —
+while fenced blocks stay quoted material, exempt as everywhere else.
+
 ## Diligence
 
 `diligence.mjs` reads the compliance log and reports what the reminders
