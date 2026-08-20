@@ -7,11 +7,14 @@
 #                           ~/.claude/projects (the live transcript is the
 #                           most recently written one)
 #
-# The marker records the transcript's line count at handoff time. A hook
-# judging freshness compares growth since then — age alone is wrong in
-# both directions: an old handoff with nothing after it is still fresh,
-# a recent one buried under a day of work is not. Without a findable
-# transcript the marker carries null and hooks fall back to age.
+# The marker records the context size at handoff time: the token sum
+# (prompt + cache reads + cache writes) of the transcript's last
+# assistant usage — the same measure compaction itself acts on. A hook
+# judging freshness compares growth since then; age alone is wrong in
+# both directions — an old handoff with nothing after it is still
+# fresh, a recent one buried under heavy context growth since is not.
+# Without a findable transcript (or one carrying no usage yet) the
+# marker carries null and hooks fall back to age.
 set -euo pipefail
 
 handoff=${1:?usage: mark.sh <handoff-file> [published-url]}
@@ -29,18 +32,27 @@ if [ -z "$transcript" ]; then
                  | sort -rn | head -1 | cut -d' ' -f2-)
 fi
 
-lines=null
+# sed, not a JSON tool: the consumer may lack one. The quoted key
+# "input_tokens": cannot match inside "cache_read_input_tokens" — the
+# opening quote only ever precedes the full key.
+tokens=null
+usage_line=""
 if [ -n "$transcript" ] && [ -f "$transcript" ]; then
-    lines=$(wc -l < "$transcript")
+    usage_line=$(grep '"usage"' "$transcript" | tail -1 || true)
 else
     transcript=""
-    echo "mark.sh: no transcript found — hooks fall back to marker age" >&2
+fi
+if [ -n "$usage_line" ]; then
+    in=$(printf '%s' "$usage_line" | sed -n 's/.*"input_tokens":\([0-9]\{1,\}\).*/\1/p')
+    cr=$(printf '%s' "$usage_line" | sed -n 's/.*"cache_read_input_tokens":\([0-9]\{1,\}\).*/\1/p')
+    cc=$(printf '%s' "$usage_line" | sed -n 's/.*"cache_creation_input_tokens":\([0-9]\{1,\}\).*/\1/p')
+    tokens=$(( ${in:-0} + ${cr:-0} + ${cc:-0} ))
+else
+    echo "mark.sh: no transcript usage found — hooks fall back to marker age" >&2
 fi
 
-# printf, not a JSON tool: the consumer may lack one, and none of these
-# values can contain a double quote (paths are ours, count is a number).
 mkdir -p "$(dirname "$state")"
-printf '{"written_at":"%s","handoff_path":"%s","published_url":"%s","transcript_path":"%s","transcript_lines":%s}\n' \
-    "$(date -u +%FT%TZ)" "$handoff" "$url" "$transcript" "$lines" \
+printf '{"written_at":"%s","handoff_path":"%s","published_url":"%s","transcript_path":"%s","context_tokens":%s}\n' \
+    "$(date -u +%FT%TZ)" "$handoff" "$url" "$transcript" "$tokens" \
     > "$state"
 echo "marker written: $state"

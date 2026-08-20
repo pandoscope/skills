@@ -7,24 +7,43 @@ setup() {
   export HANDOFF_STATE="$TMP/state.json"
   export HANDOFF_TRANSCRIPT="$TMP/transcript.jsonl"
   echo "a handoff" > "$TMP/handoff.md"
-  printf 'line\nline\n' > "$TMP/transcript.jsonl"
+  {
+    echo '{"type":"user"}'
+    echo '{"type":"assistant","message":{"usage":{"input_tokens":5,"cache_creation_input_tokens":2000,"cache_read_input_tokens":640000,"output_tokens":10}}}'
+  } > "$TMP/transcript.jsonl"
 }
 
 teardown() { rm -rf "$TMP"; }
 
-@test "mark then check passes, marker carries url and line count" {
+@test "mark then check passes, marker carries url and context tokens" {
   run "$SKILL/mark.sh" "$TMP/handoff.md" "https://example.com/h"
   [ "$status" -eq 0 ]
-  grep -q '"transcript_lines":2' "$HANDOFF_STATE"
+  grep -q '"context_tokens":642005' "$HANDOFF_STATE"
   grep -q '"published_url":"https://example.com/h"' "$HANDOFF_STATE"
   run "$SKILL/check.sh"
   [ "$status" -eq 0 ]
 }
 
+@test "the last usage wins, not an earlier one" {
+  echo '{"type":"assistant","message":{"usage":{"input_tokens":1,"cache_creation_input_tokens":2,"cache_read_input_tokens":3,"output_tokens":4}}}' \
+    >> "$TMP/transcript.jsonl"
+  run "$SKILL/mark.sh" "$TMP/handoff.md"
+  [ "$status" -eq 0 ]
+  grep -q '"context_tokens":6' "$HANDOFF_STATE"
+}
+
 @test "mark without a findable transcript records null and warns" {
   run env HANDOFF_TRANSCRIPT="$TMP/nope.jsonl" "$SKILL/mark.sh" "$TMP/handoff.md"
   [ "$status" -eq 0 ]
-  grep -q '"transcript_lines":null' "$HANDOFF_STATE"
+  grep -q '"context_tokens":null' "$HANDOFF_STATE"
+  [[ "$output" == *"fall back to marker age"* ]]
+}
+
+@test "a transcript with no usage yet records null and warns" {
+  echo '{"type":"user"}' > "$TMP/transcript.jsonl"
+  run "$SKILL/mark.sh" "$TMP/handoff.md"
+  [ "$status" -eq 0 ]
+  grep -q '"context_tokens":null' "$HANDOFF_STATE"
   [[ "$output" == *"fall back to marker age"* ]]
 }
 

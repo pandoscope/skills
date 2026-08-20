@@ -17,7 +17,13 @@ is the part chosen deliberately: what is open, why, and what continues.
 1. **Collect open state** from the session itself, never by
    re-derivation: unmerged changes and what gates them, open tickets
    touched, rulings and standing rules the principal stated, gotchas
-   that cost time. Completion: every item carries a next action.
+   that cost time. Order items as a work ledger orders threads —
+   urgency, then importance, a blocker before what waits on it — with
+   low-hanging fruit carrying the most value for the work ahead
+   surfaced early. Where the `thread-ledger` skill's tooling is
+   available, render its view as a mechanically generated second
+   opinion — never the primary source, so work not yet recorded there
+   is not overlooked. Completion: every item carries a next action.
 2. **Write the handoff** to a file: what happened since the previous
    handoff; an open-state table (item | state | next); standing rules;
    gotchas. Link the previous handoff. Completion: a reader with none
