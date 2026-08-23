@@ -3,7 +3,7 @@
   "stop_hook_active": false,
   "summary_written_at": "2026-07-30T14:32:00.000Z",
   "exit": 0,
-  "check": "ledger-event",
+  "check": "tickets-updated",
   "sealed": false,
   "reason": [],
   "observe": true,

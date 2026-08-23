@@ -3506,12 +3506,11 @@ describe("StoreResolution", () => {
 // ------------------------------------------------------- declare verb
 
 import { declareText } from "../../../original/thread-ledger/ledger.mjs";
-import { readTurnSummary } from "../../../original/thread-ledger/heartbeat.mjs";
+import { readTurnSummary, resolveSummaryFile } from "../../../original/thread-ledger/heartbeat.mjs";
 
 describe("declare", () => {
   it("round-trips through the heartbeat's own reader", () => {
     const text = declareText({
-      threads: "handoff-skill, orchestrator-set-map",
       tickets: "pandoscope/skills#157",
       reviews: "nothing-to-persist",
       rulings: "bundle-minimal-core-curated",
@@ -3519,10 +3518,10 @@ describe("declare", () => {
     });
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "declare-"));
     try {
-      const file = path.join(dir, "turn-summary.txt");
+      const file = path.join(dir, "summary.txt");
       fs.writeFileSync(file, text, "utf8");
       const parsed = readTurnSummary(file);
-      assert.deepEqual(parsed.threads, ["handoff-skill", "orchestrator-set-map"]);
+      assert.deepEqual(parsed.threads, []);
       assert.deepEqual(parsed.tickets, ["pandoscope/skills#157"]);
       assert.equal(parsed.reviews, "nothing-to-persist");
       assert.deepEqual(parsed.rulings, ["bundle-minimal-core-curated"]);
@@ -3534,9 +3533,9 @@ describe("declare", () => {
     }
   });
 
-  it("writes the three core lines even when empty", () => {
+  it("writes the two core lines even when empty", () => {
     const text = declareText({ reviews: "none" });
-    assert.equal(text, "threads: \ntickets: \nreviews: none\n");
+    assert.equal(text, "tickets: \nreviews: none\n");
   });
 
   it("keeps detail after the reviews state word", () => {
@@ -3552,10 +3551,10 @@ describe("declare", () => {
     throws(() => declareText({ reviews: "done" }), "names no state");
   });
 
-  it("refuses a non-slug thread", () => {
+  it("refuses the retired --threads flag with the skills#153 pointer", () => {
     throws(
-      () => declareText({ reviews: "none", threads: "Handoff Skill" }),
-      "kebab-case",
+      () => declareText({ reviews: "none", threads: "handoff-skill" }),
+      "observed from the ledger",
     );
   });
 
@@ -3583,5 +3582,71 @@ describe("declare", () => {
     const text = declareText(opts);
     assert.match(text, /no-update: a\/b#1 first reason\n/);
     assert.match(text, /no-update: a\/b#2 second reason\n/);
+  });
+});
+
+describe("summary path resolution (skills#153)", () => {
+  // One env var is the wrapper/writer/checker agreement; these pin the
+  // fallback ladder so a migration cannot silently strand either side.
+  const withEnv = (vars, fn) => {
+    const saved = {};
+    for (const [k, v] of Object.entries(vars)) {
+      saved[k] = process.env[k];
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    try {
+      return fn();
+    } finally {
+      for (const [k, v] of Object.entries(saved)) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+  };
+
+  it("reads the v2 path when the env var names one", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sumpath-"));
+    try {
+      const v2 = path.join(dir, ".turn", "summary.txt");
+      fs.mkdirSync(path.dirname(v2), { recursive: true });
+      fs.writeFileSync(v2, "tickets: \nreviews: none\n", "utf8");
+      withEnv({ TURN_SUMMARY_PATH: v2, HOME: dir }, () => {
+        const resolved = resolveSummaryFile();
+        assert.equal(resolved.file, v2);
+        assert.equal(resolved.legacy, false);
+      });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to the legacy home file and says so", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sumpath-"));
+    try {
+      const legacy = path.join(dir, ".claude", "turn-summary.txt");
+      fs.mkdirSync(path.dirname(legacy), { recursive: true });
+      fs.writeFileSync(legacy, "tickets: \nreviews: none\n", "utf8");
+      withEnv({ TURN_SUMMARY_PATH: path.join(dir, ".turn", "summary.txt"), HOME: dir }, () => {
+        const resolved = resolveSummaryFile();
+        assert.equal(resolved.file, legacy);
+        assert.equal(resolved.legacy, true);
+      });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("uses the legacy path when the env var is unset", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sumpath-"));
+    try {
+      withEnv({ TURN_SUMMARY_PATH: undefined, HOME: dir }, () => {
+        const resolved = resolveSummaryFile();
+        assert.equal(resolved.file, path.join(dir, ".claude", "turn-summary.txt"));
+        assert.equal(resolved.legacy, true);
+      });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

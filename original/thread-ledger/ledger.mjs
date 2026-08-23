@@ -1147,11 +1147,14 @@ export function declareText(opts) {
     (value ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   const errors = [];
 
-  const threads = list(opts.threads);
-  for (const slug of threads) {
-    if (!SLUG_LINE.test(slug)) {
-      errors.push(`thread ${JSON.stringify(slug)} is not a kebab-case slug ([a-z0-9-])`);
-    }
+  // Threads are observed from the ledger's events, never declared
+  // (skills#153) — refusing the flag outright teaches the change
+  // instead of writing a line every check now ignores.
+  if (opts.threads !== undefined) {
+    errors.push(
+      "--threads is gone: threads are observed from the ledger's events " +
+        "this turn, not declared (skills#153) — append the event instead",
+    );
   }
   const tickets = list(opts.tickets);
   for (const ref of tickets) {
@@ -1192,7 +1195,6 @@ export function declareText(opts) {
   }
 
   const lines = [
-    `threads: ${threads.join(", ")}`,
     `tickets: ${tickets.join(", ")}`,
     `reviews: ${reviews}`,
   ];
@@ -1209,9 +1211,10 @@ const USAGE = `ledger — a session's open-work record
                 [--by bot] [--no-push]
                 [--branch <name>] [--pr owner/repo#2]
   ledger declare --reviews <none|read|persisted|nothing-to-persist>
-                 [--threads a,b] [--tickets owner/repo#1,owner/repo#2]
+                 [--tickets owner/repo#1,owner/repo#2]
                  [--rulings slug-a] [--no-update "<target> <reason>"]...
                  [--summary-path <file>]   # validated turn-summary writer; no store needed
+                 # threads are observed from the ledger's events, not declared (skills#153)
   ledger state
   ledger render [--out <file>] [--format html|md] [--title …] [--session-url …]
                 [--no-pull]   # render pulls the store first; this skips it
@@ -1238,8 +1241,15 @@ export function main(argv) {
   // is passing the very hook that would otherwise reject the turn.
   if (cmd === "declare") {
     const text = declareText(opts);
+    // The same single env var the hook wrapper exports (skills#153):
+    // writer and checker resolve the location through one name, so
+    // neither can drift to a private path. The legacy home fallback
+    // keeps unmigrated environments declaring while the wrapper rolls
+    // out; the heartbeat reads it with a deprecation note.
     const file =
-      opts["summary-path"] ?? path.join(os.homedir(), ".claude", "turn-summary.txt");
+      opts["summary-path"] ??
+      process.env.TURN_SUMMARY_PATH ??
+      path.join(os.homedir(), ".claude", "turn-summary.txt");
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, text, "utf8");
     process.stdout.write(`wrote ${file}\n${text}`);

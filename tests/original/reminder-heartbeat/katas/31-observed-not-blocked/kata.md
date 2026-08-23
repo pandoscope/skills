@@ -22,3 +22,9 @@ flag set.
 
 Exit 0, empty stderr, no seal, and a compliance record whose outcome is
 `observed` with check 3's failure in its verdicts.
+
+> **Format v2 (skills#153):** threads are observed from the ledger, not
+> declared, so the declared-thread scenario this kata was born from can
+> no longer occur. The fixture stands as regression over the v2
+> behavior its expected.json now asserts — the turn resolves on
+> observation (and on the ticket declaration, where one is staged).
