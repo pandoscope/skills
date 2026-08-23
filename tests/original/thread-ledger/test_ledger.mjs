@@ -3502,3 +3502,86 @@ describe("StoreResolution", () => {
     assert.equal(fs.existsSync(absent), false);
   });
 });
+
+// ------------------------------------------------------- declare verb
+
+import { declareText } from "../../../original/thread-ledger/ledger.mjs";
+import { readTurnSummary } from "../../../original/thread-ledger/heartbeat.mjs";
+
+describe("declare", () => {
+  it("round-trips through the heartbeat's own reader", () => {
+    const text = declareText({
+      threads: "handoff-skill, orchestrator-set-map",
+      tickets: "pandoscope/skills#157",
+      reviews: "nothing-to-persist",
+      rulings: "bundle-minimal-core-curated",
+      "no-update": ["pandoscope/skills#71 blocked on the principal"],
+    });
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "declare-"));
+    try {
+      const file = path.join(dir, "turn-summary.txt");
+      fs.writeFileSync(file, text, "utf8");
+      const parsed = readTurnSummary(file);
+      assert.deepEqual(parsed.threads, ["handoff-skill", "orchestrator-set-map"]);
+      assert.deepEqual(parsed.tickets, ["pandoscope/skills#157"]);
+      assert.equal(parsed.reviews, "nothing-to-persist");
+      assert.deepEqual(parsed.rulings, ["bundle-minimal-core-curated"]);
+      assert.deepEqual(parsed.waivers, {
+        "pandoscope/skills#71": "blocked on the principal",
+      });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("writes the three core lines even when empty", () => {
+    const text = declareText({ reviews: "none" });
+    assert.equal(text, "threads: \ntickets: \nreviews: none\n");
+  });
+
+  it("keeps detail after the reviews state word", () => {
+    const text = declareText({ reviews: "persisted em record for dm!29" });
+    assert.match(text, /^reviews: persisted em record for dm!29$/m);
+  });
+
+  it("requires a reviews declaration", () => {
+    throws(() => declareText({}), "--reviews is required");
+  });
+
+  it("refuses a reviews word outside the heartbeat's grammar", () => {
+    throws(() => declareText({ reviews: "done" }), "names no state");
+  });
+
+  it("refuses a non-slug thread", () => {
+    throws(
+      () => declareText({ reviews: "none", threads: "Handoff Skill" }),
+      "kebab-case",
+    );
+  });
+
+  it("refuses a bare ticket number", () => {
+    throws(
+      () => declareText({ reviews: "none", tickets: "#157" }),
+      "owner/repo#n",
+    );
+  });
+
+  it("refuses a waiver without a reason", () => {
+    throws(
+      () => declareText({ reviews: "none", "no-update": ["skills#71"] }),
+      "target and a reason",
+    );
+  });
+
+  it("accumulates repeated --no-update flags", () => {
+    const [cmd, opts] = parseArgs([
+      "declare", "--reviews", "none",
+      "--no-update", "a/b#1 first reason",
+      "--no-update", "a/b#2 second reason",
+    ]);
+    assert.equal(cmd, "declare");
+    const text = declareText(opts);
+    assert.match(text, /no-update: a\/b#1 first reason\n/);
+    assert.match(text, /no-update: a\/b#2 second reason\n/);
+  });
+});

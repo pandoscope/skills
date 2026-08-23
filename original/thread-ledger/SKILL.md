@@ -116,13 +116,28 @@ once. There is no self-report tier: a checklist filled in by the agent
 that did the work is another claim from the context that already
 believed the work happened.
 
-Your part is one file per turn, `~/.claude/turn-summary.txt`:
+Your part is one file per turn, `~/.claude/turn-summary.txt`, written
+through the validated writer so a malformed declaration fails here —
+with the correction in the error — instead of as a Stop-hook block:
+
+```bash
+node ledger.mjs declare --reviews none \
+  --threads reminder-heartbeat,seal-event --tickets my-org/skills#56
+```
+
+which writes:
 
 ```text
 threads: reminder-heartbeat, seal-event
 tickets: my-org/skills#56
 reviews: none
 ```
+
+`--rulings slug-a` adds a rulings line; each
+`--no-update "<target> <reason>"` adds a per-ticket waiver line (a
+target without a reason is refused). The verb needs no store or
+identity — it is the one command that must work when everything else
+is misconfigured.
 
 Every check is a mechanical diff of that declaration against what was
 actually written and pushed. When one fails, the block reason states

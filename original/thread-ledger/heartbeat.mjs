@@ -82,8 +82,7 @@ function localFile(name) {
  *
  * Returns `{ path, exists, writtenAt, threads, tickets }`.
  */
-function readTurnSummary() {
-  const file = localFile("turn-summary.txt");
+export function readTurnSummary(file = localFile("turn-summary.txt")) {
   if (!fs.existsSync(file)) {
     return {
       path: file,
