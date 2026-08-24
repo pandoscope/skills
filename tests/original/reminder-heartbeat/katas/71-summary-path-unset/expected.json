@@ -1,0 +1,22 @@
+{
+  "status": "active",
+  "stop_hook_active": false,
+  "summary_written_at": "2026-08-03T15:19:25.000Z",
+  "exit": 0,
+  "check": null,
+  "sealed": true,
+  "reason": [],
+  "verdict_details": {
+    "turn-summary": "turn summary read from the v1 path — deprecated, migrate the wrapper (skills#153)"
+  },
+  "digest": {
+    "turns": 1,
+    "executions": {
+      "sealed": 1,
+      "blocked": 0,
+      "unsealed": 0,
+      "observed": 0
+    },
+    "checks": {}
+  }
+}
