@@ -30,3 +30,9 @@ A declared thread sitting in `blocked`, with no event this turn.
 
 Check 3 fires and offers `--ev unblocked`, the transition the state
 machine actually permits from `blocked`.
+
+> **Format v2 (skills#153):** threads are observed from the ledger, not
+> declared, so the declared-thread scenario this kata was born from can
+> no longer occur. The fixture stands as regression over the v2
+> behavior its expected.json now asserts — the turn resolves on
+> observation (and on the ticket declaration, where one is staged).

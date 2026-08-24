@@ -1061,8 +1061,12 @@ const FLAGS = [
   "root", "session", "transcript", "session-url", "ev", "thread", "title",
   "ticket", "parent", "deps", "urgency", "importance", "pct", "note", "on",
   "what", "trigger", "out", "format", "by", "range", "branch", "pr", "repos",
+  "threads", "tickets", "reviews", "rulings", "summary-path",
 ];
 const BOOLS = ["conversation-only", "no-push", "no-pull"];
+// Flags that accumulate: each occurrence appends. A turn can waive
+// several tickets, and "last one wins" would silently drop the rest.
+const MULTI = ["no-update"];
 
 /**
  * Split argv into a command and its options.
@@ -1083,7 +1087,11 @@ export function parseArgs(argv) {
       continue;
     }
     const name = arg.slice(2);
-    if (BOOLS.includes(name)) {
+    if (MULTI.includes(name)) {
+      i += 1;
+      if (i >= argv.length) throw new LedgerError(`--${name} needs a value`);
+      (opts[name] ??= []).push(argv[i]);
+    } else if (BOOLS.includes(name)) {
       opts[name] = true;
     } else if (FLAGS.includes(name)) {
       i += 1;
@@ -1121,6 +1129,80 @@ function eventFrom(opts) {
   return event;
 }
 
+// ------------------------------------------------------- turn summary
+
+// The writer side of the heartbeat's turn-summary contract
+// (skills#157). The grammar below is what the heartbeat's checks
+// read; validating here turns a Stop-hook rejection round trip into
+// an immediate error with the correction in it. The round-trip test
+// parses the written text with the heartbeat's own reader, so writer
+// and checker cannot drift apart silently.
+const REVIEW_WORDS = ["none", "read", "persisted", "nothing-to-persist"];
+const SLUG_LINE = /^[a-z0-9][a-z0-9-]*$/;
+const TICKET_REF = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+#\d+$/;
+
+/** Validate a declaration and render it as turn-summary text. */
+export function declareText(opts) {
+  const list = (value) =>
+    (value ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  const errors = [];
+
+  // Threads are observed from the ledger's events, never declared
+  // (skills#153) — refusing the flag outright teaches the change
+  // instead of writing a line every check now ignores.
+  if (opts.threads !== undefined) {
+    errors.push(
+      "--threads is gone: threads are observed from the ledger's events " +
+        "this turn, not declared (skills#153) — append the event instead",
+    );
+  }
+  const tickets = list(opts.tickets);
+  for (const ref of tickets) {
+    if (!TICKET_REF.test(ref)) {
+      errors.push(`ticket ${JSON.stringify(ref)} is not an owner/repo#n reference`);
+    }
+  }
+  const reviews = (opts.reviews ?? "").trim();
+  const reviewToken = reviews ? reviews.split(/[\s,]+/)[0].toLowerCase() : null;
+  if (!reviews) {
+    errors.push(`--reviews is required: one of ${REVIEW_WORDS.join(", ")}`);
+  } else if (!REVIEW_WORDS.includes(reviewToken)) {
+    errors.push(
+      `reviews ${JSON.stringify(reviews)} names no state the heartbeat reads — ` +
+        `declare one of: ${REVIEW_WORDS.join(", ")}`,
+    );
+  }
+  const rulings = list(opts.rulings);
+  for (const slug of rulings) {
+    if (!SLUG_LINE.test(slug)) {
+      errors.push(`ruling ${JSON.stringify(slug)} is not a kebab-case slug ([a-z0-9-])`);
+    }
+  }
+  // A waiver without a reason renders as "(no reason given)" on the
+  // checker side — representable there, refused here.
+  const waivers = opts["no-update"] ?? [];
+  for (const waiver of waivers) {
+    const [target, ...why] = waiver.trim().split(/\s+/);
+    if (!target || !why.length) {
+      errors.push(
+        `--no-update ${JSON.stringify(waiver)} needs a target and a reason: ` +
+          `"<ticket-or-thread> <why it was deliberately not updated>"`,
+      );
+    }
+  }
+  if (errors.length) {
+    throw new LedgerError(`declare refused:\n  - ${errors.join("\n  - ")}`);
+  }
+
+  const lines = [
+    `tickets: ${tickets.join(", ")}`,
+    `reviews: ${reviews}`,
+  ];
+  if (rulings.length) lines.push(`rulings: ${rulings.join(", ")}`);
+  for (const waiver of waivers) lines.push(`no-update: ${waiver.trim()}`);
+  return `${lines.join("\n")}\n`;
+}
+
 const USAGE = `ledger — a session's open-work record
 
   ledger append --ev <kind> --thread <slug> [--title …] [--ticket owner/repo#1]
@@ -1128,6 +1210,11 @@ const USAGE = `ledger — a session's open-work record
                 [--pct 40] [--note …] [--on internal] [--what …] [--trigger …]
                 [--by bot] [--no-push]
                 [--branch <name>] [--pr owner/repo#2]
+  ledger declare --reviews <none|read|persisted|nothing-to-persist>
+                 [--tickets owner/repo#1,owner/repo#2]
+                 [--rulings slug-a] [--no-update "<target> <reason>"]...
+                 [--summary-path <file>]   # validated turn-summary writer; no store needed
+                 # threads are observed from the ledger's events, not declared (skills#153)
   ledger state
   ledger render [--out <file>] [--format html|md] [--title …] [--session-url …]
                 [--no-pull]   # render pulls the store first; this skips it
@@ -1145,6 +1232,27 @@ export function main(argv) {
   const [cmd, opts] = parseArgs(argv);
   if (!cmd || cmd === "help") {
     process.stdout.write(`${USAGE}\n`);
+    return 0;
+  }
+
+  // Before the store resolves: declare writes a session-local file the
+  // heartbeat reads, and needs no clone, identity, or transcript — a
+  // missing SESSION_MEMORY_URL must not block the one command whose job
+  // is passing the very hook that would otherwise reject the turn.
+  if (cmd === "declare") {
+    const text = declareText(opts);
+    // The same single env var the hook wrapper exports (skills#153):
+    // writer and checker resolve the location through one name, so
+    // neither can drift to a private path. The legacy home fallback
+    // keeps unmigrated environments declaring while the wrapper rolls
+    // out; the heartbeat reads it with a deprecation note.
+    const file =
+      opts["summary-path"] ??
+      process.env.TURN_SUMMARY_PATH ??
+      path.join(os.homedir(), ".claude", "turn-summary.txt");
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, text, "utf8");
+    process.stdout.write(`wrote ${file}\n${text}`);
     return 0;
   }
 

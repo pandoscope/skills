@@ -116,24 +116,32 @@ once. There is no self-report tier: a checklist filled in by the agent
 that did the work is another claim from the context that already
 believed the work happened.
 
-Your part is one file per turn, `~/.claude/turn-summary.txt`:
+Your part is one declaration per turn, written ONLY through the
+validated writer — never by editing any file by hand; where the
+declaration lives is the writer's business, and a malformed one fails
+here with the correction in the error instead of as a Stop-hook block:
 
-```text
-threads: reminder-heartbeat, seal-event
-tickets: my-org/skills#56
-reviews: none
+```bash
+node ledger.mjs declare --reviews none --tickets my-org/skills#56
 ```
 
-Every check is a mechanical diff of that declaration against what was
-actually written and pushed. When one fails, the block reason states
-the completion criterion and the exact command — run it and end the
-turn; it is never a prompt to start new work.
+`--rulings slug-a` adds a rulings declaration; each
+`--no-update "<target> <reason>"` adds a per-ticket waiver (a target
+without a reason is refused). The verb needs no store or identity — it
+is the one command that must work when everything else is
+misconfigured.
 
-`threads:` is a **same-turn claim, not a topic list**: every slug named
-needs an event appended during this turn. Naming a thread the turn
-merely discussed fails `ledger-event`, correctly — the declaration says
-the ledger is current about that thread, and it is not. Append first,
-then declare what you appended.
+Threads are **not declared**: the heartbeat observes which threads got
+events this turn from the ledger itself, so the observation IS the
+claim. Append the event and the turn's threads follow; a turn that
+committed to a clone while appending nothing fails `ledger-event` on
+that observation alone.
+
+Every check is a mechanical diff of the declaration and the observed
+state against what was actually written and pushed. When one fails,
+the block reason states the completion criterion and the exact
+command — run it and end the turn; it is never a prompt to start new
+work.
 
 The hook blocks once per reason, not once per turn. A re-fire that
 fails a check the block never named earns one more block, up to three

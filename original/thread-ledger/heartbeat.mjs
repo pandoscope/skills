@@ -45,9 +45,7 @@ import { fileURLToPath } from "node:url";
 import {
   LedgerError,
   OPENING,
-  TRANSITIONS,
   countUserTurns,
-  currentStates,
   knownPrs,
   lastAssistantText,
   lastUserTurnAt,
@@ -82,13 +80,35 @@ function localFile(name) {
  *
  * Returns `{ path, exists, writtenAt, threads, tickets }`.
  */
-function readTurnSummary() {
-  const file = localFile("turn-summary.txt");
+/**
+ * Where the turn summary lives (skills#153, format v2).
+ *
+ * One env var is the whole agreement between the hook wrapper and the
+ * `ledger declare` writer — both resolve through it, so neither can
+ * drift to a private path. Unset, or set with nothing written there
+ * while a legacy file exists, the read falls back to the v1 location
+ * under `~/.claude/` so sessions opened before the move keep sealing;
+ * the fallback is flagged so the verdict detail can log the
+ * deprecation and diligence can measure when the v1 tail goes quiet.
+ */
+export function resolveSummaryFile() {
+  const v2 = process.env.TURN_SUMMARY_PATH || null;
+  const legacy = localFile("turn-summary.txt");
+  if (v2 && (fs.existsSync(v2) || !fs.existsSync(legacy))) {
+    return { file: v2, legacy: false };
+  }
+  return { file: legacy, legacy: true };
+}
+
+export function readTurnSummary(file = null) {
+  let legacy = false;
+  if (!file) ({ file, legacy } = resolveSummaryFile());
   if (!fs.existsSync(file)) {
     return {
       path: file,
       exists: false,
       writtenAt: null,
+      legacy,
       threads: [],
       tickets: [],
       reviews: null,
@@ -125,6 +145,7 @@ function readTurnSummary() {
     path: file,
     exists: true,
     writtenAt: fs.statSync(file).mtime,
+    legacy,
     threads: field("threads"),
     tickets: field("tickets"),
     reviews: single("reviews"),
@@ -189,7 +210,10 @@ function committedThisTurn(repo, turnStart) {
  * stamp of the message the principal last typed.
  */
 function checkTurnSummary(ctx) {
-  const write = `  printf 'threads: %s\\ntickets: %s\\nreviews: %s\\n' '<thread-slug>, <thread-slug>' '<owner/repo#n>' '<none|read|persisted|nothing-to-persist>' > ${ctx.summary.path}`;
+  // The block teaches the validated writer, never the raw file: hand
+  // edits are what let a malformed declaration reach this hook at all
+  // (skills#157), and naming the path invites them.
+  const write = `  node ${LEDGER} declare --reviews <none|read|persisted|nothing-to-persist> [--tickets owner/repo#n] [--no-update "<target> <reason>"]`;
 
   // Without a boundary nothing downstream means what it says: freshness
   // has nothing to compare against and check 3's window widens to all
@@ -243,37 +267,25 @@ function checkTurnSummary(ctx) {
         ? `turn summary predates the turn (written ${ctx.summary.writtenAt.toISOString()})`
         : "no turn summary",
       reason: [
-        `The turn is not complete until ${ctx.summary.path} describes it. ` +
-          "Write the ledger threads and the tickets this turn touched.",
+        "The turn is not complete until it declares itself. Declare the " +
+          "tickets this turn touched and its reviews state; the threads are " +
+          "observed from the ledger, not declared (skills#153).",
         "",
         write,
       ].join("\n"),
     };
   }
 
-  // A declaration of nothing is a declaration nothing can contradict:
-  // every later check diffs against it, so an empty one passes them all
-  // and the bare seal — there so idle turns are not nagged — becomes
-  // the way out of every check. The turn's own commits are evidence it
-  // cannot write about itself, so they are what the emptiness is
-  // measured against.
-  if (!ctx.summary.threads.length) {
-    const touched = ctx.clones.find((repo) => committedThisTurn(repo, ctx.turnStart));
-    if (touched) {
-      return {
-        verdict: "fail",
-        detail: `committed to ${touched.name} while declaring no thread`,
-        reason: [
-          `The turn is not complete until ${ctx.summary.path} names the ` +
-            `threads behind it. It committed to ${touched.name} and declared ` +
-            "no thread.",
-          "",
-          write,
-        ].join("\n"),
-      };
-    }
-  }
-  return { verdict: "pass", detail: `${ctx.summary.threads.length} threads declared` };
+  // Threads are DERIVED from the ledger's own events this turn
+  // (skills#153) — the declaration was redundant with the observation,
+  // and the empty-declaration trap moved to check 3, which measures
+  // commits against observed events instead of declared names.
+  return {
+    verdict: "pass",
+    detail: ctx.summary.legacy
+      ? "turn summary read from the v1 path — deprecated, migrate the wrapper (skills#153)"
+      : "turn summary fresh",
+  };
 }
 
 /**
@@ -451,12 +463,41 @@ function checkPushBlocklist(ctx) {
 }
 
 /**
- * Check 3 — the ledger has an event for every declared thread.
+ * The threads this turn touched, OBSERVED from the ledger (skills#153).
  *
- * The original heartbeat. The recorder validates WHAT gets written;
- * this is the only thing that validates THAT something was written.
- * An event counts when it landed after the turn began, so a thread
- * carried over from an earlier turn does not answer for this one.
+ * Derived, never declared: an event counts when it landed after the
+ * turn began, so a thread carried over from an earlier turn does not
+ * answer for this one. The writer set includes the NAMED ones — the
+ * close-loop's bot completing a thread mid-turn leaves the ledger
+ * exactly what the turn produced, and blocking there punishes the
+ * mechanism for working (#89). An event from another conversation
+ * still does not count, because two sessions on one thread would
+ * otherwise excuse each other's bookkeeping; a `by` writer is not a
+ * conversation and has no bookkeeping to excuse.
+ */
+function observedThreads(ctx) {
+  if (!ctx.turnStart) return new Set();
+  const start = ctx.turnStart.getTime();
+  return new Set(
+    ctx.events
+      .filter((event) => event.anchor?.session === ctx.session || event.by)
+      .filter((event) => event.at && new Date(event.at).getTime() >= start)
+      .map((event) => event.thread)
+      .filter(Boolean),
+  );
+}
+
+/**
+ * Check 3 — the ledger heard about the turn's work.
+ *
+ * The original heartbeat, inverted by skills#153: threads are observed
+ * from the ledger's own events, so a declaration can no longer name a
+ * thread the ledger never heard of — the two-step trap (#123) is gone
+ * by construction. What remains checkable is the empty-observation
+ * trap that used to live in check 1: the turn's own commits are
+ * evidence it cannot write about itself, so a turn that committed to a
+ * clone while appending nothing is a turn the ledger knows nothing
+ * about.
  */
 function checkLedgerEvent(ctx) {
   // Every check runs even once one has failed, so this has to survive a
@@ -465,79 +506,25 @@ function checkLedgerEvent(ctx) {
   if (!ctx.turnStart) {
     return { verdict: "unconfigured", detail: "no turn boundary to measure against" };
   }
-  if (!ctx.summary.threads.length) {
-    return { verdict: "pass", detail: "no threads declared — nothing to record" };
+  const touched = observedThreads(ctx);
+  if (!touched.size) {
+    const committed = ctx.clones.find((repo) => committedThisTurn(repo, ctx.turnStart));
+    if (committed) {
+      return {
+        verdict: "fail",
+        detail: `committed to ${committed.name} with no ledger event this turn`,
+        reason: [
+          "The turn is not complete until the ledger has an event for the " +
+            `work behind it. It committed to ${committed.name} and appended ` +
+            "nothing, so the ledger knows nothing about this turn.",
+          "",
+          `  node ${LEDGER} append --ev progress --thread <slug> --note <what happened>`,
+        ].join("\n"),
+      };
+    }
+    return { verdict: "pass", detail: "no events and no commits this turn — nothing to record" };
   }
-  const start = ctx.turnStart.getTime();
-  // Narrowed by time, and by writer — but the writer set includes the
-  // NAMED ones. The check's question is "is the ledger current about
-  // what this turn touched", not "did this session hold the pen": the
-  // close-loop's bot completes a declared thread mid-turn, and the
-  // ledger is then already exactly what the turn produced — blocking
-  // there punishes the mechanism for working (#89). An event from
-  // another conversation still does not count, because two sessions on
-  // one thread would otherwise excuse each other's bookkeeping; a `by`
-  // writer is not a conversation and has no bookkeeping to excuse.
-  const touched = new Set(
-    ctx.events
-      .filter((event) => event.anchor?.session === ctx.session || event.by)
-      .filter((event) => event.at && new Date(event.at).getTime() >= start)
-      .map((event) => event.thread),
-  );
-  const missing = ctx.summary.threads.filter((thread) => !touched.has(thread));
-  if (!missing.length) {
-    return { verdict: "pass", detail: `${ctx.summary.threads.length} threads recorded` };
-  }
-
-  // The verb has to be one the state machine will accept from where the
-  // thread actually stands. Offering `progress` unconditionally fails
-  // for every thread that is blocked, parked or finished as surely as
-  // for one never opened, and a command that errors leaves the model
-  // improvising inside the single turn the hook allows it.
-  const [first] = missing;
-  const state = currentStates(ctx.events)[first] ?? "";
-  // From a terminal state the only legal append is `reopened`, and a
-  // `reopened` that no resumed work caused is a false event written to
-  // clear a check — the lie this whole system exists to prevent. A
-  // block reason must never propose an event that is false, so here
-  // the remedy is the DECLARATION: a finished thread nothing touched
-  // since the boundary means the summary names a thread this turn did
-  // not actually change.
-  if (state === "completed" || state === "dropped") {
-    return {
-      verdict: "fail",
-      detail: `no event this turn for ${missing.join(", ")}`,
-      reason: [
-        "The turn is not complete until the ledger has an event for every " +
-          `thread it changed. ${first} is already ${state} and nothing has ` +
-          `touched it since the turn began — if this turn did not change ` +
-          `it, the declaration is what is wrong.`,
-        "",
-        `  Remove ${first} from ${ctx.summary.path} and end the turn. ` +
-          `Append --ev reopened only if the work genuinely resumed; never ` +
-          `append it to satisfy this check.`,
-      ].join("\n"),
-    };
-  }
-  const args = appendArgs(first, state);
-  // The state is named only where it changes the answer. For a thread
-  // that can simply take `progress` it is noise; for one that cannot,
-  // it is the whole explanation for the unfamiliar verb being offered.
-  const named = !state
-    ? `Never opened: ${first}`
-    : args.startsWith("--ev progress")
-      ? `Missing: ${first}`
-      : `Missing: ${first}, which is ${state}`;
-  return {
-    verdict: "fail",
-    detail: state ? `no event this turn for ${missing.join(", ")}` : `${first} was never opened`,
-    reason: [
-      "The turn is not complete until the ledger has an event for every " +
-        `thread it changed. ${named}.`,
-      "",
-      `  node ${LEDGER} append ${args}`,
-    ].join("\n"),
-  };
+  return { verdict: "pass", detail: `${touched.size} threads observed` };
 }
 
 // --------------------------------------------------------- decisions
@@ -837,9 +824,10 @@ function checkTicketsUpdated(ctx) {
       "The turn is not complete until every ticket it declared heard " +
         `about it. Declared and never written to this turn: ` +
         `${missing.join(", ")}. Update each one on the forge, or waive ` +
-        "it explicitly — add a line per ticket to " +
-        `${ctx.summary.path}: no-update: <owner/repo#n> <why> — the ` +
-        "waiver is logged as a claim.",
+        "it explicitly — redeclare with a waiver per ticket, which is " +
+        "logged as a claim:",
+      "",
+      `  node ${LEDGER} declare <your declaration> --no-update "<owner/repo#n> <why>"`,
     ].join("\n"),
   };
 }
@@ -1313,8 +1301,9 @@ function checkResponseHygiene(ctx) {
   const violations = refViolations(prose, shortcodes, knownPrs(ctx.events));
 
   // Threads owed a name in prose: announced when opened this turn,
-  // stated when declared. Matching is on the raw response — backticks
-  // around a slug are style, not evasion.
+  // stated when observed with an event this turn (skills#153 — the
+  // observation replaced the declaration). Matching is on the raw
+  // response — backticks around a slug are style, not evasion.
   const start = ctx.turnStart.getTime();
   const openedNow = ctx.events
     .filter((event) => event.anchor?.session === ctx.session)
@@ -1327,7 +1316,7 @@ function checkResponseHygiene(ctx) {
       naming.push({ slug, expected: `new thread: ${slug}` });
     }
   }
-  for (const slug of ctx.summary.threads) {
+  for (const slug of observedThreads(ctx)) {
     if (openedNow.includes(slug)) continue;
     if (!response.includes(slug)) naming.push({ slug, expected: slug });
   }
@@ -1418,25 +1407,6 @@ function checkResponseHygiene(ctx) {
       ...lines,
     ].join("\n"),
   };
-}
-
-/**
- * The append a thread in `state` can actually take.
- *
- * Driven by the same transition table the recorder validates against,
- * so the offer cannot drift from what the recorder will accept — and
- * each kind's own required fields come with it, since a legal verb
- * missing its arguments fails just as loudly as an illegal one.
- */
-function appendArgs(thread, state) {
-  const [next] = TRANSITIONS[state] ?? [];
-  const extra = {
-    opened: '--title "<one line>" --ticket <owner/repo#n>',
-    reopened: '--title "<one line>" --ticket <owner/repo#n>',
-    progress: '--pct <n> --note "<what changed>"',
-    unblocked: '--note "<what changed>"',
-  };
-  return `--ev ${next} --thread ${thread} ${extra[next] ?? '--note "<what changed>"'}`.trim();
 }
 
 /**

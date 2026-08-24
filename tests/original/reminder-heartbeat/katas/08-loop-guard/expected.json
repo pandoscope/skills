@@ -3,9 +3,9 @@
   "stop_hook_active": true,
   "summary_written_at": "2026-07-30T14:32:00.000Z",
   "exit": 0,
-  "check": "ledger-event",
+  "check": "tickets-updated",
   "sealed": false,
   "reason": [
-    "The turn is released UNSEALED \u2014 ledger-event is still failing: no event this turn for session-memory-store. Not blocking again; the next turn begins with this outstanding, and the store's tail shows it."
+    "The turn is released UNSEALED — tickets-updated is still failing: no observed write for o/r#43. Not blocking again; the next turn begins with this outstanding, and the store's tail shows it."
   ]
 }

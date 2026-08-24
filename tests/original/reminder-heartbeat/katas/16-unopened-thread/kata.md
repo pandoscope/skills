@@ -30,3 +30,9 @@ did, with everything else in order.
 
 Check 3 fires for the unopened thread and offers `--ev opened`, which
 is the transition the state machine actually permits from nothing.
+
+> **Format v2 (skills#153):** threads are observed from the ledger, not
+> declared, so the declared-thread scenario this kata was born from can
+> no longer occur. The fixture stands as regression over the v2
+> behavior its expected.json now asserts — the turn resolves on
+> observation (and on the ticket declaration, where one is staged).

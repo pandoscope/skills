@@ -25,3 +25,9 @@ boundary, with no event from anyone since.
 The block stands — the declaration is genuinely wrong — but the reason
 tells the truth: fix the summary, and never append `reopened` to
 satisfy a check.
+
+> **Format v2 (skills#153):** threads are observed from the ledger, not
+> declared, so the declared-thread scenario this kata was born from can
+> no longer occur. The fixture stands as regression over the v2
+> behavior its expected.json now asserts — the turn resolves on
+> observation (and on the ticket declaration, where one is staged).
