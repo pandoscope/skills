@@ -131,6 +131,9 @@ Code-specific skills:
 - Never push to `main`
 - Create PR immediately on branch creation
 - Commits: conventional commits
+- **Merge commits only on `main`** — feature branches rebase onto
+  `main`, never merge it in; the `commitlint` job rejects `Merge`
+  headers on PR commits.
 - **Ticket references in PR bodies are ALL CAPS, from the central list**
   (`.github/reference-keywords.json`, enforced by the `ticket` job):
   `CLOSES #n` / `FIXES #n` close on merge,
