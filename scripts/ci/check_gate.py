@@ -176,7 +176,14 @@ def ticket_violations(body, branch, labels, author, config):
     named = re.match(config["branch_pattern"], branch or "")
     if named:
         in_body = {re.search(r"#(\d+)$", ref).group(1) for _, ref in found}
-        for number in sorted(set(named.group(1).split("-")) - in_body, key=int):
+        # A token may carry a lowercase repo shortcode before its
+        # number (skills#147: one branch name for a cross-repo arc);
+        # the ticket number is the token's trailing digit run, so
+        # d10e76 names ticket 76, never 10.
+        in_branch = {
+            re.search(r"(\d+)$", token).group(1) for token in named.group(1).split("-")
+        }
+        for number in sorted(in_branch - in_body, key=int):
             problems.append(
                 f"the branch names ticket {number} but the body never "
                 f"references #{number} with a canonical keyword"
