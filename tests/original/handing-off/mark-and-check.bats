@@ -5,6 +5,7 @@ setup() {
   SKILL="$REPO_ROOT/original/handing-off"
   TMP=$(mktemp -d)
   export HANDOFF_STATE="$TMP/state.json"
+  export CLAUDE_SETTINGS="$TMP/settings.json"
   export HANDOFF_TRANSCRIPT="$TMP/transcript.jsonl"
   echo "a handoff" > "$TMP/handoff.md"
   {

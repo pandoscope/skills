@@ -26,7 +26,10 @@ is the part chosen deliberately: what is open, why, and what continues.
    is not overlooked. Completion: every item carries a next action.
 2. **Write the handoff** to a file: what happened since the previous
    handoff; an open-state table (item | state | next); standing rules;
-   gotchas. Link the previous handoff. Completion: a reader with none
+   gotchas. Link the previous handoff. Table rows are single-line and
+   stand in step 1's priority order — verify.sh lifts them verbatim
+   into the post-compaction context, so the table IS the priority
+   list and the extractor stays dumb. Completion: a reader with none
    of this session's context can pick any table row and continue it.
 3. **Publish** the file wherever the installing project keeps session
    artifacts, and update the tickets and progress records the session
@@ -39,11 +42,24 @@ is the part chosen deliberately: what is open, why, and what continues.
    candidate `/compact <focus line>` commands, first one recommended.
    Running `/compact` stays the user's step — end the run on the
    proposals.
-6. Run `./check.sh` — machine-verifies the marker and handoff file,
-   prints the residue to verify by hand.
+6. Run `./check.sh` — machine-verifies the marker, the handoff file,
+   and that the skill's hooks are registered (installing the
+   registration where nothing else manages `settings.json`), then
+   prints the residue to verify by hand. Relay any warning it prints
+   about registration timing: registration is captured at CLI
+   startup, so a fresh install protects the next session, not the
+   compaction this handoff prepares.
 
-The post-compaction verification and the compaction gate belong to the
-installing project's hooks, where present; this skill only writes what
-they read. `HANDOFF_STATE` and `HANDOFF_TRANSCRIPT` (transcript path
-override; unset = newest transcript under `~/.claude/projects`) are the
-whole contract between them.
+The skill ships its own compaction hooks: `verify.sh` runs on
+`SessionStart` (matcher `compact`) and injects the handoff pointer
+plus the open-state table verbatim into the fresh context, with the
+instruction to restate it; `guard.sh` runs on `PreCompact` and blocks
+compaction (exit 2) while no fresh marker exists — growth-based
+freshness, `PRECOMPACT_GUARD=off` overrides. The installing project
+contributes only registration: where a manager owns `settings.json`
+(a `managedBy` marker), its template must carry the two entries and
+`check.sh` prints exactly what to add; everywhere else `check.sh`
+installs them itself. `HANDOFF_STATE` and `HANDOFF_TRANSCRIPT`
+(transcript path override; unset = newest transcript under
+`~/.claude/projects`) remain the data contract all three scripts
+share.
