@@ -39,9 +39,10 @@ is the part chosen deliberately: what is open, why, and what continues.
    `~/.claude/handoff-state.json`) so hooks can tell a fresh handoff
    from a stale one. Completion: mark.sh prints the marker path.
 5. **Propose focus**: from what continues next, print one to three
-   candidate `/compact <focus line>` commands, first one recommended.
-   Running `/compact` stays the user's step — end the run on the
-   proposals.
+   candidate `/compact <focus line>` commands, first one recommended,
+   **each in its own fenced code block** — nothing inside a fence but
+   the command itself, so one gesture copies it whole. Running
+   `/compact` stays the user's step — end the run on the proposals.
 6. Run `./check.sh` — machine-verifies the marker, the handoff file,
    and that the skill's hooks are registered (installing the
    registration where nothing else manages `settings.json`), then
