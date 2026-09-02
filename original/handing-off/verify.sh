@@ -33,9 +33,11 @@ if [ -n "$path" ] && [ -f "$path" ]; then
         /^\|/ { if (!in_t) { hdr = $0; in_t = 1; n = 0; rows = ""; next }
                 n++; if (n == 1) next
                 rows = rows $0 "\n"; next }
-        in_t  { if (hdr ~ /[Ii]tem/ && hdr ~ /[Nn]ext/) { printf "%s", rows; exit }
+        in_t  { if (hdr ~ /[Ii]tem/ && hdr ~ /[Nn]ext/) { printf "%s", rows; done = 1; exit }
                 in_t = 0 }
-        END   { if (in_t && hdr ~ /[Ii]tem/ && hdr ~ /[Nn]ext/) printf "%s", rows }
+        # awk runs END after exit, so the flag keeps a table that ended
+        # mid-file from printing twice (skills#174).
+        END   { if (!done && in_t && hdr ~ /[Ii]tem/ && hdr ~ /[Nn]ext/) printf "%s", rows }
     ' "$path")
 fi
 
