@@ -1,6 +1,6 @@
 # Skills — Agent Guidelines
 
-Repo: <https://github.com/frankify-app/skills>
+Repo: <https://github.com/pandoscope/skills>
 
 ## Project Specifics
 
@@ -36,7 +36,6 @@ Read [docs/architecture.md](docs/architecture.md) before touching any code.
 ## Rules
 
 - Small, single-purpose files
-- Prose (skills, ADRs, tickets, docs): as short as possible, prefer caveman mode — unless precision or understandability suffers
 - Readability over brevity — straightforward, easy-to-follow code. No compact "one-liners" stretching across multiple lines (e.g. nested ternaries). Stretching across multiple lines is only allowed if it aids readability.
 - When removing a feature, erase every mention of it — docs, help text, comments, tests. Don't leave "no longer supported" notes: readers who never knew it existed pay to learn it did. State what is, not what stopped being. (Migration notes belong in the commit's `BREAKING CHANGE:` footer, which is where someone upgrading looks.)
 - In prose, don't state facts maintained elsewhere — counts ("the seven examples above"), far positional references, restated section names. Link the target instead. Immediate-adjacency words ("the examples above", "the following table") are fine — they only break if adjacency breaks.
@@ -112,6 +111,10 @@ Code-specific skills:
 | `tdd`                    | Test-driven-development for any implementation                                                     |
 | `to-tickets`             | Splitting approved work into tracer-bullet issues with blocking edges (reproducible-spec rules)    |
 
+### Repo-Local Skill Overrides
+
+- `grilling`: present questions via the platform's native question dialog (e.g. `AskUserQuestion` in Claude Code) when the platform provides one; fall back to plain text otherwise. (The multiple-choice question format itself is part of the skill — this override only covers presentation.)
+
 ### Skill Environment Variables
 
 - `DECISION_MEMORY_URL` — FULL git URL of the decision-memory repo the `grilling` skill records decisions to. A full URL rather than an owner/repo slug, so the hosting stays swappable. Recording requires this env var in the agent's execution environment; the recorder and the skill read exactly this name (shared contract — renaming either side breaks recording silently). Never hardcode, commit, or echo the value into artifacts. Unset → grilling still works, skips recording, and says so. Where to set it: local sessions → shell profile / user-level agent settings; remote or cloud sessions → the environment's configuration; CI → a repository secret. `scripts/doctor.sh` warns when it's unset and checks reachability when set.
@@ -151,11 +154,11 @@ Code-specific skills:
   recognized the reference. Every ticket number in a
   `claude/((?:[a-z][a-z0-9]*?)?\d+(?:-(?:[a-z][a-z0-9]*?)?\d+)*)-` branch must appear as a canonical
   reference in the body.
-- **Answer every review comment with a full commit URL or `No commit: <why>`**
-  (enforced by the `review-answers` job): the commit URL must be a real
-  commit on the PR — verify with `git rev-parse` before pasting, never
-  expand a short hash from memory — and resolving a thread is not
-  answering it.
+- **Answer every review comment by naming the fixing commit or `No commit: <why>`**
+  (enforced by the `review-answers` job): the commit — as a URL or a
+  sha of seven or more hex digits — must be a real commit on the PR;
+  verify with `git rev-parse` before pasting, never expand a short hash
+  from memory, and resolving a thread is not answering it.
 - Document unexpected encounters and design decisions in commit message as well as PR/Issue
 - **A push rejected over a commit you did not write is rebased around, never forced.**
   Branch rules re-evaluate every commit an update spans, not just the new ones,
@@ -265,11 +268,12 @@ The modes below are the kinds of work the user will ask for. **Each runs in its 
 #### Plan
 
 - Explore the codebase. Flag `DECISION:SCOPE` when resolving ambiguities. Use the `documenting-decisions` skill (refs: `pre-approval-gate.md`, `scope-interpretation.md`).
-- Write an issue; set metadata (labels/assignees/milestone).
+- Write an issue → `ghx issue create`
+- Set issue metadata → `ghx issue edit` (labels/assignees/milestone)
 
 #### Implement
 
-- Read the given issue and comments.
+- Read the given issue and comments → `ghx issue view --comments`
 - Do Test-Driven Development per the `tdd` skill.
 - Implement the minimal code to pass tests, then the remaining code per the ticket spec. Place `DECISION:` markers per the `documenting-decisions` skill (refs: `decision-markers.md`, `marker-examples.md`).
 - Commit discipline:
@@ -277,8 +281,8 @@ The modes below are the kinds of work the user will ask for. **Each runs in its 
   - `prek` must pass on every commit (lint/format hooks only — prek never runs unit tests). Enforce it, don't assume it: after **every** commit run `prek run --all-files` and require exit 0 with a clean tree — an auto-fixer modifying files counts as failure; amend the fix into the commit that introduced it (per the `tdd` skill's commit protocol). The SessionStart hook (`scripts/ensure-prek.sh`) installs the git hook so dirty commits are blocked even in fresh clones; a missing prek is a `scripts/doctor.sh --install` failure, not a license to skip.
   - TDD red-step commits are expected and required — red on **tests only**: lint, format, and type checks still pass. A test needing a not-yet-existing API surface gets a signature-only `chore(stub):` commit first (see the `tdd` skill). **CI evaluates at PR HEAD, not per-commit**, so a red-step commit does not constitute a CI failure — do not treat it as one.
   - Don't fix lint manually — run the formatter. Only touch code directly if the tools can't resolve it.
-- Push → `git push`
-- Create the PR if not already present, and link it to the issue both ways (start with `Closes #<number>` in description; back-reference on the issue if needed). **If a PR already exists for this branch, do not create or re-link it** — skip to CI.
+- Push → `git push` *(plain git; git is not routed through `ghx`)*
+- Create the PR if not already present, and link it to the issue both ways → `ghx pr create` (start with `Closes #<number>` in description), then `ghx issue edit` if a back-reference is needed. **If a PR already exists for this branch, do not create or re-link it** — skip to CI.
   PR body must include:
   - `Closes #<number>`.
   - Any obstacles that diverged from the initial plan, and — in the rare event spec deviation was unavoidable — what deviated and why.
@@ -291,16 +295,19 @@ The modes below are the kinds of work the user will ask for. **Each runs in its 
 
 #### Review
 
-- Read the given issue and comments.
+- Read the given issue and comments → `ghx issue view --comments`
 - Review the PR and give Critical / Important feedback per the `requesting-code-review` skill.
-- Submit as a single review: PR-level summary body + line-tied code comments together — don't split across a review and separate comments.
+- Submit it as a single review → `ghx pr review`:
+  - PR-level summary feedback → `--body "..."`
+  - Feedback tied to specific lines → repeatable `--code-comment path:line:text`
+  - Put both in the same `ghx pr review` call; don't split a review across `pr review` and `pr comment`.
 
 #### Apply Review Comments
 
-- Read the given issue and comments.
-- Read PR comments and code comments.
-- If the review uncovers inconsistencies in the issue, **comment** on it freely.
-- Only **edit** issue content when the user explicitly requests it. Editing is gated on explicit request because it can overwrite human-authored intent; commenting is always safe, editing is not.
+- Read the given issue and comments → `ghx issue view --comments`
+- Read PR comments and code comments → `ghx pr view --comments`
+- If the review uncovers inconsistencies in the issue, **comment** on it freely → `ghx issue comment`
+- Only **edit** issue content when the user explicitly requests it → `ghx issue edit`. Editing is gated on explicit request because it can overwrite human-authored intent; commenting is always safe, editing is not.
 - Then re-enter the **Implement** workflow.
 
 ## Dependencies

@@ -341,18 +341,22 @@ def review_violations(
     what to do next, not a human who already knows which comment they
     left.
 
-    Answered: a full commit URL under `base_url` whose sha is one of
-    this PR's own commits — a pasted-but-wrong link fails, and a bare
-    hash fails by design — or a line starting exactly with the central
-    file's `no_commit_marker`. A thread the reviewer RESOLVED is off
+    Answered: the reply names a commit that is one of this PR's own —
+    as a commit URL under `base_url`, the PR's own /commits/<sha> URL,
+    or a bare sha of seven or more hex digits; the gate already holds
+    the PR's shas, so any spelling it can match is proof enough and
+    demanding one spelling only cost a round-trip (#205). A sha not on
+    the PR fails whatever wraps it. Or a line starting exactly with the
+    central file's `no_commit_marker`. A thread the reviewer RESOLVED is off
     the worklist regardless: resolution is the reviewer's own sign-off
     that nothing more is needed, and demanding a reply on top of it
     gated pandoscope/skills#30 on wording nobody was waiting for
     (agentic-engineering-template#166).
     """
-    url_re = re.compile(
-        re.escape(base_url) + r"/[\w.-]+/[\w.-]+/commit/([0-9a-f]{7,40})\b"
-    )
+    # Any hex run of 7-40 digits is a candidate; only a prefix of one of
+    # the PR's own shas answers, so hex-looking prose cannot pass by
+    # accident and a pasted-but-wrong sha still fails.
+    sha_re = re.compile(r"\b([0-9a-f]{7,40})\b")
     problems = []
     for comments in threads:
         first = comments[0]
@@ -368,7 +372,7 @@ def review_violations(
             body = reply.get("body") or ""
             linked = any(
                 any(sha.startswith(match.group(1)) for sha in pr_shas)
-                for match in url_re.finditer(body)
+                for match in sha_re.finditer(body)
             )
             marked = any(line.strip().startswith(marker) for line in body.splitlines())
             if linked or marked:
@@ -383,8 +387,10 @@ def review_violations(
             problems.append(
                 f'unanswered review thread by {opener} at {where}: "{quote}"'
                 + (f" ({link})" if link else "")
-                + f" — reply with a commit URL on this PR or a '{marker} <why>'"
-                " line, or the reviewer resolves the thread"
+                + " — reply naming a commit on this PR (its URL or sha; a sha"
+                " not on the PR fails, and amending the commit invalidates"
+                f" the reference), or a '{marker} <why>' line, or the reviewer"
+                " resolves the thread"
             )
     return problems
 
