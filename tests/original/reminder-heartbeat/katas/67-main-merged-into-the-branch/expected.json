@@ -1,0 +1,13 @@
+{
+  "status": "active",
+  "stop_hook_active": false,
+  "summary_written_at": "2026-08-03T16:53:30.000Z",
+  "exit": 2,
+  "check": "linear-history",
+  "sealed": false,
+  "reason": [
+    "The turn is not complete until every working branch is linear: skills is on claude/kata, which carries 1 merge commit main does not hold (chore: merge main). A working branch is rebased onto main, never merged into; the forge's own merges are the only merge commits.",
+    "",
+    "  git -C {{repos}}/skills rebase origin/main"
+  ]
+}
