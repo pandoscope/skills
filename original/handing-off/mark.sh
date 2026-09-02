@@ -23,6 +23,10 @@ if [ ! -s "$handoff" ]; then
     echo "mark.sh: handoff file missing or empty: $handoff" >&2
     exit 1
 fi
+# Absolute, always: verify.sh and check.sh read this path from another
+# cwd, and a relative path made the first real run extract nothing —
+# silently (skills#174). No realpath: not every consumer has GNU tools.
+handoff="$(cd "$(dirname "$handoff")" && pwd)/$(basename "$handoff")"
 
 state=${HANDOFF_STATE:-$HOME/.claude/handoff-state.json}
 transcript=${HANDOFF_TRANSCRIPT:-}

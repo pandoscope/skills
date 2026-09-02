@@ -47,6 +47,9 @@ teardown() { rm -rf "$TMP"; }
   [[ "$output" == *"| repo!12 fix | green, awaiting merge | merge it |"* ]]
   [[ "$output" == *"| repo#34 linter | designed, parked | grill the open questions |"* ]]
   [[ "$output" != *"| Item | State | Next |"* ]]
+  # Once each: awk's exit still runs END, which re-printed every row
+  # on the first real handoff (skills#174).
+  [ "$(printf '%s\n' "$output" | grep -c '^| repo!12 fix')" -eq 1 ]
   [[ "$output" == *"Restate this list"* ]]
   [[ "$output" == *"mark which item you are starting on"* ]]
 }
@@ -136,4 +139,19 @@ MD
   [[ "$output" == *"verify.sh"* ]]
   [[ "$output" == *"guard.sh"* ]]
   grep -q '"hooks": {}' "$CLAUDE_SETTINGS"
+}
+
+# --- mark.sh path handling (skills#174) ---------------------------
+
+@test "a relative handoff path is stored absolute, so verify reads it from any cwd" {
+  cd "$TMP"
+  run "$SKILL/mark.sh" handoff.md
+  [ "$status" -eq 0 ]
+  grep -q "\"handoff_path\":\"$TMP/handoff.md\"" "$HANDOFF_STATE"
+  cd /
+  run "$SKILL/verify.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"| repo!12 fix | green, awaiting merge | merge it |"* ]]
+  run "$SKILL/check.sh"
+  [ "$status" -eq 0 ]
 }
