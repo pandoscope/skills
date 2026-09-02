@@ -1526,6 +1526,75 @@ function checkCommitSigned(ctx) {
   };
 }
 
+/**
+ * Check 17 — every working branch is linear (skills#147).
+ *
+ * A working branch is updated by rebase onto the default branch, never
+ * by merging anything into it; the only legitimate merge commits are
+ * the ones a forge makes when it merges a PR. Measured 2026-08-16:
+ * main merged INTO a claude/* branch dragged 45 upstream commits into
+ * the branch's rebase range, and the repair took four steps.
+ *
+ * The judgement is the branch's own range — `--merges HEAD --not
+ * origin/<default>` — so a merge commit main already holds is the
+ * forge's and passes, and so does a linear branch rebased on top of
+ * one. The default branch is what the clone's origin/HEAD names, or
+ * origin/main; a clone with neither is not judged, and says so.
+ *
+ * Runs before `pushed` deliberately: the per-clone pre-push hook
+ * (the template's scripts/check-linear-history.sh at pre-push) refuses this exact state,
+ * so telling the turn to push first would hand it a command that
+ * cannot succeed. The subject goes in the reason, the hash in the
+ * detail — the same split check 16 makes, for the same reason.
+ */
+function checkLinearHistory(ctx) {
+  if (!ctx.repoRoot) {
+    return {
+      verdict: "unconfigured",
+      detail: "HEARTBEAT_REPO_ROOT is unset — no clones were examined",
+    };
+  }
+  let judged = 0;
+  for (const repo of ctx.clones) {
+    if (ctx.root && path.resolve(repo.path) === path.resolve(ctx.root)) continue;
+    const branch = gitOrNull(repo.path, "symbolic-ref", "--short", "-q", "HEAD");
+    if (!branch || !branch.startsWith("claude/")) continue;
+    const head = gitOrNull(repo.path, "symbolic-ref", "-q", "--short", "refs/remotes/origin/HEAD");
+    const target =
+      head ??
+      (gitOrNull(repo.path, "rev-parse", "--verify", "--quiet", "origin/main") ? "origin/main" : null);
+    if (!target) continue;
+    judged += 1;
+    const merges = gitOrNull(repo.path, "rev-list", "--merges", "HEAD", "--not", target);
+    if (!merges) continue;
+    const shas = merges.split("\n").filter(Boolean);
+    // The oldest merge is the one the rebase has to unpick first.
+    const first = shas[shas.length - 1];
+    const subject = gitOrNull(repo.path, "log", "-1", "--format=%s", first) ?? first.slice(0, 8);
+    return {
+      verdict: "fail",
+      detail: `${repo.name} (${branch}): ${shas.length} merge commit(s) not on ${target} (${shas
+        .map((sha) => sha.slice(0, 8))
+        .join(", ")})`,
+      reason: [
+        "The turn is not complete until every working branch is linear: " +
+          `${repo.name} is on ${branch}, which carries ${shas.length} merge ` +
+          `commit${shas.length === 1 ? "" : "s"} main does not hold (${subject}). ` +
+          "A working branch is rebased onto main, never merged into; the " +
+          "forge's own merges are the only merge commits.",
+        "",
+        `  git -C ${repo.path} rebase ${target}`,
+      ].join("\n"),
+    };
+  }
+  return {
+    verdict: "pass",
+    detail: judged
+      ? `${judged} working branch(es) linear against their default branch`
+      : "no clone on a working branch with a known default branch — nothing judged",
+  };
+}
+
 // Priority order. First failure wins; the rest wait for the next turn.
 // push-blocklist sits ahead of pushed deliberately: a hit must block
 // BEFORE the turn is told to push, or the reminder itself publishes it.
@@ -1543,6 +1612,7 @@ const CHECKS = [
   { check: "push-blocklist", run: checkPushBlocklist },
   { check: "clone-config", run: checkCloneConfig },
   { check: "commit-signed", run: checkCommitSigned },
+  { check: "linear-history", run: checkLinearHistory },
   { check: "pushed", run: checkPushed },
   { check: "ledger-event", run: checkLedgerEvent },
   { check: "tickets-updated", run: checkTicketsUpdated },
