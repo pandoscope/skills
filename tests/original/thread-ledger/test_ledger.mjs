@@ -3264,6 +3264,40 @@ describe("TicketWrites", () => {
     const text = write("mcp__github__issue_write", { owner: "O", repo: "R", issue_number: 61 });
     assert.deepEqual([...ticketWrites(text)], ["o/r#61"]);
   });
+
+  const result = (toolUseId, content, at = "2026-08-03T15:14:01.000Z") =>
+    JSON.stringify({
+      type: "user",
+      timestamp: at,
+      message: {
+        role: "user",
+        content: [{ type: "tool_result", tool_use_id: toolUseId, content }],
+      },
+    });
+
+  it("a ticket created this turn counts as written (skills#181)", () => {
+    // Creation is a write. The number exists only in the tool result,
+    // so the create call pairs with its result by tool_use id.
+    const text = [
+      write("mcp__github__issue_write", { method: "create", owner: "o", repo: "r", title: "t" }),
+      result("toolu_w", '{"id":"1","url":"https://github.com/o/r/issues/180"}'),
+    ].join("\n");
+    assert.deepEqual([...ticketWrites(text)], ["o/r#180"]);
+  });
+
+  it("a PR body with a canonical keyword writes the ticket it names (skills#181)", () => {
+    // The forge posts the reference on the ticket's timeline, so the
+    // ticket heard about the turn without a comment of its own.
+    const text = write("mcp__github__create_pull_request", {
+      owner: "o",
+      repo: "r",
+      title: "t",
+      head: "h",
+      base: "main",
+      body: "CLOSES #228.\n\nADVANCES x/y#5 too.",
+    });
+    assert.deepEqual([...ticketWrites(text)].sort(), ["o/r#228", "x/y#5"]);
+  });
 });
 
 
