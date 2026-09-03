@@ -29,6 +29,9 @@
 //     LEDGER_SESSION_URL    this conversation's URL — the log's identity
 //     DECISION_MEMORY_URL   the decision store, when the session has one
 //     LEDGER_RENDER_PATH    the rendered ledger page this session republishes
+//     REINSET_ANSWERS       the session answers file the composer writes
+//                           (skills#179 §3) — named before it exists, so
+//                           absence is ordinary and reads as nothing
 //
 // The store root comes from the environment, never from cwd. The
 // platform's own Stop hook silently no-ops in multi-repo sessions
@@ -57,6 +60,7 @@ import {
   transcriptUsage,
 } from "./core.mjs";
 import { digestOf, readLog, stretchOf } from "./diligence.mjs";
+import { readAnswers } from "./answers.mjs";
 import { append, push, readAll, resolveRoot, resolveSession, tail } from "./ledger.mjs";
 import { blocklistTerms, scanText, shellRef } from "./scan.mjs";
 
@@ -506,6 +510,7 @@ function checkLedgerEvent(ctx) {
   if (!ctx.turnStart) {
     return { verdict: "unconfigured", detail: "no turn boundary to measure against" };
   }
+  if (probeExempt(ctx)) return PROBE_EXEMPT;
   const touched = observedThreads(ctx);
   if (!touched.size) {
     const committed = ctx.clones.find((repo) => committedThisTurn(repo, ctx.turnStart));
@@ -829,6 +834,86 @@ function checkTicketsUpdated(ctx) {
       "",
       `  node ${LEDGER} declare <your declaration> --no-update "<owner/repo#n> <why>"`,
     ].join("\n"),
+  };
+}
+
+// ------------------------------------------------------- spawned sessions
+
+/**
+ * The composer's answers for this session, or null (skills#179 §3).
+ *
+ * `REINSET_ANSWERS` is exported by the compose hook before the composer
+ * has written anything, so a named-and-absent file is the ordinary
+ * state of a first Stop, not a misconfiguration — unlike
+ * SESSION_MEMORY_ROOT, whose set-and-missing is a crash. A file that
+ * exists and cannot be read is a finding the drift check reports.
+ */
+function answersOf(ctx) {
+  return ctx.answers?.answers ?? null;
+}
+
+/**
+ * A probe does one commit and one answers file; the ledger event and
+ * the rendered artifact are its orchestrator's (skills#181 item 1).
+ * Measured: every fired probe that pushed was held by checks 3 and 5,
+ * and one guessed a stray artifact to satisfy the republish sentence.
+ * The exemption is read from the RESOLVED role — what the composer
+ * measured against the reference — never from a role the turn claims.
+ */
+function probeExempt(ctx) {
+  return answersOf(ctx)?.resolved?.role === "probe";
+}
+
+const PROBE_EXEMPT = {
+  verdict: "unconfigured",
+  detail: "resolved.role is probe — the ledger and the artifact are the orchestrator's (skills#181)",
+};
+
+/** Origins whose passed list is a spawner's claim (skills#179 §3.3). */
+const SPAWNED_ORIGINS = new Set(["spawner", "webhook", "poll"]);
+
+/**
+ * Check 4b — a declared ticket outside the spawner's passed list is
+ * surfaced, never blocked (skills#179 D5).
+ *
+ * `passed.thread` and `passed.tickets` are the spawner's claim and the
+ * ledger is the record. A spawned session declaring a ticket its
+ * spawner never named has drifted from what it was spawned for — which
+ * may be right, and is the orchestrator's to judge from the printed
+ * drift. A principal-origin session has no passed list and no drift to
+ * measure; without an answers file the check has looked at nothing.
+ */
+function checkPassedTickets(ctx) {
+  if (!ctx.answers) {
+    return { verdict: "unconfigured", detail: "no session answers file — nothing to diff" };
+  }
+  if (ctx.answers.error) {
+    return {
+      verdict: "unconfigured",
+      detail: `session answers file unreadable: ${ctx.answers.error}`,
+    };
+  }
+  const passed = answersOf(ctx)?.passed;
+  if (!passed || !SPAWNED_ORIGINS.has(passed.origin)) {
+    return { verdict: "pass", detail: "no spawner's passed list — nothing to drift from" };
+  }
+  const allowed = new Set((passed.tickets ?? []).map((ticket) => String(ticket).toLowerCase()));
+  const declared = ctx.summary.tickets
+    .map((ticket) => ticket.toLowerCase())
+    .filter((ticket) => /^[\w.-]+\/[\w.-]+#\d+$/.test(ticket));
+  const drifted = declared.filter((ticket) => !allowed.has(ticket));
+  if (!drifted.length) {
+    return { verdict: "pass", detail: `${declared.length} declared tickets inside the passed list` };
+  }
+  const list = allowed.size ? [...allowed].join(", ") : "(none)";
+  return {
+    verdict: "pass",
+    detail: `declared outside the passed list: ${drifted.join(", ")}`,
+    notice:
+      "Ticket drift, surfaced and not blocked (skills#179 D5): this turn " +
+      `declared ${drifted.join(", ")}, outside the tickets its spawner ` +
+      `passed — ${list} (origin ${passed.origin}). The ledger is the ` +
+      "record; the spawner's list is its claim.",
   };
 }
 
@@ -1216,6 +1301,7 @@ function checkArtifactFresh(ctx) {
   if (!ctx.turnStart) {
     return { verdict: "unconfigured", detail: "no turn boundary to measure against" };
   }
+  if (probeExempt(ctx)) return PROBE_EXEMPT;
   if (!ctx.renderPath) {
     return {
       verdict: "unconfigured",
@@ -1255,7 +1341,8 @@ function checkArtifactFresh(ctx) {
         `${renderedAt ? "predates the log" : "does not exist"}.`,
       "",
       `  node ${LEDGER} --root ${ctx.root}${name} render --out ${ctx.renderPath} ` +
-        '--title "Thread ledger" — then republish the artifact from that file.',
+        '--title "Thread ledger" — then republish the artifact this session ' +
+        "already publishes from that file; a session with none publishes nothing.",
     ].join("\n"),
   };
 }
@@ -1616,6 +1703,7 @@ const CHECKS = [
   { check: "pushed", run: checkPushed },
   { check: "ledger-event", run: checkLedgerEvent },
   { check: "tickets-updated", run: checkTicketsUpdated },
+  { check: "passed-tickets", run: checkPassedTickets },
   { check: "decision-record", run: checkDecisionRecord },
   { check: "rulings-recorded", run: checkRulingsRecorded },
   { check: "review-persistence", run: checkReviewPersistence },
@@ -1843,6 +1931,7 @@ function context(input) {
       .map((name) => name.trim())
       .filter(Boolean),
     renderPath: process.env.LEDGER_RENDER_PATH || null,
+    answers: readAnswers(),
     clones: clonesUnder(process.env.HEARTBEAT_REPO_ROOT || null),
     summary: readTurnSummary(),
     events: readAll(root),
@@ -1864,6 +1953,10 @@ export function run(input) {
   const verdicts = CHECKS.map((entry) => ({ check: entry.check, ...entry.run(ctx) }));
   const failed = verdicts.find((verdict) => verdict.verdict === "fail");
   const reported = verdicts.map(({ check, verdict, detail }) => ({ check, verdict, detail }));
+  // What a passing check still has to say — printed when the turn ends
+  // without a block, so a surfaced finding reaches the transcript
+  // without ever costing a round-trip.
+  const notices = verdicts.map((verdict) => verdict.notice).filter(Boolean);
 
   // Green seals, and nothing else does. An unsealed tail then carries
   // exactly one meaning — the last turn did not finish its bookkeeping
@@ -1907,6 +2000,7 @@ export function run(input) {
       // Local seal stands; the next push carries it.
     }
     writeCompliance(file, record);
+    if (notices.length) process.stderr.write(`${notices.join("\n")}\n`);
     return 0;
   }
 
