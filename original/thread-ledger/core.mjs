@@ -418,6 +418,10 @@ export function grillingInvokedAt(text) {
 }
 
 const TICKET_WRITE = /(issue_write|add_issue_comment|sub_issue_write)$/;
+const PR_WRITE = /(create_pull_request|update_pull_request)$/;
+// The forge's canonical keywords, as the ticket-reference gate spells
+// them: ALL CAPS, then `#n` or `owner/repo#n`.
+const PR_BODY_REF = /\b(?:CLOSES|FIXES|ADVANCES)\s+(?:([\w.-]+\/[\w.-]+))?#(\d+)/g;
 
 /**
  * Tickets the transcript shows being written to since `since`, as
@@ -427,10 +431,18 @@ const TICKET_WRITE = /(issue_write|add_issue_comment|sub_issue_write)$/;
  * tool call names its owner, repo and issue number in its own input,
  * so the declared set diffs against actual calls without touching the
  * network. Only writes count — reading a ticket is not updating it.
+ *
+ * Two writes carry no number in the call (skills#181). A create call's
+ * number exists only in its tool result, so the call is remembered by
+ * its tool_use id and the result's `/issues/<n>` completes it. A PR
+ * body with a canonical CLOSES/FIXES/ADVANCES reference writes the
+ * ticket's timeline through the forge, so the ticket heard about the
+ * turn without a comment of its own.
  */
 export function ticketWrites(text, since) {
   const boundary = since ? new Date(since).getTime() : null;
   const written = new Set();
+  const pendingCreates = new Map();
   for (const line of String(text).split("\n")) {
     if (!line.trim()) continue;
     let record;
@@ -439,22 +451,51 @@ export function ticketWrites(text, since) {
     } catch {
       continue;
     }
-    if (record?.type !== "assistant") continue;
-    if (boundary && record.timestamp && new Date(record.timestamp).getTime() < boundary) {
+    if (boundary && record?.timestamp && new Date(record.timestamp).getTime() < boundary) {
       continue;
     }
-    const content = record.message?.content;
+    const content = record?.message?.content;
     if (!Array.isArray(content)) continue;
+    if (record.type === "user") {
+      for (const block of content) {
+        if (block?.type !== "tool_result") continue;
+        const repo = pendingCreates.get(block.tool_use_id);
+        if (!repo) continue;
+        pendingCreates.delete(block.tool_use_id);
+        const n = /\/issues\/(\d+)/.exec(resultText(block.content))?.[1];
+        if (n) written.add(`${repo}#${n}`.toLowerCase());
+      }
+      continue;
+    }
+    if (record.type !== "assistant") continue;
     for (const block of content) {
       if (block?.type !== "tool_use") continue;
-      if (!TICKET_WRITE.test(block.name ?? "")) continue;
       const input = block.input ?? {};
+      if (!input.owner || !input.repo) continue;
+      const repo = `${input.owner}/${input.repo}`;
+      if (PR_WRITE.test(block.name ?? "")) {
+        for (const match of String(input.body ?? "").matchAll(PR_BODY_REF)) {
+          written.add(`${match[1] ?? repo}#${match[2]}`.toLowerCase());
+        }
+        continue;
+      }
+      if (!TICKET_WRITE.test(block.name ?? "")) continue;
       const n = input.issue_number ?? input.issueNumber ?? input.number;
-      if (!input.owner || !input.repo || !Number.isInteger(n)) continue;
-      written.add(`${input.owner}/${input.repo}#${n}`.toLowerCase());
+      if (Number.isInteger(n)) {
+        written.add(`${repo}#${n}`.toLowerCase());
+      } else if (input.method === "create" && block.id) {
+        pendingCreates.set(block.id, repo);
+      }
     }
   }
   return written;
+}
+
+/** The text of a tool_result block, whichever shape the harness used. */
+function resultText(content) {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content.map((b) => (typeof b === "string" ? b : (b?.text ?? ""))).join("\n");
 }
 
 /** Refs the ledger knows to be PRs: every `pr` a thread event carried. */
