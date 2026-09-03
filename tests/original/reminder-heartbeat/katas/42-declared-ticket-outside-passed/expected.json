@@ -1,0 +1,15 @@
+{
+  "status": "active",
+  "stop_hook_active": false,
+  "summary_written_at": "2026-09-04T10:06:00.000Z",
+  "answers_path": "home/.claude/reinset/answers.yml",
+  "exit": 0,
+  "check": null,
+  "sealed": true,
+  "reason": [
+    "Ticket drift, surfaced and not blocked (skills#179 D5): this turn declared pandoscope/skills#46, outside the tickets its spawner passed — pandoscope/skills#45 (origin spawner). The ledger is the record; the spawner's list is its claim."
+  ],
+  "verdict_of": {
+    "passed-tickets": "pass"
+  }
+}

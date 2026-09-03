@@ -197,6 +197,10 @@ function fire(dir, spec, script = HEARTBEAT) {
       // Only set when the kata names it, so every other kata keeps
       // exercising the footer-only reading an account-less session has.
       ...(spec.agent_accounts ? { AGENT_ACCOUNTS: spec.agent_accounts } : {}),
+      // Only set when the kata names it — and the named file may be
+      // absent, which is a session's first Stop before the composer
+      // has written anything (skills#181).
+      ...(spec.answers_path ? { REINSET_ANSWERS: path.join(dir, spec.answers_path) } : {}),
     },
   });
   assert.equal(result.error, undefined, `the hook did not run: ${result.error}`);
@@ -346,7 +350,7 @@ function assertKata(name, dir, spec, result) {
   // an empty verdict list is the honest shape of "nothing was checked".
   assert.deepEqual(
     record.verdicts.map((verdict) => verdict.check),
-    spec.verdicts ?? ["turn-summary", "push-blocklist", "clone-config", "commit-signed", "linear-history", "pushed", "ledger-event", "tickets-updated", "decision-record", "rulings-recorded", "review-persistence", "grilling-recorded", "kata-reminder", "blocked-captured", "response-hygiene", "artifact-fresh"],
+    spec.verdicts ?? ["turn-summary", "push-blocklist", "clone-config", "commit-signed", "linear-history", "pushed", "ledger-event", "tickets-updated", "passed-tickets", "decision-record", "rulings-recorded", "review-persistence", "grilling-recorded", "kata-reminder", "blocked-captured", "response-hygiene", "artifact-fresh"],
     `${name}: every check reports, pass or fail`,
   );
   assert.equal(record.fired, spec.check, `${name}: the check the log says fired`);
@@ -400,6 +404,16 @@ function assertKata(name, dir, spec, result) {
       record.verdicts.find((verdict) => verdict.check === "decision-record")?.verdict,
       spec.check4_verdict,
       `${name}: what the log says check 4 established`,
+    );
+  }
+  // Any check's verdict, by name — for the cases where the point is
+  // which column a check landed in while the turn ended green either
+  // way: an exemption is "declined", never "checked and clean".
+  for (const [check, verdict] of Object.entries(spec.verdict_of ?? {})) {
+    assert.equal(
+      record.verdicts.find((item) => item.check === check)?.verdict,
+      verdict,
+      `${name}: what the log says ${check} established`,
     );
   }
   assert.equal(record.guarded, spec.stop_hook_active ?? false);

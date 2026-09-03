@@ -1,0 +1,18 @@
+detected:
+  harness: claude-code
+  environment: ccow
+  spawned: false
+  identity: p-40be564147c6
+  model:
+    configured: unknown
+    served: unknown
+passed: null
+resolved:
+  harness: claude-code
+  environment: ccow
+  role: general
+  principal: p-40be564147c6
+  model: unknown
+mismatches: []
+reference: null
+errors: []

@@ -9,6 +9,6 @@
   "reason": [
     "The turn is not complete until the rendered ledger page is newer than the newest event it should show. {{render}} predates the log.",
     "",
-    "  node {{ledger}} --root {{store}} --session-url https://claude.test/code/session_kata_render render --out {{render}} --title \"Thread ledger\" — then republish the artifact from that file."
+    "  node {{ledger}} --root {{store}} --session-url https://claude.test/code/session_kata_render render --out {{render}} --title \"Thread ledger\" — then republish the artifact this session already publishes from that file; a session with none publishes nothing."
   ]
 }

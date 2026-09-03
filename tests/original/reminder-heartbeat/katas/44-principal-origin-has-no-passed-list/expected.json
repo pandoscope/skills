@@ -1,0 +1,13 @@
+{
+  "status": "active",
+  "stop_hook_active": false,
+  "summary_written_at": "2026-09-04T10:06:00.000Z",
+  "answers_path": "home/.claude/reinset/answers.yml",
+  "exit": 0,
+  "check": null,
+  "sealed": true,
+  "reason": [],
+  "verdict_of": {
+    "passed-tickets": "pass"
+  }
+}
