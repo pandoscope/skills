@@ -360,6 +360,29 @@ describe("declare", () => {
     }
   });
 
+  it("writes to the default path when nothing names one", () => {
+    // The CLI's own resolution, run as a process: `declareText` is pure
+    // and never reaches it, so the branch that builds the fallback path
+    // had no test and a missing import broke it silently (#188).
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "declare-home-"));
+    try {
+      const result = spawnSync(
+        process.execPath,
+        [path.join(SKILL, "ledger.mjs"), "declare", "--reviews", "none"],
+        {
+          encoding: "utf8",
+          env: { ...process.env, HOME: dir, TURN_SUMMARY_PATH: undefined },
+        },
+      );
+      assert.equal(result.status, 0, result.stderr);
+      const written = path.join(dir, ".claude", "turn-summary.txt");
+      assert.ok(fs.existsSync(written), `nothing at ${written}`);
+      assert.match(fs.readFileSync(written, "utf8"), /^reviews: none$/m);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("writes the two core lines even when empty", () => {
     const text = declareText({ reviews: "none" });
     assert.equal(text, "tickets: \nreviews: none\n");

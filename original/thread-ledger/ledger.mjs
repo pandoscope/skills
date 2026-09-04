@@ -19,6 +19,7 @@
 // Node builtins only. Pushes with plain git; no forge API, no MCP.
 
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
