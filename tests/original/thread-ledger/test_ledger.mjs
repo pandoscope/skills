@@ -1708,38 +1708,43 @@ describe("OneImplementation", () => {
     assert.ok(page.includes(marker.replace(/^export /, "")), "fold() is not in the page");
   });
 
-  it("the bundle names every part of the core", () => {
+  it("the bundle names every part of the core and the views", () => {
     // `bundle()` inlines the parts by name because it strips module
     // syntax, so a part nobody added there is simply absent from the
     // page — and the page fails at boot, in the browser, with the
     // recorder's own tests still green.
     const source = fs.readFileSync(path.join(SKILL, "store/pages.mjs"), "utf8");
-    const bundled = [...source.matchAll(/"(core\/[\w-]+\.mjs)"/g)].map((hit) => hit[1]);
-    const parts = fs
-      .readdirSync(path.join(SKILL, "core"))
-      .filter((name) => name.endsWith(".mjs"))
-      .map((name) => `core/${name}`);
-    assert.deepEqual([...bundled].sort(), parts.sort());
-  });
-
-  it("the core imports only its own parts, so it runs in a browser unchanged", () => {
-    const files = fs
-      .readdirSync(path.join(SKILL, "core"))
-      .filter((name) => name.endsWith(".mjs"));
-    for (const name of ["../core.mjs", ...files]) {
-      const text = fs.readFileSync(path.join(SKILL, "core", name), "utf8");
-      assert.doesNotMatch(text, /require\(/, name);
-      for (const [, specifier] of text.matchAll(/\bfrom "([^"]+)";/g)) {
-        assert.match(specifier, /^\.\/(?:core\/)?[\w-]+\.mjs$/, `${name}: ${specifier}`);
-      }
+    for (const dir of ["core", "views"]) {
+      const bundled = [...source.matchAll(new RegExp(`"(${dir}/[\\w-]+\\.mjs)"`, "g"))];
+      const parts = fs
+        .readdirSync(path.join(SKILL, dir))
+        .filter((name) => name.endsWith(".mjs"))
+        .map((name) => `${dir}/${name}`);
+      assert.deepEqual(bundled.map((hit) => hit[1]).sort(), parts.sort(), dir);
     }
   });
 
-  it("the views import only the core", () => {
-    const views = fs.readFileSync(path.join(SKILL, "views.mjs"), "utf8");
-    const imports = views.match(/^import[\s\S]*?;$/gm) ?? [];
-    assert.equal(imports.length, 1);
-    assert.match(imports[0], /core\.mjs/);
+  it("the core and the views import nothing but each other, so they run in a browser", () => {
+    // Browser-safe means node builtins are the thing to keep out: a
+    // `node:fs` anywhere under here is a part that cannot be inlined,
+    // and the page would fail at boot rather than at build.
+    for (const dir of ["core", "views"]) {
+      const files = fs
+        .readdirSync(path.join(SKILL, dir))
+        .filter((name) => name.endsWith(".mjs"))
+        .map((name) => `${dir}/${name}`);
+      for (const name of [`${dir}.mjs`, ...files]) {
+        const text = fs.readFileSync(path.join(SKILL, name), "utf8");
+        assert.doesNotMatch(text, /require\(/, name);
+        for (const [, specifier] of text.matchAll(/\bfrom "([^"]+)";/g)) {
+          assert.match(
+            specifier,
+            /^(?:\.\/(?:core|views)\/[\w-]+\.mjs|\.\/[\w-]+\.mjs|\.\.\/core\.mjs)$/,
+            `${name}: ${specifier}`,
+          );
+        }
+      }
+    }
   });
 });
 

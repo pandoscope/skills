@@ -35,7 +35,13 @@ function bundle() {
     "core/state.mjs",
     "core/validate.mjs",
     "core/measures.mjs",
-    "views.mjs",
+    "views/css.mjs",
+    "views/html.mjs",
+    "views/prompts.mjs",
+    "views/summary.mjs",
+    "views/markdown.mjs",
+    "views/stretches.mjs",
+    "views/rows.mjs",
     "page.mjs",
   ].map((name) =>
     fs
