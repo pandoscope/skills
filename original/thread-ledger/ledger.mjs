@@ -960,7 +960,18 @@ export function guardRange(root, range) {
  * One copy on disk, one copy in the page, no second implementation.
  */
 function bundle() {
-  const sources = ["core.mjs", "views.mjs", "page.mjs"].map((name) =>
+  // `core.mjs` is a barrel: stripping its module syntax would leave
+  // nothing, so its parts are named here, in dependency order.
+  const sources = [
+    "core/schema.mjs",
+    "core/transcript.mjs",
+    "core/forge.mjs",
+    "core/state.mjs",
+    "core/validate.mjs",
+    "core/measures.mjs",
+    "views.mjs",
+    "page.mjs",
+  ].map((name) =>
     fs
       .readFileSync(path.join(HERE, name), "utf8")
       .replace(/^import[\s\S]*?;\n/gm, "")

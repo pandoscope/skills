@@ -1703,15 +1703,36 @@ describe("OneImplementation", () => {
     // three consumers of the fold, and a second copy of these semantics
     // is the one that would drift.
     const page = renderPage([opened("a")], "t", null, {}, null);
-    const core = fs.readFileSync(path.join(SKILL, "core.mjs"), "utf8");
-    const marker = core.match(/function fold\(events\) \{[\s\S]{0,80}/)[0];
+    const state = fs.readFileSync(path.join(SKILL, "core/state.mjs"), "utf8");
+    const marker = state.match(/function fold\(events\) \{[\s\S]{0,80}/)[0];
     assert.ok(page.includes(marker.replace(/^export /, "")), "fold() is not in the page");
   });
 
-  it("the core imports nothing, so it runs in a browser unchanged", () => {
-    const core = fs.readFileSync(path.join(SKILL, "core.mjs"), "utf8");
-    assert.doesNotMatch(core, /^import /m);
-    assert.doesNotMatch(core, /require\(/);
+  it("the bundle names every part of the core", () => {
+    // `bundle()` inlines the parts by name because it strips module
+    // syntax, so a part nobody added there is simply absent from the
+    // page — and the page fails at boot, in the browser, with the
+    // recorder's own tests still green.
+    const source = fs.readFileSync(path.join(SKILL, "ledger.mjs"), "utf8");
+    const bundled = [...source.matchAll(/"(core\/[\w-]+\.mjs)"/g)].map((hit) => hit[1]);
+    const parts = fs
+      .readdirSync(path.join(SKILL, "core"))
+      .filter((name) => name.endsWith(".mjs"))
+      .map((name) => `core/${name}`);
+    assert.deepEqual([...bundled].sort(), parts.sort());
+  });
+
+  it("the core imports only its own parts, so it runs in a browser unchanged", () => {
+    const files = fs
+      .readdirSync(path.join(SKILL, "core"))
+      .filter((name) => name.endsWith(".mjs"));
+    for (const name of ["../core.mjs", ...files]) {
+      const text = fs.readFileSync(path.join(SKILL, "core", name), "utf8");
+      assert.doesNotMatch(text, /require\(/, name);
+      for (const [, specifier] of text.matchAll(/\bfrom "([^"]+)";/g)) {
+        assert.match(specifier, /^\.\/(?:core\/)?[\w-]+\.mjs$/, `${name}: ${specifier}`);
+      }
+    }
   });
 
   it("the views import only the core", () => {
