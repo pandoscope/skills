@@ -1,0 +1,3 @@
+{"ev":"opened","thread":"seal-event","title":"Seal event: a log-level mark that a turn finished its bookkeeping","ticket":"o/r#46","at":"2026-08-03T16:01:00+00:00","anchor":{"session":"session_kata_unpushed","msg":1,"url":"https://claude.test/code/session_kata_unpushed"}}
+{"ev":"sealed","at":"2026-08-03T16:01:04+00:00","anchor":{"session":"session_kata_unpushed","msg":1,"url":"https://claude.test/code/session_kata_unpushed"}}
+{"ev":"progress","thread":"seal-event","note":"schema addition landed with its tests; the heartbeat writes it on green.","pct":50,"at":"2026-08-03T16:53:11+00:00","anchor":{"session":"session_kata_unpushed","msg":2,"url":"https://claude.test/code/session_kata_unpushed"}}

@@ -1,0 +1,4 @@
+{"type":"user","timestamp":"2026-08-03T16:40:00.000Z","message":{"role":"user","content":"Add the seal event to the schema and record it."}}
+{"type":"assistant","timestamp":"2026-08-03T16:52:18.402Z","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_kata06a","name":"Bash","input":{"command":"git -C skills commit -m 'feat: the seal event'"}}]}}
+{"type":"user","timestamp":"2026-08-03T16:52:20.771Z","message":{"role":"user","content":[{"type":"tool_result","content":"[claude/kata 4c1de90] feat: the seal event"}]}}
+{"type":"assistant","timestamp":"2026-08-03T16:53:40.118Z","message":{"role":"assistant","content":[{"type":"text","text":"Committed, and the ledger records it."}]}}
