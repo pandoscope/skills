@@ -12,7 +12,8 @@ the hook told a probe to rebase a clone it had never touched.
 
 A clone on a `claude/*` branch whose tip is a merge commit the bare
 origin's main holds, with the local `origin/main` ref moved back to
-the seed. No commit this turn.
+the seed, and one commit this turn on the branch — so the untouched-clone
+rule does not apply and only a refreshed base can pass it.
 
 ## Expected
 

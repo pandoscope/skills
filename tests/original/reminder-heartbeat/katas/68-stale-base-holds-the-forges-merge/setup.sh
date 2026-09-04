@@ -24,3 +24,10 @@ git -C "$work" push -q origin main
 git -C "$work" checkout -q -b claude/focused-kata main
 git -C "$work" push -q -u origin claude/focused-kata
 git -C "$work" update-ref refs/remotes/origin/main "$seed"
+# The turn then works on that branch, so the untouched-clone path does
+# not apply: only refreshing the base can clear the forge's merge.
+echo "work done this turn" >> "$work/README.md"
+git -C "$work" add -A
+GIT_COMMITTER_DATE="2026-08-03T16:52:00Z" git -C "$work" commit -q --date "2026-08-03T16:52:00Z" -m "feat: work this turn"
+git -C "$work" push -q origin claude/focused-kata
+git -C "$work" update-ref refs/remotes/origin/main "$seed"
