@@ -1713,7 +1713,7 @@ describe("OneImplementation", () => {
     // syntax, so a part nobody added there is simply absent from the
     // page — and the page fails at boot, in the browser, with the
     // recorder's own tests still green.
-    const source = fs.readFileSync(path.join(SKILL, "ledger.mjs"), "utf8");
+    const source = fs.readFileSync(path.join(SKILL, "store/pages.mjs"), "utf8");
     const bundled = [...source.matchAll(/"(core\/[\w-]+\.mjs)"/g)].map((hit) => hit[1]);
     const parts = fs
       .readdirSync(path.join(SKILL, "core"))
