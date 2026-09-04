@@ -1,0 +1,12 @@
+{
+  "status": "active",
+  "stop_hook_active": false,
+  "summary_written_at": "2026-08-03T16:53:30.000Z",
+  "exit": 0,
+  "check": null,
+  "sealed": true,
+  "reason": [],
+  "verdict_of": {
+    "linear-history": "pass"
+  }
+}
