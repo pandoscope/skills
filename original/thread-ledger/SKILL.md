@@ -160,8 +160,10 @@ never greens the check: only an observed memory write does that. The
 explicit waiver, `nothing-to-persist`, passes as a logged claim, so
 declining to persist is a visible act rather than a silence.
 
-The check list, the seal, the verdict log and the environment contract
-are code, documented where they live: the header of `heartbeat.mjs`.
+The seal, the verdict log and the environment contract are code,
+documented where they live: the header of `heartbeat.mjs`. The check
+list is `checks/index.mjs` — the priority order in one place, each
+check with its own module beside it.
 The installer configures them; a misconfiguration is logged, never
 passed.
 
