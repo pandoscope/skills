@@ -252,6 +252,19 @@ open` mints a new session branch every time it runs, stranding the
 records committed on the branch it replaces. The hook reads the
 recorder's own state and offers the command that matches it.
 
+**A spawned session is checked against what it was spawned for.**
+With `REINSET_ANSWERS` naming the composer's answers file
+([skills#179](https://github.com/pandoscope/skills/issues/179) §3), a
+ticket the turn declares outside the spawner's `passed.tickets` is
+printed as drift — declared ticket, passed list, origin — and never
+blocked: the passed list is the spawner's claim, the ledger is the
+record (D5). A principal-origin session has no passed list and no
+drift; a named file that does not exist yet is the ordinary first
+Stop and reads as nothing. A session whose resolved role is `probe`
+is exempt from `ledger-event` and `artifact-fresh`: it does one
+commit and one answers file, and the ledger and the artifact are its
+orchestrator's ([skills#181](https://github.com/pandoscope/skills/issues/181)).
+
 **Republish the page after appending.** The rendered file is compared
 against the newest event, so a stale artifact blocks the turn. Render
 with `--session-url`: a store holding several conversations refuses

@@ -1,0 +1,29 @@
+# yamllint disable rule:indentation
+# PyYAML safe_dump output, kept verbatim
+detected:
+  harness: claude-code
+  environment: ccow
+  spawned: true
+  identity: p-40be564147c6
+  model:
+    configured: unknown
+    served: unknown
+passed:
+  spawn_id: spawn-r0a1
+  spawner: p-40be564147c6
+  origin: spawner
+  role: probe
+  principal: p-40be564147c6
+  thread: per-session-agent-config
+  tickets:
+  - pandoscope/skills#179
+  dojo: null
+resolved:
+  harness: claude-code
+  environment: ccow
+  role: probe
+  principal: p-40be564147c6
+  model: unknown
+mismatches: []
+reference: session-memory@0123456789abcdef0123456789abcdef01234567:intents/spawn-r0a1.yml
+errors: []
