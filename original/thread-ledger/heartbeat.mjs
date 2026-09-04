@@ -1652,9 +1652,34 @@ function checkLinearHistory(ctx) {
       (gitOrNull(repo.path, "rev-parse", "--verify", "--quiet", "origin/main") ? "origin/main" : null);
     if (!target) continue;
     judged += 1;
-    const merges = gitOrNull(repo.path, "rev-list", "--merges", "HEAD", "--not", target);
+    let merges = gitOrNull(repo.path, "rev-list", "--merges", "HEAD", "--not", target);
     if (!merges) continue;
+    // A suspect merge is judged against the remote's default branch as
+    // it IS, not as the tracking ref remembers it (skills#185): the
+    // harness creates the session branch at main's fresh tip, and a
+    // clone nobody fetched holds an older origin/main — so the forge's
+    // own merge, the very commit that is main, read as a merge main
+    // does not hold. The fetch is paid only here, by the one clone
+    // whose first pass found something; a fetch the network refuses
+    // leaves the first reading standing.
+    if (gitOrNull(repo.path, "fetch", "--quiet", "origin", target.replace(/^origin\//, "")) !== null) {
+      merges = gitOrNull(repo.path, "rev-list", "--merges", "HEAD", "--not", target);
+      if (!merges) continue;
+    }
     const shas = merges.split("\n").filter(Boolean);
+    // A merge that predates the turn on a clone the turn never
+    // committed to is debt, and named as such — but the rewrite is
+    // offered only to the turn that worked the branch. Rebasing a
+    // branch this turn did not touch is not this turn's to do.
+    if (!committedThisTurn(repo, ctx.turnStart)) {
+      return {
+        verdict: "pass",
+        detail:
+          `${repo.name} (${branch}) carries ${shas.length} merge commit(s) not on ${target} ` +
+          `(${shas.map((sha) => sha.slice(0, 8)).join(", ")}) from before this turn — ` +
+          "reported, not this turn's to rewrite",
+      };
+    }
     // The oldest merge is the one the rebase has to unpick first.
     const first = shas[shas.length - 1];
     const subject = gitOrNull(repo.path, "log", "-1", "--format=%s", first) ?? first.slice(0, 8);
