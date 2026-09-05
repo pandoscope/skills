@@ -28,6 +28,7 @@ import {
 import { checkBlockedCaptured, checkKataReminder } from "./reminders.mjs";
 import { checkResponseHygiene } from "./response.mjs";
 import { checkArtifactFresh } from "./render.mjs";
+import { checkBranchPattern, checkCommitHeaders, checkTrackerBodies } from "./workflow.mjs";
 
 export const CHECKS = [
   { check: "turn-summary", run: checkTurnSummary },
@@ -47,4 +48,30 @@ export const CHECKS = [
   { check: "blocked-captured", run: checkBlockedCaptured },
   { check: "response-hygiene", run: checkResponseHygiene },
   { check: "artifact-fresh", run: checkArtifactFresh },
+  // Shadowed (skills#192): a failure is logged as `shadow`, never
+  // blocked on and never counted as fired, until the compliance log
+  // has shown on real turns what each would have refused. Arming is
+  // dropping the flag, with the kata that pins the wording.
+  { check: "branch-pattern", run: checkBranchPattern, shadow: true },
+  { check: "commit-headers", run: checkCommitHeaders, shadow: true },
+  { check: "tracker-bodies", run: checkTrackerBodies, shadow: true },
 ];
+
+/**
+ * Every check's verdict over `ctx`, in table order.
+ *
+ * A shadowed check's failure comes back as `shadow`, with its detail
+ * and without its reason: the log keeps what it saw, and nothing
+ * downstream can mistake it for a block. Every caller that runs the
+ * table runs it through here, so the hook and the preflight cannot
+ * disagree about what a shadow is.
+ */
+export function runChecks(ctx) {
+  return CHECKS.map((entry) => {
+    const verdict = { check: entry.check, ...entry.run(ctx) };
+    if (entry.shadow && verdict.verdict === "fail") {
+      return { check: entry.check, verdict: "shadow", detail: verdict.detail };
+    }
+    return verdict;
+  });
+}

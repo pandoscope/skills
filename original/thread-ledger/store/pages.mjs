@@ -35,6 +35,7 @@ function bundle() {
     "core/state.mjs",
     "core/validate.mjs",
     "core/measures.mjs",
+    "core/workflow.mjs",
     "views/css.mjs",
     "views/html.mjs",
     "views/prompts.mjs",

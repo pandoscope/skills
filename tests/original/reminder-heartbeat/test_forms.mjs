@@ -116,6 +116,8 @@ describe("tracker-bodies: the forms a tracker body may take", () => {
     "Fixed the wording in the README.",
     "1. first step\n2. second step",
     "<!-- replay-report -->\n<img src=\"x.png\">",
+    "CLOSES #130\nADVANCES #221",
+    "One complete sentence.\nAnother complete sentence.",
   ];
   for (const body of clean) {
     it(`accepts ${JSON.stringify(body.slice(0, 40))}`, () => {
@@ -147,6 +149,11 @@ describe("tracker-bodies: the forms a tracker body may take", () => {
     );
     assert.deepEqual(found.map((v) => v.kind), ["hard-wrap"]);
     assert.match(found[0].evidence, /^This paragraph was wrapped/);
+  });
+
+  it("flags sentence-per-line prose once it runs to three lines", () => {
+    const found = bodyViolations("First sentence.\nSecond sentence.\nThird sentence.", KEYWORDS);
+    assert.deepEqual(found.map((v) => v.kind), ["hard-wrap"]);
   });
 
   it("does not read a wrapped paragraph inside a fence", () => {
