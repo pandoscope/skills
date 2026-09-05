@@ -16,7 +16,7 @@ import path from "node:path";
 import process from "node:process";
 
 import { knownPrs, refViolations, stripCode } from "./core.mjs";
-import { CHECKS } from "./checks/index.mjs";
+import { runChecks } from "./checks/index.mjs";
 import { context, gitOrNull } from "./context.mjs";
 import { logCompliance } from "./compliance.mjs";
 
@@ -130,7 +130,7 @@ export function preflight(input, opts) {
     }
     ctx.assistantText = draftText;
   }
-  const verdicts = CHECKS.map((entry) => ({ check: entry.check, ...entry.run(ctx) }));
+  const verdicts = runChecks(ctx);
   const failed = verdicts.filter((verdict) => verdict.verdict === "fail");
   for (const verdict of verdicts) {
     process.stdout.write(`${verdict.verdict.padEnd(12)} ${verdict.check} — ${verdict.detail}\n`);

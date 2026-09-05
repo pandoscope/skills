@@ -267,6 +267,27 @@ is exempt from `ledger-event` and `artifact-fresh`: it does one
 commit and one answers file, and the ledger and the artifact are its
 orchestrator's ([skills#181](https://github.com/pandoscope/skills/issues/181)).
 
+**The shape of the work is checked, shadowed first (skills#192).** Three
+checks read the working-branch rules from the judged clone's own
+`.github/reference-keywords.json` — the branch pattern, the canonical
+keywords, the forge's native ones — and from commitlint's grammar: a
+clone committed to this turn sits on a `claude/<code><ticket>…-<desc>`
+branch, its commits this turn carry conventional headers (`fixup!`,
+`squash!` and a git-made `Revert` included) with no merge on the
+branch, and every tracker body the transcript shows posted renders as
+written — canonical keywords only, no angle-bracket placeholder outside
+code, no hard-wrapped paragraph, every branch ticket referenced. The
+stores are never judged by these rules. Each ships **shadowed**: a
+failure lands in the compliance log as `shadow`, is never blocked on,
+never seals a fired count into a digest, and the diligence report
+counts it per check as the rate that argues for arming it. Arming is
+dropping the flag in the check table, with the kata that pins the
+block's wording. A check enters the table only with its accepted
+forms — the spellings its rule allows, in
+`tests/original/reminder-heartbeat/test_forms.mjs` — because the
+driver lab refused correct work three times over forms the rule text
+permitted.
+
 **Republish the page after appending.** The rendered file is compared
 against the newest event, so a stale artifact blocks the turn. Render
 with `--session-url`: a store holding several conversations refuses
