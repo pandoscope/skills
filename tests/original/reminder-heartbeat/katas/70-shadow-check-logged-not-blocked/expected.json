@@ -1,0 +1,17 @@
+{
+  "status": "active",
+  "stop_hook_active": false,
+  "summary_written_at": "2026-08-03T15:19:25.000Z",
+  "exit": 0,
+  "check": null,
+  "sealed": true,
+  "reason": [],
+  "verdict_of": {
+    "branch-pattern": "shadow",
+    "commit-headers": "pass",
+    "tracker-bodies": "pass"
+  },
+  "digest": {
+    "checks": {}
+  }
+}

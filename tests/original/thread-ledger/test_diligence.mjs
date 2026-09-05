@@ -90,6 +90,18 @@ describe("Diligence", () => {
     assert.equal(row.unpromptedFail, 1);
   });
 
+  // A shadowed check's would-be failure is its own column (skills#192):
+  // never a fail, never fired, and the rate that argues for arming it.
+  it("counts a shadow verdict apart from failures", () => {
+    const shadowed = [{ check: "branch-pattern", verdict: "shadow", detail: "off pattern" }];
+    const records = [stamp(1, 1, { verdicts: shadowed }), stamp(2, 1, { verdicts: shadowed })];
+    const row = perCheck(records, turnsOf(records)).find((r) => r.check === "branch-pattern");
+    assert.equal(row.shadow, 2);
+    assert.equal(row.unpromptedFail, 0);
+    assert.equal(row.fired, 0);
+    assert.match(report(records), /branch-pattern.*100%/);
+  });
+
   // A check that fired and did NOT clear is pure cost — the case the
   // report exists to make visible, so it must not be counted as help.
   it("a check that fires and does not clear is not cleared", () => {

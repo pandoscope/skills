@@ -195,3 +195,56 @@ export function grillingInvokedAt(text) {
   }
   return at;
 }
+
+
+// Tool calls that post a body the tracker renders. The name's tail is
+// what the forge MCP tools share across servers; the fields are the
+// ones those tools carry a rendered body in.
+const TRACKER_WRITE =
+  /(create_pull_request|update_pull_request|issue_write|add_issue_comment|add_reply_to_pull_request_comment|pull_request_review_write|create_issue)$/;
+
+/**
+ * Every tracker body the transcript shows posted since `since`.
+ *
+ * One entry per tool call carrying a body, with what the workflow
+ * checks read off it: the tool, the repo, the body text and — for a PR
+ * opened this turn — the head branch whose tickets the body owes.
+ *
+ * @param {string} text the transcript, one JSON record per line
+ * @param {string|null} since ISO stamp; records before it are skipped
+ * @returns {{tool: string, at: string|null, repo: string|null, body: string, head: string|null}[]}
+ */
+export function trackerWrites(text, since) {
+  const boundary = since ? new Date(since).getTime() : null;
+  const posted = [];
+  for (const line of String(text).split("\n")) {
+    if (!line.trim()) continue;
+    let record;
+    try {
+      record = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (record?.type !== "assistant") continue;
+    if (boundary && record.timestamp && new Date(record.timestamp).getTime() < boundary) {
+      continue;
+    }
+    const content = record.message?.content;
+    if (!Array.isArray(content)) continue;
+    for (const block of content) {
+      if (block?.type !== "tool_use" || !TRACKER_WRITE.test(block.name ?? "")) continue;
+      const input = block.input ?? {};
+      const body = input.body ?? input.text ?? null;
+      if (typeof body !== "string") continue;
+      const tool = String(block.name).replace(/^.*__/, "");
+      posted.push({
+        tool,
+        at: record.timestamp ?? null,
+        repo: input.owner && input.repo ? `${input.owner}/${input.repo}` : null,
+        body,
+        head: tool === "create_pull_request" && typeof input.head === "string" ? input.head : null,
+      });
+    }
+  }
+  return posted;
+}

@@ -93,11 +93,12 @@ export function report(records, disputes = []) {
   lines.push("");
   lines.push("Per check");
   lines.push(
-    "  check            unprompted fail   unconfigured   fired   cleared   ignored   disputed",
+    "  check            unprompted fail   shadow   unconfigured   fired   cleared   ignored   disputed",
   );
   for (const row of perCheck(records, turns, disputes)) {
     lines.push(
       `  ${row.check.padEnd(16)} ${pct(row.unpromptedFail, row.turns).padStart(15)}   ` +
+        `${pct(row.shadow, row.turns).padStart(6)}   ` +
         `${pct(row.unconfigured, row.turns).padStart(12)}   ${String(row.fired).padStart(5)}   ` +
         `${pct(row.cleared, row.fired).padStart(7)}   ${String(row.ignored).padStart(7)}   ` +
         `${String(row.disputed).padStart(8)}`,
@@ -139,6 +140,8 @@ export function report(records, disputes = []) {
   lines.push("  - Cycle 1 is unprompted THIS TURN, not unmonitored: the model has been");
   lines.push("    blocked on earlier turns and knows the hook exists. The clean baseline");
   lines.push("    needs sessions run under HEARTBEAT_OBSERVE, where nothing is surfaced.");
+  lines.push("  - 'Shadow' is what a check not yet armed would have refused: logged,");
+  lines.push("    never surfaced, never blocked on. Its rate is the case for arming it.");
   lines.push("  - A disputed count is a failure inside a filed check-defect window,");
   lines.push("    excluded from both sides of the rates. It may still contain real");
   lines.push("    non-compliance the defect happened to overlap; the tickets above say");
