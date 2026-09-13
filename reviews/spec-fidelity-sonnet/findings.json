@@ -1,0 +1,35 @@
+{
+  "pr": "pandoscope/skills#196",
+  "head": "5a7746ecc4cd1e3e1a3b282ddff24e45be4f5b71",
+  "pass": "spec-fidelity",
+  "tier": "sonnet",
+  "findings": [
+    {
+      "file": "original/thread-ledger/review/policy.mjs",
+      "line": 249,
+      "rule": "git switch, add, commit and push only for the review branch and the review directory.",
+      "input": "Bash command `git stash` with no arguments",
+      "tier": "hard",
+      "confidence": 78,
+      "finding": "A bare `git stash` (which defaults to `git stash push` and mutates the working tree) is treated as an unconditionally allowed read subcommand because GIT_WRITE_FLAGS.stash only matches specific sub-arguments like `push` or `pop`, so the argument-less form is never denied even though it is not the branch/add/commit/push exception the rule names."
+    },
+    {
+      "file": "original/thread-ledger/review/policy.mjs",
+      "line": 260,
+      "rule": "git switch, add, commit and push only for the review branch and the review directory.",
+      "input": "Bash command `git add reviews/spec-fidelity-sonnet-other/notes.txt`",
+      "tier": "judgment",
+      "confidence": 45,
+      "finding": "The `add` check allows any path where `path.includes(run.dir)` is true rather than requiring the path to be inside the review directory, so a path that merely contains `reviews/spec-fidelity-sonnet` as a substring of a different directory name is staged without denial."
+    },
+    {
+      "file": "original/thread-ledger/review/policy.mjs",
+      "line": 212,
+      "rule": "Bash is allowed only for read commands (git read subcommands, cat, sed, grep, find, ls and the like), no python, no node, no test runner, no redirections.",
+      "input": "Bash command `mkdir -p reviews/spec-fidelity-sonnet`",
+      "tier": "judgment",
+      "confidence": 35,
+      "finding": "`mkdir` and `touch` are added to the Bash read-command allowlist with a scoped write exception, even though the rule restricts Bash to read commands and names no directory- or file-creation exception."
+    }
+  ]
+}
