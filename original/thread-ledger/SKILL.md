@@ -472,3 +472,21 @@ failure banner carrying a ready-to-paste debugging prompt.
 
 `SESSION_MEMORY_URL` names the store events are written to. Unset,
 every command fails.
+
+## Review sessions
+
+A routine-fired session whose saved prompt starts with
+`PANDO-REVIEW: <pass> tier=<tier>` on its own line is a review
+session (skills#195). Two hooks replace the heartbeat there:
+`review-driver.mjs` on `PreToolUse` denies every call outside the
+read-only policy in `review/policy.mjs` — read commands, git read
+subcommands, the findings file, the review branch's switch, add,
+commit and push, nothing posted to the forge — and on `Stop` refuses
+to end the session until `reviews/<pass>-<tier>/findings.json`
+validates and sits committed and pushed on
+`claude/review-<pass>-<tier>-pr<n>`. The driver's denials and a trace
+of the session's calls and usage are copied beside the findings and
+travel on the same branch, which is what the collector reads. The
+sentinel skips the heartbeat when `review-driver.mjs --is-review`
+says so. Routine prompts live in `review/`; the Stop reasons are
+pinned by `tests/original/review-driver/`.
