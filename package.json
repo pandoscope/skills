@@ -1,0 +1,12 @@
+{
+  "name": "pandoscope-skills",
+  "private": true,
+  "description": "Type checking only: the skills run from source with no build (skills#195, O2). Nothing here is a runtime dependency.",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.9.0"
+  }
+}

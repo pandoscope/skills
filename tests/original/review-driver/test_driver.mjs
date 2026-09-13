@@ -20,10 +20,12 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DRIVER = path.join(HERE, "../../../original/thread-ledger/review-driver.mjs");
 
 const PROMPT = "PANDO-REVIEW: spec-fidelity tier=sonnet\n\nReview the pull request named in the trigger.";
-const RUN = reviewRun(
+const PARSED = reviewRun(
   `${JSON.stringify({ type: "user", message: { role: "user", content: PROMPT } })}\n` +
     `${JSON.stringify({ type: "assistant", message: { role: "assistant", model: "m", usage: { input_tokens: 1 }, content: [] } })}\n`,
 );
+if (!PARSED) throw new Error("the kata prompt did not parse as a review run");
+const RUN = PARSED;
 
 describe("marker", () => {
   it("reads pass and tier from the first user message", () => {
@@ -48,10 +50,12 @@ describe("marker", () => {
 });
 
 describe("bash policy", () => {
+  /** @param {string} cmd */
   const allow = (cmd) => assert.deepEqual(bashVerdict(cmd, RUN), { allow: true }, cmd);
+  /** @param {string} cmd @param {...string} words */
   const deny = (cmd, ...words) => {
     const v = bashVerdict(cmd, RUN);
-    assert.equal(v.allow, false, `${cmd} should be denied`);
+    if (v.allow) assert.fail(`${cmd} should be denied`);
     for (const w of words) assert.match(v.why, new RegExp(w), `${cmd}: ${v.why}`);
   };
   it("allows reading", () => {
@@ -108,17 +112,17 @@ describe("tool policy", () => {
     assert.equal(toolVerdict("mcp__github__get_file_contents", {}, RUN).allow, true);
     assert.equal(toolVerdict("Write", { file_path: "/home/user/meta/reviews/spec-fidelity-sonnet/findings.json" }, RUN).allow, true);
     const v = toolVerdict("Write", { file_path: "/home/user/meta/src/x.py" }, RUN);
-    assert.equal(v.allow, false);
+    if (v.allow) assert.fail("a write outside the review directory should be denied");
     assert.match(v.why, /only file a review writes is reviews\/spec-fidelity-sonnet\/findings.json/);
   });
   it("denies forge writes and everything unlisted, naming the alternative", () => {
     for (const name of ["mcp__github__add_issue_comment", "mcp__github__pull_request_review_write", "mcp__github__create_pull_request", "mcp__github__push_files"]) {
       const v = toolVerdict(name, {}, RUN);
-      assert.equal(v.allow, false, name);
+      if (v.allow) assert.fail(`${name} should be denied`);
       assert.match(v.why, /posts nothing/);
     }
     const v = toolVerdict("Artifact", {}, RUN);
-    assert.equal(v.allow, false);
+    if (v.allow) assert.fail("Artifact should be denied");
     assert.match(v.why, /not on the review session's tool list/);
   });
 });
@@ -148,6 +152,7 @@ describe("findings contract", () => {
 
 // ------------------------------------------------------------ staged
 
+/** @param {string} cwd @param {...string} args */
 function sh(cwd, ...args) {
   const r = spawnSync(args[0], args.slice(1), { cwd, encoding: "utf8" });
   assert.equal(r.status, 0, `${args.join(" ")}\n${r.stderr}`);
@@ -180,13 +185,17 @@ function stage() {
   return { root, home, clone, transcript };
 }
 
+/**
+ * @param {ReturnType<typeof stage>} s
+ * @param {Record<string, unknown>} input
+ */
 function fire(s, input) {
   const r = spawnSync("node", [DRIVER], {
     input: JSON.stringify({ transcript_path: s.transcript, session_id: "kata", ...input }),
     encoding: "utf8",
     env: { ...process.env, HOME: s.home, CLAUDE_CONFIG_DIR: path.join(s.home, ".claude"), HEARTBEAT_REPO_ROOT: path.join(s.root, "repos") },
   });
-  return { code: r.status, err: r.stderr };
+  return { code: r.status, err: r.stderr ?? "" };
 }
 
 describe("staged session", () => {

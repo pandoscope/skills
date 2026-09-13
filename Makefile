@@ -31,6 +31,10 @@ test:
 		node --test "$$f" || exit 1; \
 	done
 
+.PHONY: typecheck ## Type-check the JSDoc-annotated modules (tsconfig.json include list); needs `npm ci`
+typecheck:
+	npx tsc -p tsconfig.json
+
 .PHONY: grilling-template ## Rebuild derived/grilling/render/template.html from its sources
 grilling-template:
 	node --experimental-strip-types --disable-warning=ExperimentalWarning derived/grilling/render/build.ts

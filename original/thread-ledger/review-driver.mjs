@@ -39,15 +39,40 @@ import { findingsProblems, prNumber, reviewRun, toolVerdict } from "./review/pol
 
 const MAX_BLOCKS = 3;
 
+/** @typedef {import("./review/policy.mjs").ReviewRun} ReviewRun */
+/**
+ * What the platform pipes in — the fields this driver reads.
+ * @typedef {object} HookInput
+ * @property {string} [hook_event_name]
+ * @property {string} [tool_name]
+ * @property {Record<string, any>} [tool_input]
+ * @property {string} [transcript_path]
+ * @property {string} [session_id]
+ * @property {boolean} [stop_hook_active]
+ */
+/**
+ * @typedef {object} Ctx
+ * @property {string | null} repoRoot   directory holding the session's clones
+ * @property {string} transcriptText
+ * @property {string} logFile           the driver's own observations
+ * @property {string} stateFile         the loop guard's memory
+ * @property {string} session
+ */
+/** @typedef {{ check: string, detail: string, reason: string }} Failure */
+/** @typedef {{ input: number, output: number, cacheRead: number, cacheCreation: number, messages: number }} Usage */
+
+/** @param {string} name */
 function localFile(name) {
   return path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude"), name);
 }
 
+/** @param {string} repo @param {...string} args @returns {string | null} */
 function git(repo, ...args) {
   const r = spawnSync("git", ["-C", repo, ...args], { encoding: "utf8" });
   return r.status === 0 ? r.stdout.trim() : null;
 }
 
+/** @param {string} file @param {Record<string, unknown>} record */
 function appendLog(file, record) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.appendFileSync(file, `${JSON.stringify({ at: new Date().toISOString(), ...record })}\n`);
@@ -55,9 +80,14 @@ function appendLog(file, record) {
 
 // -------------------------------------------------------------- trace
 
-/** What the session did, from its transcript: calls and usage per model. */
+/**
+ * What the session did, from its transcript: calls and usage per model.
+ * @param {string} text
+ */
 export function traceOf(text) {
+  /** @type {{ at: string | null, tool: string, arg: string | null }[]} */
   const calls = [];
+  /** @type {Record<string, Usage>} */
   const usage = {};
   let turns = 0;
   for (const line of text.split("\n")) {
@@ -91,6 +121,7 @@ export function traceOf(text) {
 
 // --------------------------------------------------------------- stop
 
+/** @param {string | null} root @returns {string[]} */
 function clonesUnder(root) {
   if (!root || !fs.existsSync(root)) return [];
   return fs
@@ -103,6 +134,9 @@ function clonesUnder(root) {
  * The first unmet completion criterion, or null when the review is
  * complete. Each failure carries the check name, the evidence, and the
  * reason with its command.
+ * @param {ReviewRun} run
+ * @param {Ctx} ctx
+ * @returns {Failure | null}
  */
 export function stopVerdict(run, ctx) {
   const clones = clonesUnder(ctx.repoRoot);
@@ -124,10 +158,11 @@ export function stopVerdict(run, ctx) {
   try {
     doc = JSON.parse(fs.readFileSync(file, "utf8"));
   } catch (err) {
+    const why = err instanceof Error ? err.message : String(err);
     return {
       check: "findings-valid",
-      detail: `${file}: ${err.message}`,
-      reason: `The review is not complete until ${file} parses as JSON: ${err.message}. Rewrite it with the Write tool.`,
+      detail: `${file}: ${why}`,
+      reason: `The review is not complete until ${file} parses as JSON: ${why}. Rewrite it with the Write tool.`,
     };
   }
   const problems = findingsProblems(doc, run);
@@ -186,6 +221,10 @@ export function stopVerdict(run, ctx) {
 
 // ---------------------------------------------------------------- run
 
+/**
+ * @param {string} file
+ * @returns {Record<string, { blocks: number, delivered: string[] }>}
+ */
 function readState(file) {
   try {
     return JSON.parse(fs.readFileSync(file, "utf8"));
@@ -194,6 +233,7 @@ function readState(file) {
   }
 }
 
+/** @param {HookInput} input @returns {number} */
 export function run(input) {
   const transcript = input.transcript_path ?? null;
   const text = transcript && fs.existsSync(transcript) ? fs.readFileSync(transcript, "utf8") : "";
@@ -208,7 +248,7 @@ export function run(input) {
   };
   const event = input.hook_event_name;
   if (event === "PreToolUse") {
-    const verdict = toolVerdict(input.tool_name, input.tool_input ?? {}, review);
+    const verdict = toolVerdict(input.tool_name ?? "(unnamed tool)", input.tool_input ?? {}, review);
     if (verdict.allow) return 0;
     appendLog(ctx.logFile, {
       event: "deny",
@@ -254,6 +294,7 @@ export function run(input) {
 // ---------------------------------------------------------------- cli
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+  /** @type {HookInput} */
   let input = {};
   try {
     const raw = fs.readFileSync(0, "utf8");
@@ -278,7 +319,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
       if (input.stop_hook_active === true) {
         process.exitCode = 0;
       } else {
-        process.stderr.write(`The review driver could not check this event:\n\n${err.stack ?? err}\n`);
+        const detail = err instanceof Error ? (err.stack ?? err.message) : String(err);
+        process.stderr.write(`The review driver could not check this event:\n\n${detail}\n`);
         process.exitCode = 2;
       }
     }
