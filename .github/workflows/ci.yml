@@ -78,3 +78,12 @@ jobs:
 
       - name: Run shell linter
         run: make lint
+
+      # Types are checked, never emitted: the skills run from source
+      # (skills#195). The include list in tsconfig.json names the
+      # JSDoc-annotated modules; a module joins it when it is annotated.
+      - name: Install the type checker
+        run: npm ci
+
+      - name: Type-check the annotated modules
+        run: make typecheck

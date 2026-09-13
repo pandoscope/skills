@@ -5,12 +5,23 @@
 // so the katas can assert on verdicts without staging a session.
 // The entry point that reads stdin, logs and exits is `../review-driver.mjs`.
 //
-// The policy is an ALLOWLIST. The driver lab (skills#130) measured
-// that a refusal naming the unmet criterion is followed, and that a
-// check followed must not be wrong; X8 (skills#41) measured that the
-// smallest tier runs code when told in prose not to. A denylist of the
-// ways to run code is a list the next detour is not on, so what is
-// allowed is enumerated and everything else is refused with the rule.
+// The policy is an ALLOWLIST.
+// The driver lab (skills#130) measured that a refusal naming the unmet criterion is followed,
+// and that a check followed must not be wrong;
+// X8 (skills#41) measured that the smallest tier runs code when told in prose not to.
+// A denylist of the ways to run code is a list the next detour is not on,
+// so what is allowed is enumerated and everything else is refused with the rule.
+
+/**
+ * @typedef {object} ReviewRun
+ * @property {string} pass       the review pass, e.g. spec-fidelity
+ * @property {string} tier       the model tier the routine runs
+ * @property {string} dir        the review directory, relative to the clone
+ * @property {string} findings   the findings file, relative to the clone
+ * @property {RegExp} branch     the review branch, capturing the PR number
+ * @property {string} branchForm the branch as the reason spells it
+ */
+/** @typedef {{ allow: true } | { allow: false, why: string }} Verdict */
 
 // ------------------------------------------------------------ marker
 
@@ -20,7 +31,11 @@
 // a review session; nothing else does.
 const MARKER = /^PANDO-REVIEW:\s*([a-z0-9-]+)\s+tier=([a-z0-9-]+)\s*$/m;
 
-/** The review run a transcript's first user message declares, or null. */
+/**
+ * The review run a transcript's first user message declares, or null.
+ * @param {string} transcriptText
+ * @returns {ReviewRun | null}
+ */
 export function reviewRun(transcriptText) {
   const first = firstUserText(transcriptText);
   const m = first ? MARKER.exec(first) : null;
@@ -38,6 +53,10 @@ export function reviewRun(transcriptText) {
   };
 }
 
+/**
+ * @param {string | null | undefined} text
+ * @returns {string | null}
+ */
 function firstUserText(text) {
   for (const line of (text ?? "").split("\n")) {
     let d;
@@ -87,9 +106,13 @@ const EDITORS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 /**
  * Verdict on one tool call: `{ allow: true }` or `{ allow: false, why }`.
  *
- * `why` is the reason the model reads. It names the rule and the
- * allowed alternative, never a bare "denied" — a refusal without the
- * criterion is what a model routes around.
+ * `why` is the reason the model reads.
+ * It names the rule and the allowed alternative,
+ * never a bare "denied" — a refusal without the criterion is what a model routes around.
+ * @param {string} name
+ * @param {Record<string, any> | undefined} input
+ * @param {ReviewRun} run
+ * @returns {Verdict}
  */
 export function toolVerdict(name, input, run) {
   if (ALLOWED_TOOLS.has(name) || FORGE_READ.test(name)) return { allow: true };
@@ -140,6 +163,7 @@ const GIT_READ = new Set([
 ]);
 
 // Sub-flags that turn a read subcommand into a write.
+/** @type {Record<string, RegExp>} */
 const GIT_WRITE_FLAGS = {
   branch: /^-(m|M|d|D|c|C|f|-move|-copy|-delete|-force|-set-upstream-to|u)$|^--(edit-description|unset-upstream)$/,
   remote: /^(add|remove|rm|rename|set-url|set-head|set-branches|prune|update)$/,
@@ -150,10 +174,16 @@ const GIT_WRITE_FLAGS = {
   fetch: /^(--prune|-p|--prune-tags|-P)$/,
 };
 
-/** Verdict on a Bash command under the read-only policy. */
+/**
+ * Verdict on a Bash command under the read-only policy.
+ * @param {string} command
+ * @param {ReviewRun} run
+ * @returns {Verdict}
+ */
 export function bashVerdict(command, run) {
+  /** @param {string} why @returns {Verdict} */
   const deny = (why) => ({ allow: false, why: `Bash \`${trim(command)}\`: ${why}` });
-  let body = stripHeredocs(command);
+  const body = stripHeredocs(command);
   const redirect = findRedirect(body);
   if (redirect) return deny(`\`${redirect}\` writes a file. A review session redirects to /dev/null only.`);
   for (const segment of segments(body)) {
@@ -189,6 +219,11 @@ export function bashVerdict(command, run) {
   return { allow: true };
 }
 
+/**
+ * @param {string[]} args
+ * @param {ReviewRun} run
+ * @returns {string | null}
+ */
 function gitWhy(args, run) {
   const a = [...args];
   while (a.length && /^-/.test(a[0])) {
@@ -245,6 +280,7 @@ function gitWhy(args, run) {
 
 // ----------------------------------------------------------- parsing
 
+/** @param {string} cmd @returns {string} */
 function stripHeredocs(cmd) {
   // A heredoc body is data, not commands — unless it feeds a program,
   // and the program is judged by its own first word.
@@ -252,6 +288,7 @@ function stripHeredocs(cmd) {
   return cmd.replace(/<<-?\s*'?(\w+)'?([^\n]*)\n[\s\S]*?\n\1\s*(?=\n|$)/g, "<<HEREDOC$2");
 }
 
+/** @param {string} body @returns {string | null} */
 function findRedirect(body) {
   const text = dropQuoted(body);
   const re = /(\d?)(>>?|&>)(&?)\s*(\S*)/g;
@@ -266,10 +303,12 @@ function findRedirect(body) {
   return null;
 }
 
+/** @param {string} text @returns {string} */
 function dropQuoted(text) {
   return text.replace(/'[^']*'/g, "''").replace(/"(?:[^"\\]|\\.)*"/g, '""');
 }
 
+/** @param {string} body @returns {string[]} */
 function segments(body) {
   // Subshells and substitutions are commands too: a `$(python ...)`
   // inside an allowed command is still python running.
@@ -280,6 +319,7 @@ function segments(body) {
     .split(/&&|\|\||;|\||\n/);
 }
 
+/** @param {string} segment @returns {string[]} */
 function tokens(segment) {
   const words = segment.trim().split(/\s+/).filter(Boolean);
   // Leading VAR=value assignments and the empty quotes dropQuoted left.
@@ -291,6 +331,7 @@ function tokens(segment) {
   return words;
 }
 
+/** @param {string} command @returns {string} */
 function trim(command) {
   const one = command.replace(/\s+/g, " ").trim();
   return one.length > 80 ? `${one.slice(0, 77)}…` : one;
@@ -308,32 +349,38 @@ const PR = /^[\w.-]+\/[\w.-]+#(\d+)$/;
  * names what was reviewed: the collector and the falsifier need the
  * PR and the head commit, and a finding without a verbatim rule
  * sentence is not a finding.
+ * @param {unknown} doc
+ * @param {ReviewRun} run
+ * @returns {string[]}
  */
 export function findingsProblems(doc, run) {
+  /** @type {string[]} */
   const out = [];
   if (!doc || typeof doc !== "object" || Array.isArray(doc)) {
     return ["the file is not a JSON object with pr, head, pass, tier and findings"];
   }
-  if (typeof doc.pr !== "string" || !PR.test(doc.pr)) out.push("`pr` must be `owner/repo#n`");
-  if (typeof doc.head !== "string" || !/^[0-9a-f]{7,40}$/.test(doc.head)) {
+  const d = /** @type {Record<string, unknown>} */ (doc);
+  if (typeof d.pr !== "string" || !PR.test(d.pr)) out.push("`pr` must be `owner/repo#n`");
+  if (typeof d.head !== "string" || !/^[0-9a-f]{7,40}$/.test(d.head)) {
     out.push("`head` must be the PR head commit sha that was reviewed");
   }
-  if (doc.pass !== run.pass) out.push(`\`pass\` must be \`${run.pass}\``);
-  if (doc.tier !== run.tier) out.push(`\`tier\` must be \`${run.tier}\``);
-  if (!Array.isArray(doc.findings)) {
+  if (d.pass !== run.pass) out.push(`\`pass\` must be \`${run.pass}\``);
+  if (d.tier !== run.tier) out.push(`\`tier\` must be \`${run.tier}\``);
+  if (!Array.isArray(d.findings)) {
     out.push("`findings` must be an array, empty when nothing was found");
     return out;
   }
-  doc.findings.forEach((f, i) => {
+  /** @type {unknown[]} */ (d.findings).forEach((entry, i) => {
     const at = `findings[${i}]`;
-    if (!f || typeof f !== "object") return out.push(`${at} is not an object`);
+    if (!entry || typeof entry !== "object") return out.push(`${at} is not an object`);
+    const f = /** @type {Record<string, unknown>} */ (entry);
     if (typeof f.file !== "string" || !f.file) out.push(`${at}.file must name the file in the PR`);
     if (!Number.isInteger(f.line)) out.push(`${at}.line must be an integer`);
     if (typeof f.rule !== "string" || f.rule.trim().length < 10) {
       out.push(`${at}.rule must quote the ticket or spec sentence verbatim`);
     }
     if (typeof f.input !== "string" || !f.input) out.push(`${at}.input must name the input that shows the departure`);
-    if (!TIERS.has(f.tier)) out.push(`${at}.tier must be hard or judgment`);
+    if (typeof f.tier !== "string" || !TIERS.has(f.tier)) out.push(`${at}.tier must be hard or judgment`);
     if (typeof f.confidence !== "number" || f.confidence < 0 || f.confidence > 100) {
       out.push(`${at}.confidence must be 0 to 100`);
     }
@@ -342,8 +389,13 @@ export function findingsProblems(doc, run) {
   return out;
 }
 
-/** The PR number a valid findings document names. */
+/**
+ * The PR number a valid findings document names.
+ * @param {unknown} doc
+ * @returns {number | null}
+ */
 export function prNumber(doc) {
-  const m = PR.exec(doc?.pr ?? "");
+  const pr = doc && typeof doc === "object" ? /** @type {Record<string, unknown>} */ (doc).pr : null;
+  const m = PR.exec(typeof pr === "string" ? pr : "");
   return m ? Number(m[1]) : null;
 }
