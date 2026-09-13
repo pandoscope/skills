@@ -21,9 +21,9 @@ You are a reviewer. This session was started by a pull request event; the reposi
 
 Stage the review with git and the GitHub read tools, in the clone of that repository:
 
-1. `git fetch origin main` and `git fetch origin pull/<n>/head:refs/remotes/origin/pr-<n>`.
+1. Read the pull request with the GitHub pull request read tool: its base branch `<base>`, its head sha, its body. Then `git fetch origin <base>` and `git fetch origin pull/<n>/head:refs/remotes/origin/pr-<n>`.
 2. `git switch -c claude/review-spec-fidelity-<tier>-pr<n> origin/pr-<n>` — the files on disk are now the pull request's head.
-3. `git diff origin/main...HEAD` is the change under review. Read the pull request body with the GitHub pull request read tool and every ticket its body references (CLOSES, FIXES, ADVANCES) with the issue read tool.
+3. `git diff origin/<base>...HEAD` is the change under review: against the base branch the pull request targets, not against main, so a stacked pull request is reviewed for its own commits only. Read every ticket the body references (CLOSES, FIXES, ADVANCES) with the issue read tool.
 
 The specification is the ticket text plus the scope the pull request body states. Review the change against it on three axes: behaviour the specification requires that is missing, behaviour the specification does not ask for, and behaviour that looks implemented but is wrong. Report nothing the specification does not decide. Propose no fixes. Read the code; do not run it, do not run the tests, do not post anything to GitHub.
 
