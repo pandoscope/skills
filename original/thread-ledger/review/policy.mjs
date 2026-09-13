@@ -115,6 +115,13 @@ const EDITORS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
  * @returns {Verdict}
  */
 export function toolVerdict(name, input, run) {
+  const target = input?.file_path ?? input?.path ?? input?.pattern ?? "";
+  if (typeof target === "string" && target && namesSecret(target)) {
+    return {
+      allow: false,
+      why: `${name} on ${target}: that path holds the session's own secrets. A review reads the repository, not the environment.`,
+    };
+  }
   if (ALLOWED_TOOLS.has(name) || FORGE_READ.test(name)) return { allow: true };
   if (EDITORS.has(name)) {
     const file = input?.file_path ?? input?.notebook_path ?? "";
@@ -152,14 +159,25 @@ const READ_COMMANDS = new Set([
   "uniq", "cut", "tr", "diff", "tree", "stat", "file", "jq", "echo", "printf", "true", "false",
   "test", "[", "[[", "cd", "pwd", "which", "type", "basename", "dirname", "realpath", "readlink",
   "date", "column", "nl", "comm", "paste", "md5sum", "sha256sum", "expr", "seq", "tac", "rev",
-  "fold", "fmt", "strings", "od", "hexdump", "xxd", "du", "df", "mkdir", "touch",
+  "fold", "fmt", "strings", "od", "hexdump", "xxd", "du", "df",
 ]);
+
+// Where the session's own secrets live. `env` is denied above; these
+// are the files that hold the same values, and reading them into a
+// transcript is the same leak by another command. A repo's own
+// `.claude/` directory is not matched — that is reviewable content.
+const SECRET_PATH = /\/proc\/[^\s'"]*\/environ\b|\bsession\.env\b|(?:~|\$HOME|\$\{HOME\}|\/root|\/home\/[^/\s]+)\/\.claude\/|(?:^|[\s/'"])\.env(?:\.[\w-]+)?(?=$|[\s'"])/;
+
+/** @param {string} text @returns {boolean} */
+export function namesSecret(text) {
+  return SECRET_PATH.test(text);
+}
 
 const GIT_READ = new Set([
   "diff", "log", "show", "fetch", "ls-files", "ls-tree", "ls-remote", "grep", "cat-file",
   "rev-parse", "status", "merge-base", "blame", "name-rev", "describe", "rev-list", "shortlog",
   "diff-tree", "for-each-ref", "show-ref", "check-ignore", "var", "count-objects", "branch",
-  "remote", "config", "worktree", "stash", "tag", "version", "help",
+  "remote", "config", "worktree", "version", "help",
 ]);
 
 // Sub-flags that turn a read subcommand into a write.
@@ -169,8 +187,6 @@ const GIT_WRITE_FLAGS = {
   remote: /^(add|remove|rm|rename|set-url|set-head|set-branches|prune|update)$/,
   config: /^(--unset|--unset-all|--add|--replace-all|--edit|-e|--rename-section|--remove-section)$/,
   worktree: /^(add|remove|prune|move|lock|unlock|repair)$/,
-  stash: /^(push|save|pop|apply|drop|clear|create|store|branch)$/,
-  tag: /^(-a|-d|-f|-s|-m|-F|--delete|--force)$/,
   fetch: /^(--prune|-p|--prune-tags|-P)$/,
 };
 
@@ -183,6 +199,9 @@ const GIT_WRITE_FLAGS = {
 export function bashVerdict(command, run) {
   /** @param {string} why @returns {Verdict} */
   const deny = (why) => ({ allow: false, why: `Bash \`${trim(command)}\`: ${why}` });
+  if (namesSecret(command)) {
+    return deny("that path holds the session's own secrets. A review reads the repository, not the environment.");
+  }
   const body = stripHeredocs(command);
   const redirect = findRedirect(body);
   if (redirect) return deny(`\`${redirect}\` writes a file. A review session redirects to /dev/null only.`);
@@ -209,11 +228,6 @@ export function bashVerdict(command, run) {
     }
     if (cmd === "awk" && args.some((a) => /system\s*\(|\|\s*"|>\s*"/.test(a))) {
       return deny("`awk` with system() or an output pipe executes or writes. Print only.");
-    }
-    if (cmd === "mkdir" || cmd === "touch") {
-      if (!args.filter((a) => !a.startsWith("-")).every((a) => a.endsWith(run.dir) || a.endsWith(run.findings))) {
-        return deny(`\`${cmd}\` outside ${run.dir}. The review directory is the only path a review creates.`);
-      }
     }
   }
   return { allow: true };
@@ -249,6 +263,16 @@ function gitWhy(args, run) {
     }
     return null;
   }
+  // Bare `git stash` is a push and `git tag <name>` creates one:
+  // the read forms are the listing ones, and only those pass.
+  if (sub === "stash") {
+    if (rest[0] === "list" || rest[0] === "show") return null;
+    return "`git stash` writes the working tree; `git stash list` and `git stash show` are the read forms.";
+  }
+  if (sub === "tag") {
+    if (!nonFlags.length || rest.some((x) => x === "-l" || x === "--list")) return null;
+    return "`git tag <name>` creates a tag; `git tag` and `git tag -l` are the read forms.";
+  }
   if (sub === "switch" || sub === "checkout") {
     const flag = rest.findIndex((x) => x === "-c" || x === "-b" || x === "--create");
     if (flag > -1 && run.branch.test(rest[flag + 1] ?? "")) return null;
@@ -258,7 +282,7 @@ function gitWhy(args, run) {
     );
   }
   if (sub === "add") {
-    if (nonFlags.length && nonFlags.every((p) => p.includes(run.dir))) return null;
+    if (nonFlags.length && nonFlags.every((p) => insideReviewDir(p, run))) return null;
     return `\`git add\` may only stage ${run.dir}/. Nothing else in the clone changes.`;
   }
   if (sub === "commit") {
@@ -276,6 +300,17 @@ function gitWhy(args, run) {
     return `\`git push\` names the review branch: git push -u origin ${run.branchForm}.`;
   }
   return `\`git ${sub}\` is not a read subcommand. Allowed: ${[...GIT_READ].slice(0, 8).join(", ")}, …, plus switch -c, add, commit and push for the findings.`;
+}
+
+/**
+ * Whether a path is the review directory or lies inside it — by path
+ * segment, so `reviews/<pass>-<tier>-other/x` is outside.
+ * @param {string} p
+ * @param {ReviewRun} run
+ */
+function insideReviewDir(p, run) {
+  const clean = p.replace(/^\.\//, "").replace(/\/+$/, "");
+  return clean === run.dir || clean.startsWith(`${run.dir}/`) || clean.endsWith(`/${run.dir}`) || clean.includes(`/${run.dir}/`);
 }
 
 // ----------------------------------------------------------- parsing

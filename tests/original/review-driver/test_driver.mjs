@@ -83,8 +83,16 @@ describe("bash policy", () => {
     deny("cat <<EOF > findings.json\n{}\nEOF", "writes a file");
     deny("sed -i 's/a/b/' src/x.py", "sed -i");
     deny("find . -name '*.pyc' -delete", "-exec, -ok or -delete");
-    deny("mkdir -p scratch", "outside reviews/spec-fidelity-sonnet");
-    allow("mkdir -p reviews/spec-fidelity-sonnet");
+    deny("mkdir -p reviews/spec-fidelity-sonnet", "mkdir", "not a read command");
+    deny("touch notes.txt", "touch");
+  });
+  it("denies reading the session's own secrets", () => {
+    deny("cat /proc/self/environ", "session's own secrets");
+    deny("cat ~/.claude/session.env", "session's own secrets");
+    deny("grep TOKEN /root/.claude/settings.json", "session's own secrets");
+    deny("cat .env", "session's own secrets");
+    allow("cat .claude/settings.json");
+    allow("grep -rn environment/ docs/");
   });
   it("allows exactly the findings branch, add, commit and push", () => {
     allow("git switch -c claude/review-spec-fidelity-sonnet-pr143");
@@ -101,13 +109,22 @@ describe("bash policy", () => {
     deny("git reset --hard", "not a read subcommand");
     deny("git branch -D main", "writes");
     deny("git -c core.hooksPath=/dev/null commit -m x", "git -c");
-    deny("git stash push", "writes");
+    deny("git stash push", "writes the working tree");
+    deny("git stash", "writes the working tree");
+    allow("git stash list");
+    deny("git tag v9", "creates a tag");
+    allow("git tag -l");
+    deny("git add reviews/spec-fidelity-sonnet-other/notes.txt", "only stage reviews/spec-fidelity-sonnet/");
+    allow("git add ./reviews/spec-fidelity-sonnet/");
   });
 });
 
 describe("tool policy", () => {
   it("allows reads and the findings file only", () => {
     assert.equal(toolVerdict("Read", { file_path: "/x" }, RUN).allow, true);
+    assert.equal(toolVerdict("Read", { file_path: "/home/user/skills/.claude/settings.json" }, RUN).allow, true);
+    assert.equal(toolVerdict("Read", { file_path: "/root/.claude/session.env" }, RUN).allow, false);
+    assert.equal(toolVerdict("Grep", { pattern: "TOKEN", path: "/proc/self/environ" }, RUN).allow, false);
     assert.equal(toolVerdict("mcp__github__pull_request_read", {}, RUN).allow, true);
     assert.equal(toolVerdict("mcp__github__get_file_contents", {}, RUN).allow, true);
     assert.equal(toolVerdict("Write", { file_path: "/home/user/meta/reviews/spec-fidelity-sonnet/findings.json" }, RUN).allow, true);
@@ -224,7 +241,11 @@ describe("staged session", () => {
     assert.equal(stop.code, 2);
     assert.match(stop.err, /git -C \S+ switch -c claude\/review-spec-fidelity-sonnet-pr143/);
     assert.ok(fs.existsSync(path.join(dir, "trace.json")), "trace written once the findings validate");
-    assert.ok(fs.existsSync(path.join(dir, "driver.jsonl")), "denial log copied beside the findings");
+    assert.ok(fs.existsSync(path.join(dir, "driver.jsonl")), "denial log written beside the findings");
+    const denials = fs.readFileSync(path.join(dir, "driver.jsonl"), "utf8").trim().split("\n");
+    assert.equal(denials.length, 1, "one denial, and only denials");
+    assert.match(denials[0], /"event":"deny"/);
+    assert.match(denials[0], /python3/);
     const trace = JSON.parse(fs.readFileSync(path.join(dir, "trace.json"), "utf8"));
     assert.equal(trace.calls[0].arg, "git diff");
     assert.equal(trace.usage["claude-sonnet"].input, 10);

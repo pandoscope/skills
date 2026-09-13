@@ -183,9 +183,16 @@ export function stopVerdict(run, ctx) {
   // the findings first validate: rewriting after the commit would dirty
   // the tree again and turn the completion check into a loop.
   const dir = path.join(clone, run.dir);
+  // driver.jsonl holds the denials up to this point — written even when there were none,
+  // so an empty file says "measured, nothing denied" and a missing one says "never written".
+  // The Stop verdicts that follow stay in the local log:
+  // copying them would dirty the tree after every commit.
   if (!fs.existsSync(path.join(dir, "trace.json"))) {
     fs.writeFileSync(path.join(dir, "trace.json"), `${JSON.stringify(traceOf(ctx.transcriptText), null, 1)}\n`);
-    if (fs.existsSync(ctx.logFile)) fs.copyFileSync(ctx.logFile, path.join(dir, "driver.jsonl"));
+    const denials = fs.existsSync(ctx.logFile)
+      ? fs.readFileSync(ctx.logFile, "utf8").split("\n").filter((l) => l.includes('"event":"deny"'))
+      : [];
+    fs.writeFileSync(path.join(dir, "driver.jsonl"), denials.map((l) => `${l}\n`).join(""));
   }
   const current = git(clone, "rev-parse", "--abbrev-ref", "HEAD");
   if (current !== branch) {
