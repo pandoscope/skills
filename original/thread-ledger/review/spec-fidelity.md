@@ -25,13 +25,15 @@ Stage the review with git and the GitHub read tools, in the clone of that reposi
 2. `git switch -c claude/review-spec-fidelity-<tier>-pr<n> origin/pr-<n>` — the files on disk are now the pull request's head.
 3. `git diff origin/<base>...HEAD` is the change under review: against the base branch the pull request targets, not against main, so a stacked pull request is reviewed for its own commits only. Read every ticket the body references (CLOSES, FIXES, ADVANCES) with the issue read tool.
 
+Read every changed file in full at the head commit before judging it. Where a file is large, read it in successive ranges until you reach its end; do not review from a truncated head of the file.
+
 The specification is the ticket text plus the scope the pull request body states. Review the change against it on three axes: behaviour the specification requires that is missing, behaviour the specification does not ask for, and behaviour that looks implemented but is wrong. Report nothing the specification does not decide. Propose no fixes. Read the code; do not run it, do not run the tests, do not post anything to GitHub.
 
 Every finding names a concrete input on which the change departs from the specification and quotes the sentence of the ticket or the pull request body it violates, verbatim. A finding you cannot tie to a specification sentence is not a finding. No findings is a valid result.
 
 # Output contract
 
-Write `reviews/spec-fidelity-<tier>/findings.json` in the clone: a JSON object with `pr` (`owner/repo#n`), `head` (the head commit sha you reviewed), `pass` (`spec-fidelity`), `tier` (`<tier>`) and `findings`, an array, empty when you found nothing, of objects with `file` (path in the pull request), `line` (integer, at the head commit), `rule` (the verbatim specification sentence), `input` (the input that shows the departure), `tier` (`hard` when the specification decides the case, `judgment` otherwise), `confidence` (0 to 100) and `finding` (one sentence). Order by severity, worst first.
+Write `reviews/spec-fidelity-<tier>/findings.json` in the clone (the Write tool creates the directory; `mkdir` is not a read command and is refused): a JSON object with `pr` (`owner/repo#n`), `head` (the head commit sha you reviewed), `pass` (`spec-fidelity`), `tier` (`<tier>`) and `findings`, an array, empty when you found nothing, of objects with `file` (path in the pull request), `line` (integer, at the head commit), `rule` (the verbatim specification sentence), `input` (the input that shows the departure), `tier` (`hard` when the specification decides the case, `judgment` otherwise), `confidence` (0 to 100) and `finding` (one sentence). Order by severity, worst first.
 
 Then commit and push the findings, and nothing else:
 
