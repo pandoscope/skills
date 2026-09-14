@@ -87,8 +87,6 @@ const ALLOWED_TOOLS = new Set([
   "WebFetch",
   "WebSearch",
   "ToolSearch",
-  "Agent",
-  "Task",
   "TaskCreate",
   "TaskUpdate",
   "TaskList",
@@ -99,6 +97,11 @@ const ALLOWED_TOOLS = new Set([
   "ReadNotifications",
   "AskUserQuestion",
 ]);
+
+// A subagent is a hole in the allowlist, not a tool on it:
+// nothing holds its calls to the read-only policy.
+// The first real opus review found this (skills#195).
+const SUBAGENTS = new Set(["Agent", "Task"]);
 
 const FORGE_READ = /^mcp__github__(get_|list_|search_|pull_request_read$|issue_read$)/;
 const EDITORS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
@@ -120,6 +123,15 @@ export function toolVerdict(name, input, run) {
     return {
       allow: false,
       why: `${name} on ${target}: that path holds the session's own secrets. A review reads the repository, not the environment.`,
+    };
+  }
+  if (SUBAGENTS.has(name)) {
+    return {
+      allow: false,
+      why:
+        `${name} spawns a session of its own, whose transcript carries no PANDO-REVIEW marker, so ` +
+        "nothing in it is read-only: it could run the code this review may not run. Read the change " +
+        "yourself with Read, Grep and Glob.",
     };
   }
   if (ALLOWED_TOOLS.has(name) || FORGE_READ.test(name)) return { allow: true };
@@ -369,7 +381,15 @@ function segments(body) {
 
 /** @param {string} segment @returns {string[]} */
 function tokens(segment) {
-  const words = segment.trim().split(/\s+/).filter(Boolean);
+  // Redirects were judged by findRedirect over the whole command; what
+  // is left of one here is punctuation, and leaving it in made
+  // `git push … 2>&1` read as a push naming a branch called "2>&1"
+  // (measured, skills#195).
+  const words = segment
+    .replace(/\d?(?:>>?|&>)&?\s*\S*/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
   // Leading VAR=value assignments and the empty quotes dropQuoted left.
   while (words.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0]) || words[0] === "''" || words[0] === '""')) {
     words.shift();

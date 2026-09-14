@@ -103,6 +103,10 @@ describe("bash policy", () => {
     allow("git checkout -b claude/review-spec-fidelity-sonnet-pr143");
     allow("git add reviews/spec-fidelity-sonnet && git commit -m 'chore(review): findings'");
     allow("git push -u origin claude/review-spec-fidelity-sonnet-pr143");
+    // A trailing redirect is punctuation by the time the arguments are judged:
+    // it must not read as a branch name.
+    allow("git push -u origin claude/review-spec-fidelity-sonnet-pr143 2>&1 | tail -5");
+    allow("git add reviews/spec-fidelity-sonnet && git commit -m 'x' && git push -u origin claude/review-spec-fidelity-sonnet-pr143 2>&1");
     deny("git switch -c claude/sk143-fix", "review branch", "claude/review-spec-fidelity-sonnet-pr<n>");
     deny("git checkout main", "review branch");
     deny("git add -A", "only stage reviews/spec-fidelity-sonnet/");
@@ -149,6 +153,17 @@ describe("tool policy", () => {
     const v = toolVerdict("Artifact", {}, RUN);
     if (v.allow) assert.fail("Artifact should be denied");
     assert.match(v.why, /not on the review session's tool list/);
+  });
+  it("denies subagents, which would carry no marker and so no policy", () => {
+    for (const name of ["Agent", "Task"]) {
+      const v = toolVerdict(name, { prompt: "run the tests" }, RUN);
+      if (v.allow) assert.fail(`${name} should be denied`);
+      assert.match(v.why, /carries no PANDO-REVIEW marker/);
+      assert.match(v.why, /could run the code this review may not run/);
+    }
+    // The task list is not a subagent: it spawns nothing.
+    assert.equal(toolVerdict("TaskCreate", {}, RUN).allow, true);
+    assert.equal(toolVerdict("TodoWrite", {}, RUN).allow, true);
   });
 });
 
