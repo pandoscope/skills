@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": true,
+    "target": "es2022",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "types": ["node"],
+    "skipLibCheck": true
+  },
+  "include": [
+    "original/thread-ledger/review-driver.mjs",
+    "original/thread-ledger/review/policy.mjs",
+    "tests/original/review-driver/test_driver.mjs"
+  ]
+}
