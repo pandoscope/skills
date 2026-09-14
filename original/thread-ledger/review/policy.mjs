@@ -167,8 +167,19 @@ const READ_COMMANDS = new Set([
 // `.claude/` directory is not matched — that is reviewable content.
 const SECRET_PATH = /\/proc\/[^\s'"]*\/environ\b|\bsession\.env\b|(?:~|\$HOME|\$\{HOME\}|\/root|\/home\/[^/\s]+)\/\.claude\/|(?:^|[\s/'"])\.env(?:\.[\w-]+)?(?=$|[\s'"])/;
 
+// The harness persists a large tool result to a file under the config
+// directory and hands back its path; reading it is how the session
+// gets the content it just asked for. Measured on the first haiku run
+// (skills#195): the rule above refused one of those, the review
+// carried on from a truncated `head -200` of the diff and reported
+// nothing. A check that is followed must not be wrong (skills#130), so
+// the one readable subtree is carved out — transcripts and the config
+// files themselves stay refused.
+const HARNESS_CONTENT = /\/\.claude\/projects\/[^\s'"]*\/tool-results\//;
+
 /** @param {string} text @returns {boolean} */
 export function namesSecret(text) {
+  if (HARNESS_CONTENT.test(text)) return false;
   return SECRET_PATH.test(text);
 }
 
