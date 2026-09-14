@@ -1,0 +1,26 @@
+{
+  "pr": "pandoscope/skills#196",
+  "head": "07d9346",
+  "pass": "spec-fidelity",
+  "tier": "opus",
+  "findings": [
+    {
+      "file": "original/thread-ledger/review/policy.mjs",
+      "line": 346,
+      "rule": "Bash is allowed only for read commands (git read subcommands, cat, sed, grep, find, ls and the like), no python, no node, no test runner, no redirections.",
+      "input": "ls > /dev/null (and 2>/dev/null, 2>&1, >&2): findRedirect returns null for a /dev/null target and for any amp form, so bashVerdict allows the command",
+      "tier": "hard",
+      "confidence": 60,
+      "finding": "The specification bans redirections outright, but the policy permits redirections to /dev/null and stderr-duplication forms rather than denying every redirect."
+    },
+    {
+      "file": "original/thread-ledger/review/policy.mjs",
+      "line": 91,
+      "rule": "Bash is allowed only for read commands (git read subcommands, cat, sed, grep, find, ls and the like), no python, no node, no test runner, no redirections.",
+      "input": "Agent/Task with a prompt like \"run pytest\": Agent and Task are in ALLOWED_TOOLS and pass unconditionally, and a spawned subagent's own transcript carries no marker, so its Bash python call is not gated by the read-only policy",
+      "tier": "judgment",
+      "confidence": 40,
+      "finding": "Placing Agent/Task on the allowlist opens a route to run python/node/tests through a subagent whose transcript lacks the marker, which the read-command-only Bash restriction is meant to forbid."
+    }
+  ]
+}
