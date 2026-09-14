@@ -93,6 +93,10 @@ describe("bash policy", () => {
     deny("cat .env", "session's own secrets");
     allow("cat .claude/settings.json");
     allow("grep -rn environment/ docs/");
+    // The harness's own persisted tool results are content, not secrets:
+    // refusing one cost the first haiku run its diff.
+    allow("cat /root/.claude/projects/-home-user-x/tool-results/toolu_01.json");
+    deny("cat /root/.claude/projects/-home-user-x/session.jsonl", "session's own secrets");
   });
   it("allows exactly the findings branch, add, commit and push", () => {
     allow("git switch -c claude/review-spec-fidelity-sonnet-pr143");
@@ -124,6 +128,10 @@ describe("tool policy", () => {
     assert.equal(toolVerdict("Read", { file_path: "/x" }, RUN).allow, true);
     assert.equal(toolVerdict("Read", { file_path: "/home/user/skills/.claude/settings.json" }, RUN).allow, true);
     assert.equal(toolVerdict("Read", { file_path: "/root/.claude/session.env" }, RUN).allow, false);
+    assert.equal(
+      toolVerdict("Read", { file_path: "/root/.claude/projects/-home-user-x/tool-results/toolu_01.json" }, RUN).allow,
+      true,
+    );
     assert.equal(toolVerdict("Grep", { pattern: "TOKEN", path: "/proc/self/environ" }, RUN).allow, false);
     assert.equal(toolVerdict("mcp__github__pull_request_read", {}, RUN).allow, true);
     assert.equal(toolVerdict("mcp__github__get_file_contents", {}, RUN).allow, true);
