@@ -26,10 +26,10 @@ Off only once user says "stop caveman" or "normal mode".
 ## Principle
 
 Parse cost stays low on every surface.
-Tokens are saved by cutting fluff and optional function words,
+Save tokens by cutting fluff and optional function words,
 never by packing several facts into one nested sentence.
 Dropped articles cost nothing when sentences still read naturally.
-A subject the reader must hold unnamed until sentence end costs a lot.
+A subject held unnamed until sentence end costs a lot.
 
 ## Modes
 
@@ -49,7 +49,7 @@ Precise short synonyms: shortest word that loses no meaning
 ("bug" not "issue you're experiencing").
 Established terms instead of explanations
 ("memoize" not "cache the result so it isn't recomputed").
-Never swap in a vaguer word to save tokens.
+Never swap in vaguer words to save tokens.
 Abbreviate established terms only (DB/auth/config).
 
 Technical terms stay exact.
@@ -73,7 +73,7 @@ Example, "Why does the React component re-render?":
 ## Docs Rules
 
 - Plain declarative prose.
-  Omit articles where the sentence still reads naturally;
+  Omit articles where sentences still read naturally;
   never drop words still needed to resolve a referent.
 - One fact per clause.
   More sentences fine, denser sentences not.
@@ -82,9 +82,9 @@ Example, "Why does the React component re-render?":
 - Verb comes within four words of subject.
   No clause between verb and complement.
 - Relative clause takes "that" or "which", or becomes its own sentence.
-- Every "the X" and "its" refers to something named in the current or previous sentence.
+- Every "the X" and "its" refers to something named in current or previous sentence.
 - Prefer shorter phrasing when it reads equally well.
-- Target: a reader who skims can stop after any sentence and have understood it.
+- Target: a skimming reader can stop after any sentence and have understood it.
 
 Not: "The hook, between ensure-repos and the composer,
 switches each clone the order's `checkouts:` block names to its ref,
