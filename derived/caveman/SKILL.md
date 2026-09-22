@@ -3,7 +3,7 @@ name: caveman
 description: >
   Terse communication that stays easy to parse. Drops filler,
   pleasantries and hedging while keeping full technical accuracy. Chat
-  keeps natural language, because a human reads it; files, docs,
+  keeps natural language, because humans read it; files, docs,
   comments and commit messages save tokens through cut fluff and flat
   sentence structure, never through nested clauses. Use when user says
   "caveman mode", "talk like caveman", "use caveman", "less tokens",
@@ -28,7 +28,7 @@ Off only once user says "stop caveman" or "normal mode".
 Parse cost stays low on every surface.
 Tokens are saved by cutting fluff and optional function words,
 never by packing several facts into one nested sentence.
-Dropped articles cost nothing when the sentence still reads naturally.
+Dropped articles cost nothing when sentences still read naturally.
 A subject the reader must hold unnamed until sentence end costs a lot.
 
 ## Modes
@@ -59,7 +59,7 @@ Errors quoted exact.
 ## Chat Rules
 
 Full sentences.
-Omit articles where the sentence still reads naturally.
+Omit articles where sentences still read naturally.
 Short fragments fine for status ("Tests green. Pushed."), not for reasoning.
 Pattern: `[thing] [action] [reason]. [next step].`
 
@@ -68,7 +68,7 @@ Yes: "Bug in auth middleware: expiry check uses `<` instead of `<=`. Fix:"
 
 Example, "Why does the React component re-render?":
 
-> Inline object prop makes a new reference on every render, so the child re-renders. Wrap it in `useMemo`.
+> Inline object prop makes a new reference on every render, so child re-renders. Wrap it in `useMemo`.
 
 ## Docs Rules
 
@@ -102,4 +102,4 @@ Drop terseness for: security warnings,
 irreversible action confirmations,
 multi-step sequences where order matters,
 user asks to clarify or repeats question.
-Resume after the clear part is done.
+Resume after clear part is done.
