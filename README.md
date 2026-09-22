@@ -40,7 +40,7 @@ Ubiquitous language: `docs/glossary/`, one file per term, resolve via `uvx disam
 ## Rules
 
 - Edit skills here only. Local copies in consumers get overwritten on update.
-- As short as possible — prefer caveman mode (`derived/caveman`) for skills, ADRs, tickets, docs. Hard limit: precision and understandability must not suffer.
+- Terse and flat — the docs mode of `derived/caveman` for skills, ADRs, tickets, docs. Save tokens by cutting fluff and optional function words, never by nesting clauses; readability sets the limit.
 - Skills stay tool-agnostic: no consumer-repo tooling (tracker CLIs etc.) hardcoded — defer to consumer's AGENTS.md conventions.
 - Descriptions state triggers only ("Use when ..."), never workflow.
 - Test artifacts live in `tests/`, never inside skill folders. Fixture manifests are named `SKILL.fixture.md` so discovery ignores them.

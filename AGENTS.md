@@ -36,7 +36,7 @@ Read [docs/architecture.md](docs/architecture.md) before touching any code.
 ## Rules
 
 - Small, single-purpose files
-- Prose (skills, ADRs, tickets, docs): as short as possible, prefer caveman mode — unless precision or understandability suffers
+- Prose (skills, ADRs, tickets, docs): terse and flat — the caveman skill's docs mode. Save tokens by cutting fluff and optional function words, never by nesting clauses; readability sets the limit
 - Readability over brevity — straightforward, easy-to-follow code. No compact "one-liners" stretching across multiple lines (e.g. nested ternaries). Stretching across multiple lines is only allowed if it aids readability.
 - When removing a feature, erase every mention of it — docs, help text, comments, tests. Don't leave "no longer supported" notes: readers who never knew it existed pay to learn it did. State what is, not what stopped being. (Migration notes belong in the commit's `BREAKING CHANGE:` footer, which is where someone upgrading looks.)
 - In prose, don't state facts maintained elsewhere — counts ("the seven examples above"), far positional references, restated section names. Link the target instead. Immediate-adjacency words ("the examples above", "the following table") are fine — they only break if adjacency breaks.
@@ -95,7 +95,7 @@ Each table is sorted alphabetically by skill — keep it sorted when adding entr
 
 | Skill                    | Trigger                                                                                            |
 | ------------------------ | -------------------------------------------------------------------------------------------------- |
-| `caveman`                | Compact wording when writing prose (issues description, PR description, comments on repo or code)  |
+| `caveman`                | Terse, easy-to-parse prose: natural chat, token-saving docs (issue and PR descriptions, comments)   |
 | `documenting-decisions`  | Any implementation task — place `DECISION:` markers                                                |
 | `domain-modeling`        | Pinning down domain terminology (glossary in `docs/glossary/`) or recording decisions in design    |
 | `grill-me`               | User asks to be grilled/interviewed about a plan or design before implementation                   |
