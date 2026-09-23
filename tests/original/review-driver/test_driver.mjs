@@ -17,11 +17,22 @@ import { fileURLToPath } from "node:url";
 import {
   bashVerdict,
   findingsProblems,
+  orderRun,
   orderTickets,
   reviewRun,
   ticketsRead,
   toolVerdict,
 } from "../../../original/thread-ledger/review/policy.mjs";
+
+// node:test has no strict expected failure: `red.fails` passes only
+// while its body throws (tdd protocol).
+const red = {
+  /** @param {string} name @param {() => void} fn */
+  fails: (name, fn) =>
+    it(`[red] ${name}`, () => {
+      assert.throws(fn, "red kata passed: remove its marker in the green commit");
+    }),
+};
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DRIVER = path.join(HERE, "../../../original/thread-ledger/review-driver.mjs");
@@ -257,6 +268,26 @@ function issueRead(id, owner, repo, n, error = false) {
   );
 }
 
+const ORDER =
+  "id: review-spec-fidelity-sonnet-pr143\nrole: reviewer\npass: spec-fidelity\ntier: sonnet\n" +
+  "pull_request: pandoscope/meta#143\ntickets:\n  - pandoscope/skills#195\n";
+
+describe("order run", () => {
+  red.fails("reads pass and tier from a reviewer order", () => {
+    const r = orderRun(ORDER);
+    assert.equal(r?.pass, "spec-fidelity");
+    assert.equal(r?.tier, "sonnet");
+    assert.equal(r?.findings, "reviews/spec-fidelity-sonnet/findings.json");
+    assert.equal(r?.branchForm, "claude/review-spec-fidelity-sonnet-pr<n>");
+  });
+  red.fails("is null for another role, or a reviewer order without pass or tier", () => {
+    assert.equal(orderRun("id: x\nrole: implementer\npull_request: pandoscope/meta#1\n"), null);
+    assert.equal(orderRun("id: x\nrole: reviewer\ntier: sonnet\n"), null);
+    assert.equal(orderRun("id: x\nrole: reviewer\npass: Spec Fidelity\ntier: sonnet\n"), null);
+    assert.equal(orderRun(""), null);
+  });
+});
+
 describe("order tickets", () => {
   it("reads the tickets list in block and flow form, lowercase", () => {
     assert.deepEqual(
@@ -359,6 +390,28 @@ describe("staged session", () => {
     const again = fire(s, { hook_event_name: "Stop", stop_hook_active: true });
     assert.equal(again.code, 0);
     assert.match(again.err, /released INCOMPLETE — findings-written/);
+  });
+
+  red.fails("takes the review run from the order when the prompt carries no marker", () => {
+    const s = stage();
+    fs.writeFileSync(s.transcript, `${JSON.stringify({ type: "user", message: { content: "A waybill order dispatched this session." } })}\n`);
+    const orders = path.join(s.root, "repos", "waybill", "orders");
+    fs.mkdirSync(orders, { recursive: true });
+    fs.writeFileSync(path.join(orders, "review-spec-fidelity-sonnet-pr143.yml"), ORDER);
+    const env = { CCR_TRIGGER_HEAD_REF: "order/review-spec-fidelity-sonnet-pr143" };
+    fs.appendFileSync(s.transcript, issueRead("r1", "pandoscope", "skills", 195));
+    const denied = fire(s, { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "python3 x.py" } }, env);
+    assert.equal(denied.code, 2);
+    assert.match(denied.err, /spec-fidelity review session \(tier sonnet\)/);
+    const stop = fire(s, { hook_event_name: "Stop" }, env);
+    assert.equal(stop.code, 2);
+    assert.match(stop.err, /not complete until reviews\/spec-fidelity-sonnet\/findings.json exists/);
+    const r = spawnSync("node", [DRIVER, "--is-review"], {
+      input: JSON.stringify({ transcript_path: s.transcript }),
+      encoding: "utf8",
+      env: { ...process.env, HEARTBEAT_REPO_ROOT: path.join(s.root, "repos"), ...env },
+    });
+    assert.equal(r.status, 0);
   });
 
   it("leaves a session without the marker alone", () => {
