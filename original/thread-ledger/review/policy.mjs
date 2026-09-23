@@ -29,6 +29,7 @@
 // the only thing the hooks can read that was stored ahead of the run.
 // `PANDO-REVIEW: <pass> tier=<tier>` on its own line makes the session
 // a review session; nothing else does.
+const NAME = /^[a-z0-9-]+$/;
 const MARKER = /^PANDO-REVIEW:\s*([a-z0-9-]+)\s+tier=([a-z0-9-]+)\s*$/m;
 
 /**
@@ -39,8 +40,15 @@ const MARKER = /^PANDO-REVIEW:\s*([a-z0-9-]+)\s+tier=([a-z0-9-]+)\s*$/m;
 export function reviewRun(transcriptText) {
   const first = firstUserText(transcriptText);
   const m = first ? MARKER.exec(first) : null;
-  if (!m) return null;
-  const [, pass, tier] = m;
+  return m ? runFor(m[1], m[2]) : null;
+}
+
+/**
+ * @param {string} pass
+ * @param {string} tier
+ * @returns {ReviewRun}
+ */
+function runFor(pass, tier) {
   return {
     pass,
     tier,
@@ -60,8 +68,15 @@ export function reviewRun(transcriptText) {
  * @returns {ReviewRun | null}
  */
 export function orderRun(orderText) {
-  void orderText;
-  throw new Error("not implemented");
+  /** @param {string} key */
+  const field = (key) => {
+    const m = new RegExp(`^${key}:[ \\t]*(.*)$`, "m").exec(orderText);
+    return m ? m[1].replace(/\s+#.*$/, "").trim().replace(/^["']|["']$/g, "") : "";
+  };
+  const pass = field("pass");
+  const tier = field("tier");
+  if (field("role") !== "reviewer" || !NAME.test(pass) || !NAME.test(tier)) return null;
+  return runFor(pass, tier);
 }
 
 /**

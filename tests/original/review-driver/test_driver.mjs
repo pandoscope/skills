@@ -24,16 +24,6 @@ import {
   toolVerdict,
 } from "../../../original/thread-ledger/review/policy.mjs";
 
-// node:test has no strict expected failure: `red.fails` passes only
-// while its body throws (tdd protocol).
-const red = {
-  /** @param {string} name @param {() => void} fn */
-  fails: (name, fn) =>
-    it(`[red] ${name}`, () => {
-      assert.throws(fn, "red kata passed: remove its marker in the green commit");
-    }),
-};
-
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DRIVER = path.join(HERE, "../../../original/thread-ledger/review-driver.mjs");
 
@@ -273,14 +263,14 @@ const ORDER =
   "pull_request: pandoscope/meta#143\ntickets:\n  - pandoscope/skills#195\n";
 
 describe("order run", () => {
-  red.fails("reads pass and tier from a reviewer order", () => {
+  it("reads pass and tier from a reviewer order", () => {
     const r = orderRun(ORDER);
     assert.equal(r?.pass, "spec-fidelity");
     assert.equal(r?.tier, "sonnet");
     assert.equal(r?.findings, "reviews/spec-fidelity-sonnet/findings.json");
     assert.equal(r?.branchForm, "claude/review-spec-fidelity-sonnet-pr<n>");
   });
-  red.fails("is null for another role, or a reviewer order without pass or tier", () => {
+  it("is null for another role, or a reviewer order without pass or tier", () => {
     assert.equal(orderRun("id: x\nrole: implementer\npull_request: pandoscope/meta#1\n"), null);
     assert.equal(orderRun("id: x\nrole: reviewer\ntier: sonnet\n"), null);
     assert.equal(orderRun("id: x\nrole: reviewer\npass: Spec Fidelity\ntier: sonnet\n"), null);
@@ -392,7 +382,7 @@ describe("staged session", () => {
     assert.match(again.err, /released INCOMPLETE — findings-written/);
   });
 
-  red.fails("takes the review run from the order when the prompt carries no marker", () => {
+  it("takes the review run from the order when the prompt carries no marker", () => {
     const s = stage();
     fs.writeFileSync(s.transcript, `${JSON.stringify({ type: "user", message: { content: "A waybill order dispatched this session." } })}\n`);
     const orders = path.join(s.root, "repos", "waybill", "orders");

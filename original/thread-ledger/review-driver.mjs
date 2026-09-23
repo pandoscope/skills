@@ -1,12 +1,14 @@
 #!/usr/bin/env node
-// The review driver — the hooks that make a routine-fired session a
+// The review driver — the hooks that make a waybill-fired session a
 // review session (skills#195).
 //
 // Registered for `PreToolUse` and `Stop`. Reads the hook's JSON on
-// stdin. When the transcript's first user message carries the
-// `PANDO-REVIEW: <pass> tier=<tier>` marker the session is a review
-// session; otherwise every event exits 0 untouched, and the ledger
-// heartbeat keeps the session.
+// stdin. When the waybill order that fired the session names
+// `role: reviewer` with its pass and tier, the session is a review
+// session. A Routine that still saves the `PANDO-REVIEW: <pass>
+// tier=<tier>` marker line as its prompt is the fallback. Otherwise
+// every event exits 0 untouched, and the ledger heartbeat keeps the
+// session.
 //
 //     PreToolUse   exit 2 + stderr   the call is denied; the reason
 //                                    names the rule and the alternative
@@ -39,7 +41,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-import { findingsProblems, orderTickets, prNumber, reviewRun, ticketsRead, toolVerdict } from "./review/policy.mjs";
+import { findingsProblems, orderRun, orderTickets, prNumber, reviewRun, ticketsRead, toolVerdict } from "./review/policy.mjs";
 
 const MAX_BLOCKS = 3;
 
@@ -259,20 +261,33 @@ function readState(file) {
   }
 }
 
-/** @param {HookInput} input @returns {number} */
-export function run(input) {
+/**
+ * The session's review run and where it came from. The waybill order
+ * is the receiver (skills#195, waybill#1): a `role: reviewer` order
+ * makes the session a review. The prompt marker is the fallback for a
+ * Routine that still saves it.
+ * @param {HookInput} input
+ */
+function session(input) {
   const transcript = input.transcript_path ?? null;
   const text = transcript && fs.existsSync(transcript) ? fs.readFileSync(transcript, "utf8") : "";
-  const review = reviewRun(text);
-  if (!review) return 0;
   const repoRoot = process.env.HEARTBEAT_REPO_ROOT || process.env.SESSION_ROOT || null;
   const orderRef = process.env.CCR_TRIGGER_HEAD_REF ?? "";
+  const orderFile =
+    repoRoot && orderRef.startsWith("order/")
+      ? path.join(repoRoot, "waybill", "orders", `${orderRef.slice("order/".length)}.yml`)
+      : null;
+  const order = orderFile && fs.existsSync(orderFile) ? orderRun(fs.readFileSync(orderFile, "utf8")) : null;
+  return { text, repoRoot, orderFile, review: order ?? reviewRun(text) };
+}
+
+/** @param {HookInput} input @returns {number} */
+export function run(input) {
+  const { text, repoRoot, orderFile, review } = session(input);
+  if (!review) return 0;
   const ctx = {
     repoRoot,
-    orderFile:
-      repoRoot && orderRef.startsWith("order/")
-        ? path.join(repoRoot, "waybill", "orders", `${orderRef.slice("order/".length)}.yml`)
-        : null,
+    orderFile,
     transcriptText: text,
     logFile: localFile("review-driver.jsonl"),
     stateFile: localFile("review-driver-state.json"),
@@ -339,9 +354,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
     throw err;
   });
   if (process.argv.includes("--is-review")) {
-    const transcript = input.transcript_path ?? null;
-    const text = transcript && fs.existsSync(transcript) ? fs.readFileSync(transcript, "utf8") : "";
-    process.exitCode = reviewRun(text) ? 0 : 1;
+    process.exitCode = session(input).review ? 0 : 1;
   } else {
     try {
       process.exitCode = run(input);
