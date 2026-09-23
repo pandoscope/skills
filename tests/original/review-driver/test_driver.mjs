@@ -28,11 +28,15 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DRIVER = path.join(HERE, "../../../original/thread-ledger/review-driver.mjs");
 
 const PROMPT = "PANDO-REVIEW: spec-fidelity tier=sonnet\n\nReview the pull request named in the trigger.";
-const PARSED = reviewRun(
-  `${JSON.stringify({ type: "user", message: { role: "user", content: PROMPT } })}\n` +
-    `${JSON.stringify({ type: "assistant", message: { role: "assistant", model: "m", usage: { input_tokens: 1 }, content: [] } })}\n`,
-);
-if (!PARSED) throw new Error("the kata prompt did not parse as a review run");
+// Every kata session is dispatched by this order.
+// The Routine's prompt, DISPATCH below, carries no data (skills#195, waybill#1).
+const ORDER =
+  "id: review-spec-fidelity-sonnet-pr143\nrole: reviewer\npass: spec-fidelity\ntier: sonnet\n" +
+  "pull_request: pandoscope/meta#143\ntickets:\n  - pandoscope/skills#195\n";
+const ORDER_REF = "order/review-spec-fidelity-sonnet-pr143";
+const DISPATCH = "A waybill order dispatched this autonomous session. Read CLAUDE.md and follow it.";
+const PARSED = orderRun(ORDER);
+if (!PARSED) throw new Error("the kata order did not parse as a review run");
 const RUN = PARSED;
 
 describe("marker", () => {
@@ -227,10 +231,15 @@ function stage() {
   const transcript = path.join(root, "transcript.jsonl");
   fs.writeFileSync(
     transcript,
-    `${JSON.stringify({ type: "user", message: { role: "user", content: PROMPT } })}\n` +
+    `${JSON.stringify({ type: "user", message: { role: "user", content: DISPATCH } })}\n` +
       `${JSON.stringify({ type: "assistant", timestamp: "t", message: { role: "assistant", model: "claude-sonnet", usage: { input_tokens: 10, output_tokens: 5 }, content: [{ type: "tool_use", name: "Bash", input: { command: "git diff" } }] } })}\n`,
   );
-  return { root, home, clone, transcript };
+  fs.appendFileSync(transcript, issueRead("r0", "pandoscope", "skills", 195));
+  const orders = path.join(root, "repos", "waybill", "orders");
+  fs.mkdirSync(orders, { recursive: true });
+  const order = path.join(orders, "review-spec-fidelity-sonnet-pr143.yml");
+  fs.writeFileSync(order, ORDER);
+  return { root, home, clone, transcript, order };
 }
 
 /**
@@ -242,7 +251,7 @@ function fire(s, input, env = {}) {
   const r = spawnSync("node", [DRIVER], {
     input: JSON.stringify({ transcript_path: s.transcript, session_id: "kata", ...input }),
     encoding: "utf8",
-    env: { ...process.env, HOME: s.home, CLAUDE_CONFIG_DIR: path.join(s.home, ".claude"), HEARTBEAT_REPO_ROOT: path.join(s.root, "repos"), CCR_TRIGGER_HEAD_REF: "", ...env },
+    env: { ...process.env, HOME: s.home, CLAUDE_CONFIG_DIR: path.join(s.home, ".claude"), HEARTBEAT_REPO_ROOT: path.join(s.root, "repos"), CCR_TRIGGER_HEAD_REF: ORDER_REF, ...env },
   });
   return { code: r.status, err: r.stderr ?? "" };
 }
@@ -257,10 +266,6 @@ function issueRead(id, owner, repo, n, error = false) {
     `${JSON.stringify({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, is_error: error, content: [{ type: "text", text: "{\"number\":1}" }] }] } })}\n`
   );
 }
-
-const ORDER =
-  "id: review-spec-fidelity-sonnet-pr143\nrole: reviewer\npass: spec-fidelity\ntier: sonnet\n" +
-  "pull_request: pandoscope/meta#143\ntickets:\n  - pandoscope/skills#195\n";
 
 describe("order run", () => {
   it("reads pass and tier from a reviewer order", () => {
@@ -304,21 +309,14 @@ describe("order tickets", () => {
 describe("staged session", () => {
   it("blocks Stop until every ticket in the order was read", () => {
     const s = stage();
-    const orders = path.join(s.root, "repos", "waybill", "orders");
-    fs.mkdirSync(orders, { recursive: true });
-    fs.writeFileSync(
-      path.join(orders, "review-spec-fidelity-sonnet-pr143.yml"),
-      "id: review-spec-fidelity-sonnet-pr143\nrole: reviewer\ntickets:\n  - pandoscope/skills#195\n  - pandoscope/waybill#1\n",
-    );
-    const env = { CCR_TRIGGER_HEAD_REF: "order/review-spec-fidelity-sonnet-pr143" };
-    fs.appendFileSync(s.transcript, issueRead("r1", "pandoscope", "skills", 195));
-    let stop = fire(s, { hook_event_name: "Stop" }, env);
+    fs.writeFileSync(s.order, `${ORDER}  - pandoscope/waybill#1\n`);
+    let stop = fire(s, { hook_event_name: "Stop" });
     assert.equal(stop.code, 2);
     assert.match(stop.err, /not complete until every ticket the order names was read/);
     assert.match(stop.err, /pandoscope\/waybill#1/);
     assert.doesNotMatch(stop.err, /pandoscope\/skills#195/);
     fs.appendFileSync(s.transcript, issueRead("r2", "pandoscope", "waybill", 1));
-    stop = fire(s, { hook_event_name: "Stop" }, env);
+    stop = fire(s, { hook_event_name: "Stop" });
     assert.equal(stop.code, 2);
     assert.match(stop.err, /not complete until reviews\/spec-fidelity-sonnet\/findings.json exists/);
   });
@@ -382,34 +380,29 @@ describe("staged session", () => {
     assert.match(again.err, /released INCOMPLETE — findings-written/);
   });
 
-  it("takes the review run from the order when the prompt carries no marker", () => {
+  it("reports a session its order makes a review", () => {
     const s = stage();
-    fs.writeFileSync(s.transcript, `${JSON.stringify({ type: "user", message: { content: "A waybill order dispatched this session." } })}\n`);
-    const orders = path.join(s.root, "repos", "waybill", "orders");
-    fs.mkdirSync(orders, { recursive: true });
-    fs.writeFileSync(path.join(orders, "review-spec-fidelity-sonnet-pr143.yml"), ORDER);
-    const env = { CCR_TRIGGER_HEAD_REF: "order/review-spec-fidelity-sonnet-pr143" };
-    fs.appendFileSync(s.transcript, issueRead("r1", "pandoscope", "skills", 195));
-    const denied = fire(s, { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "python3 x.py" } }, env);
-    assert.equal(denied.code, 2);
-    assert.match(denied.err, /spec-fidelity review session \(tier sonnet\)/);
-    const stop = fire(s, { hook_event_name: "Stop" }, env);
-    assert.equal(stop.code, 2);
-    assert.match(stop.err, /not complete until reviews\/spec-fidelity-sonnet\/findings.json exists/);
     const r = spawnSync("node", [DRIVER, "--is-review"], {
       input: JSON.stringify({ transcript_path: s.transcript }),
       encoding: "utf8",
-      env: { ...process.env, HEARTBEAT_REPO_ROOT: path.join(s.root, "repos"), ...env },
+      env: { ...process.env, HEARTBEAT_REPO_ROOT: path.join(s.root, "repos"), CCR_TRIGGER_HEAD_REF: ORDER_REF },
     });
     assert.equal(r.status, 0);
   });
 
-  it("leaves a session without the marker alone", () => {
+  it("leaves a session without a reviewer order alone", () => {
     const s = stage();
-    fs.writeFileSync(s.transcript, `${JSON.stringify({ type: "user", message: { content: "fix the bug" } })}\n`);
-    assert.equal(fire(s, { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "python3 x.py" } }).code, 0);
+    const none = { CCR_TRIGGER_HEAD_REF: "" };
+    assert.equal(fire(s, { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "python3 x.py" } }, none).code, 0);
+    assert.equal(fire(s, { hook_event_name: "Stop" }, none).code, 0);
+    fs.writeFileSync(s.order, "id: review-spec-fidelity-sonnet-pr143\nrole: implementer\n");
     assert.equal(fire(s, { hook_event_name: "Stop" }).code, 0);
-    const r = spawnSync("node", [DRIVER, "--is-review"], { input: JSON.stringify({ transcript_path: s.transcript }), encoding: "utf8" });
+    const r = spawnSync("node", [DRIVER, "--is-review"], {
+      input: JSON.stringify({ transcript_path: s.transcript }),
+      encoding: "utf8",
+      env: { ...process.env, HEARTBEAT_REPO_ROOT: path.join(s.root, "repos"), CCR_TRIGGER_HEAD_REF: "" },
+    });
     assert.equal(r.status, 1);
   });
+
 });
