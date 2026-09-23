@@ -23,17 +23,6 @@ import {
   toolVerdict,
 } from "../../../original/thread-ledger/review/policy.mjs";
 
-// node:test has no strict expected failure: `red.fails` passes only
-// while its body throws, so a red kata that starts passing turns the
-// suite red until its marker is removed (tdd protocol).
-const red = {
-  /** @param {string} name @param {() => void} fn */
-  fails: (name, fn) =>
-    it(`[red] ${name}`, () => {
-      assert.throws(fn, "red kata passed: remove its marker in the green commit");
-    }),
-};
-
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DRIVER = path.join(HERE, "../../../original/thread-ledger/review-driver.mjs");
 
@@ -269,7 +258,7 @@ function issueRead(id, owner, repo, n, error = false) {
 }
 
 describe("order tickets", () => {
-  red.fails("reads the tickets list in block and flow form, lowercase", () => {
+  it("reads the tickets list in block and flow form, lowercase", () => {
     assert.deepEqual(
       orderTickets("id: x\nrole: reviewer\ntickets:\n  - pandoscope/skills#195\n  - 'Pandoscope/Waybill#1'  # the order\npass: spec-fidelity\n"),
       ["pandoscope/skills#195", "pandoscope/waybill#1"],
@@ -281,7 +270,7 @@ describe("order tickets", () => {
     assert.deepEqual(orderTickets("id: x\ntickets: []\n"), []);
     assert.deepEqual(orderTickets("id: x\n"), []);
   });
-  red.fails("counts a ticket read only when its issue read result came back clean", () => {
+  it("counts a ticket read only when its issue read result came back clean", () => {
     const text =
       issueRead("a", "pandoscope", "skills", 195) +
       issueRead("b", "Pandoscope", "Meta", 52) +
@@ -292,7 +281,7 @@ describe("order tickets", () => {
 });
 
 describe("staged session", () => {
-  red.fails("blocks Stop until every ticket in the order was read", () => {
+  it("blocks Stop until every ticket in the order was read", () => {
     const s = stage();
     const orders = path.join(s.root, "repos", "waybill", "orders");
     fs.mkdirSync(orders, { recursive: true });

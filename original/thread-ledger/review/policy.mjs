@@ -477,8 +477,27 @@ export function prNumber(doc) {
  * @returns {string[]}
  */
 export function orderTickets(orderText) {
-  void orderText;
-  throw new Error("not implemented");
+  const lines = orderText.split("\n");
+  const at = lines.findIndex((l) => /^tickets:/.test(l));
+  if (at < 0) return [];
+  const bare = (/** @type {string} */ v) =>
+    v.replace(/\s+#.*$/, "").trim().replace(/^["']|["']$/g, "").toLowerCase();
+  const inline = lines[at].slice("tickets:".length).trim();
+  if (inline.startsWith("[")) {
+    return inline
+      .replace(/^\[|\].*$/g, "")
+      .split(",")
+      .map(bare)
+      .filter(Boolean);
+  }
+  /** @type {string[]} */
+  const out = [];
+  for (const line of lines.slice(at + 1)) {
+    const m = /^\s+-\s+(.+)$/.exec(line);
+    if (!m) break;
+    out.push(bare(m[1]));
+  }
+  return out;
 }
 
 /**
@@ -488,6 +507,29 @@ export function orderTickets(orderText) {
  * @returns {Set<string>}
  */
 export function ticketsRead(transcriptText) {
-  void transcriptText;
-  throw new Error("not implemented");
+  /** @type {Map<string, string>} */
+  const calls = new Map();
+  /** @type {Set<string>} */
+  const read = new Set();
+  for (const line of transcriptText.split("\n")) {
+    let d;
+    try {
+      d = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    const content = d?.message?.content;
+    if (!Array.isArray(content)) continue;
+    for (const b of content) {
+      if (b?.type === "tool_use" && /(^|__)issue_read$/.test(b.name ?? "")) {
+        const i = b.input ?? {};
+        if ((i.method ?? "get") !== "get" || !i.owner || !i.repo || !i.issue_number) continue;
+        calls.set(b.id, `${i.owner}/${i.repo}#${i.issue_number}`.toLowerCase());
+      }
+      if (b?.type === "tool_result" && calls.has(b.tool_use_id) && b.is_error !== true) {
+        read.add(/** @type {string} */ (calls.get(b.tool_use_id)));
+      }
+    }
+  }
+  return read;
 }

@@ -21,12 +21,15 @@
 // posted. Prohibitions therefore fire BEFORE the call, and the Stop
 // hook keeps only the completion criterion. Policy: `review/policy.mjs`.
 //
-// The driver's own observations — every denial, every Stop verdict —
-// are the measurement this exists for, so they are copied into the
-// review directory beside the findings and travel on the same branch.
+// The driver's denials and a trace of the session's calls and usage
+// are the measurement this exists for.
+// The driver writes them beside the findings, on the review branch.
 //
 //     HEARTBEAT_REPO_ROOT   directory holding the session's clones
-//     --is-review           exit 0 when stdin describes a review session,
+//     CCR_TRIGGER_HEAD_REF  the order branch, order/<name>; its order
+//                           file waybill/orders/<name>.yml names the
+//                           tickets the review must read
+//     --is-review           exit 0 when the order makes the session a review,
 //                           1 otherwise — the sentinel's skip test
 
 import { spawnSync } from "node:child_process";
@@ -36,7 +39,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-import { findingsProblems, prNumber, reviewRun, toolVerdict } from "./review/policy.mjs";
+import { findingsProblems, orderTickets, prNumber, reviewRun, ticketsRead, toolVerdict } from "./review/policy.mjs";
 
 const MAX_BLOCKS = 3;
 
@@ -58,6 +61,7 @@ const MAX_BLOCKS = 3;
  * @property {string} logFile           the driver's own observations
  * @property {string} stateFile         the loop guard's memory
  * @property {string} session
+ * @property {string | null} orderFile  the waybill order, when one fired the session
  */
 /** @typedef {{ check: string, detail: string, reason: string }} Failure */
 /** @typedef {{ input: number, output: number, cacheRead: number, cacheCreation: number, messages: number }} Usage */
@@ -139,6 +143,21 @@ function clonesUnder(root) {
  * @returns {Failure | null}
  */
 export function stopVerdict(run, ctx) {
+  if (ctx.orderFile && fs.existsSync(ctx.orderFile)) {
+    const read = ticketsRead(ctx.transcriptText);
+    const missing = orderTickets(fs.readFileSync(ctx.orderFile, "utf8")).filter((t) => !read.has(t));
+    if (missing.length) {
+      return {
+        check: "tickets-read",
+        detail: `unread: ${missing.join(", ")}`,
+        reason: [
+          "The review is not complete until every ticket the order names was read: the tickets are the specification.",
+          "Read each with the GitHub issue read tool, method get:",
+          ...missing.map((t) => `  ${t}`),
+        ].join("\n"),
+      };
+    }
+  }
   const clones = clonesUnder(ctx.repoRoot);
   const clone = clones.find((c) => fs.existsSync(path.join(c, run.findings)));
   const where = ctx.repoRoot ? ` under ${ctx.repoRoot}` : "";
@@ -246,8 +265,14 @@ export function run(input) {
   const text = transcript && fs.existsSync(transcript) ? fs.readFileSync(transcript, "utf8") : "";
   const review = reviewRun(text);
   if (!review) return 0;
+  const repoRoot = process.env.HEARTBEAT_REPO_ROOT || process.env.SESSION_ROOT || null;
+  const orderRef = process.env.CCR_TRIGGER_HEAD_REF ?? "";
   const ctx = {
-    repoRoot: process.env.HEARTBEAT_REPO_ROOT || process.env.SESSION_ROOT || null,
+    repoRoot,
+    orderFile:
+      repoRoot && orderRef.startsWith("order/")
+        ? path.join(repoRoot, "waybill", "orders", `${orderRef.slice("order/".length)}.yml`)
+        : null,
     transcriptText: text,
     logFile: localFile("review-driver.jsonl"),
     stateFile: localFile("review-driver-state.json"),
