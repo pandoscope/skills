@@ -34,3 +34,16 @@ The rendered `AGENTS.md` does name `ghx`, because it is template-owned
 and the template has no tracker-agnostic answer to select (see
 frankify-app/agentic-engineering-template#68). That governs how an
 agent works *in this repo*; it must not propagate into shipped skills.
+
+## Prose
+
+Skills, ADRs, tickets and docs are terse and flat: the caveman skill's
+docs mode. Save tokens by cutting fluff and optional function words,
+never by nesting clauses; readability sets the limit.
+
+## Repo-local skill overrides
+
+- `grilling`: present questions through the platform's native question
+  dialog (`AskUserQuestion` in Claude Code) when the platform has one;
+  fall back to plain text otherwise. The multiple-choice format itself
+  is part of the skill; this override covers presentation only.

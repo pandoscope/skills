@@ -13,7 +13,7 @@
           },
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/scripts/ensure-test-tools.sh\""
+            "command": "bash \"$CLAUDE_PROJECT_DIR/scripts/session-start.local.sh\""
           }
         ]
       }
