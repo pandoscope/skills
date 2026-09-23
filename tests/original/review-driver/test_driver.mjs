@@ -24,6 +24,16 @@ import {
   toolVerdict,
 } from "../../../original/thread-ledger/review/policy.mjs";
 
+// node:test has no strict expected failure: `red.fails` passes only
+// while its body throws (tdd protocol).
+const red = {
+  /** @param {string} name @param {() => void} fn */
+  fails: (name, fn) =>
+    it(`[red] ${name}`, () => {
+      assert.throws(fn, "red kata passed: remove its marker in the green commit");
+    }),
+};
+
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DRIVER = path.join(HERE, "../../../original/thread-ledger/review-driver.mjs");
 
@@ -388,6 +398,14 @@ describe("staged session", () => {
       env: { ...process.env, HEARTBEAT_REPO_ROOT: path.join(s.root, "repos"), CCR_TRIGGER_HEAD_REF: ORDER_REF },
     });
     assert.equal(r.status, 0);
+  });
+
+  red.fails("ignores a PANDO-REVIEW prompt line: the order is the only receiver", () => {
+    const s = stage();
+    fs.writeFileSync(s.transcript, `${JSON.stringify({ type: "user", message: { content: PROMPT } })}\n`);
+    const none = { CCR_TRIGGER_HEAD_REF: "" };
+    assert.equal(fire(s, { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "python3 x.py" } }, none).code, 0);
+    assert.equal(fire(s, { hook_event_name: "Stop" }, none).code, 0);
   });
 
   it("leaves a session without a reviewer order alone", () => {
