@@ -95,7 +95,7 @@ Each table is sorted alphabetically by skill — keep it sorted when adding entr
 
 | Skill                    | Trigger                                                                                            |
 | ------------------------ | -------------------------------------------------------------------------------------------------- |
-| `caveman`                | Terse, easy-to-parse prose: natural chat, token-saving docs (issue and PR descriptions, comments)   |
+| `caveman`                | Terse, easy-to-parse prose: natural chat, token-saving docs (issue and PR descriptions, comments)  |
 | `documenting-decisions`  | Any implementation task — place `DECISION:` markers                                                |
 | `domain-modeling`        | Pinning down domain terminology (glossary in `docs/glossary/`) or recording decisions in design    |
 | `grill-me`               | User asks to be grilled/interviewed about a plan or design before implementation                   |
