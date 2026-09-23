@@ -54,6 +54,17 @@ export function reviewRun(transcriptText) {
 }
 
 /**
+ * The review run a waybill order declares, or null: the order names
+ * `role: reviewer` with its `pass` and `tier`.
+ * @param {string} orderText the order file, YAML
+ * @returns {ReviewRun | null}
+ */
+export function orderRun(orderText) {
+  void orderText;
+  throw new Error("not implemented");
+}
+
+/**
  * @param {string | null | undefined} text
  * @returns {string | null}
  */
