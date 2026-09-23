@@ -14,7 +14,25 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { bashVerdict, findingsProblems, reviewRun, toolVerdict } from "../../../original/thread-ledger/review/policy.mjs";
+import {
+  bashVerdict,
+  findingsProblems,
+  orderTickets,
+  reviewRun,
+  ticketsRead,
+  toolVerdict,
+} from "../../../original/thread-ledger/review/policy.mjs";
+
+// node:test has no strict expected failure: `red.fails` passes only
+// while its body throws, so a red kata that starts passing turns the
+// suite red until its marker is removed (tdd protocol).
+const red = {
+  /** @param {string} name @param {() => void} fn */
+  fails: (name, fn) =>
+    it(`[red] ${name}`, () => {
+      assert.throws(fn, "red kata passed: remove its marker in the green commit");
+    }),
+};
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DRIVER = path.join(HERE, "../../../original/thread-ledger/review-driver.mjs");
@@ -228,17 +246,73 @@ function stage() {
 /**
  * @param {ReturnType<typeof stage>} s
  * @param {Record<string, unknown>} input
+ * @param {Record<string, string>} [env]
  */
-function fire(s, input) {
+function fire(s, input, env = {}) {
   const r = spawnSync("node", [DRIVER], {
     input: JSON.stringify({ transcript_path: s.transcript, session_id: "kata", ...input }),
     encoding: "utf8",
-    env: { ...process.env, HOME: s.home, CLAUDE_CONFIG_DIR: path.join(s.home, ".claude"), HEARTBEAT_REPO_ROOT: path.join(s.root, "repos") },
+    env: { ...process.env, HOME: s.home, CLAUDE_CONFIG_DIR: path.join(s.home, ".claude"), HEARTBEAT_REPO_ROOT: path.join(s.root, "repos"), CCR_TRIGGER_HEAD_REF: "", ...env },
   });
   return { code: r.status, err: r.stderr ?? "" };
 }
 
+/**
+ * One issue read call and its result, as the transcript records them.
+ * @param {string} id @param {string} owner @param {string} repo @param {number} n @param {boolean} [error]
+ */
+function issueRead(id, owner, repo, n, error = false) {
+  return (
+    `${JSON.stringify({ type: "assistant", message: { role: "assistant", model: "m", content: [{ type: "tool_use", id, name: "mcp__github__issue_read", input: { method: "get", owner, repo, issue_number: n } }] } })}\n` +
+    `${JSON.stringify({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, is_error: error, content: [{ type: "text", text: "{\"number\":1}" }] }] } })}\n`
+  );
+}
+
+describe("order tickets", () => {
+  red.fails("reads the tickets list in block and flow form, lowercase", () => {
+    assert.deepEqual(
+      orderTickets("id: x\nrole: reviewer\ntickets:\n  - pandoscope/skills#195\n  - 'Pandoscope/Waybill#1'  # the order\npass: spec-fidelity\n"),
+      ["pandoscope/skills#195", "pandoscope/waybill#1"],
+    );
+    assert.deepEqual(orderTickets("tickets: [pandoscope/skills#195, \"pandoscope/meta#52\"]\n"), [
+      "pandoscope/skills#195",
+      "pandoscope/meta#52",
+    ]);
+    assert.deepEqual(orderTickets("id: x\ntickets: []\n"), []);
+    assert.deepEqual(orderTickets("id: x\n"), []);
+  });
+  red.fails("counts a ticket read only when its issue read result came back clean", () => {
+    const text =
+      issueRead("a", "pandoscope", "skills", 195) +
+      issueRead("b", "Pandoscope", "Meta", 52) +
+      issueRead("c", "pandoscope", "waybill", 1, true) +
+      `${JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "d", name: "mcp__github__issue_read", input: { method: "get_comments", owner: "pandoscope", repo: "ghx", issue_number: 3 } }] } })}\n`;
+    assert.deepEqual([...ticketsRead(text)].sort(), ["pandoscope/meta#52", "pandoscope/skills#195"]);
+  });
+});
+
 describe("staged session", () => {
+  red.fails("blocks Stop until every ticket in the order was read", () => {
+    const s = stage();
+    const orders = path.join(s.root, "repos", "waybill", "orders");
+    fs.mkdirSync(orders, { recursive: true });
+    fs.writeFileSync(
+      path.join(orders, "review-spec-fidelity-sonnet-pr143.yml"),
+      "id: review-spec-fidelity-sonnet-pr143\nrole: reviewer\ntickets:\n  - pandoscope/skills#195\n  - pandoscope/waybill#1\n",
+    );
+    const env = { CCR_TRIGGER_HEAD_REF: "order/review-spec-fidelity-sonnet-pr143" };
+    fs.appendFileSync(s.transcript, issueRead("r1", "pandoscope", "skills", 195));
+    let stop = fire(s, { hook_event_name: "Stop" }, env);
+    assert.equal(stop.code, 2);
+    assert.match(stop.err, /not complete until every ticket the order names was read/);
+    assert.match(stop.err, /pandoscope\/waybill#1/);
+    assert.doesNotMatch(stop.err, /pandoscope\/skills#195/);
+    fs.appendFileSync(s.transcript, issueRead("r2", "pandoscope", "waybill", 1));
+    stop = fire(s, { hook_event_name: "Stop" }, env);
+    assert.equal(stop.code, 2);
+    assert.match(stop.err, /not complete until reviews\/spec-fidelity-sonnet\/findings.json exists/);
+  });
+
   it("denies at PreToolUse, logs it, and walks the Stop criteria to completion", () => {
     const s = stage();
     const denied = fire(s, { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "python3 -m pytest" } });
