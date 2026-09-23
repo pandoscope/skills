@@ -5,10 +5,8 @@
 // Registered for `PreToolUse` and `Stop`. Reads the hook's JSON on
 // stdin. When the waybill order that fired the session names
 // `role: reviewer` with its pass and tier, the session is a review
-// session. A Routine that still saves the `PANDO-REVIEW: <pass>
-// tier=<tier>` marker line as its prompt is the fallback. Otherwise
-// every event exits 0 untouched, and the ledger heartbeat keeps the
-// session.
+// session. Otherwise every event exits 0 untouched, and the ledger
+// heartbeat keeps the session.
 //
 //     PreToolUse   exit 2 + stderr   the call is denied; the reason
 //                                    names the rule and the alternative
@@ -41,7 +39,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-import { findingsProblems, orderRun, orderTickets, prNumber, reviewRun, ticketsRead, toolVerdict } from "./review/policy.mjs";
+import { findingsProblems, orderRun, orderTickets, prNumber, ticketsRead, toolVerdict } from "./review/policy.mjs";
 
 const MAX_BLOCKS = 3;
 
@@ -262,10 +260,8 @@ function readState(file) {
 }
 
 /**
- * The session's review run and where it came from. The waybill order
- * is the receiver (skills#195, waybill#1): a `role: reviewer` order
- * makes the session a review. The prompt marker is the fallback for a
- * Routine that still saves it.
+ * The session's review run and where it came from
+ * (SKILL.md, "Review sessions").
  * @param {HookInput} input
  */
 function session(input) {
@@ -278,7 +274,7 @@ function session(input) {
       ? path.join(repoRoot, "waybill", "orders", `${orderRef.slice("order/".length)}.yml`)
       : null;
   const order = orderFile && fs.existsSync(orderFile) ? orderRun(fs.readFileSync(orderFile, "utf8")) : null;
-  return { text, repoRoot, orderFile, review: order ?? reviewRun(text) };
+  return { text, repoRoot, orderFile, review: order };
 }
 
 /** @param {HookInput} input @returns {number} */

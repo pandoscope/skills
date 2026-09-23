@@ -19,20 +19,9 @@ import {
   findingsProblems,
   orderRun,
   orderTickets,
-  reviewRun,
   ticketsRead,
   toolVerdict,
 } from "../../../original/thread-ledger/review/policy.mjs";
-
-// node:test has no strict expected failure: `red.fails` passes only
-// while its body throws (tdd protocol).
-const red = {
-  /** @param {string} name @param {() => void} fn */
-  fails: (name, fn) =>
-    it(`[red] ${name}`, () => {
-      assert.throws(fn, "red kata passed: remove its marker in the green commit");
-    }),
-};
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DRIVER = path.join(HERE, "../../../original/thread-ledger/review-driver.mjs");
@@ -48,28 +37,6 @@ const DISPATCH = "A waybill order dispatched this autonomous session. Read CLAUD
 const PARSED = orderRun(ORDER);
 if (!PARSED) throw new Error("the kata order did not parse as a review run");
 const RUN = PARSED;
-
-describe("marker", () => {
-  it("reads pass and tier from the first user message", () => {
-    assert.equal(RUN.pass, "spec-fidelity");
-    assert.equal(RUN.tier, "sonnet");
-    assert.equal(RUN.findings, "reviews/spec-fidelity-sonnet/findings.json");
-  });
-  it("ignores a marker that is not on its own line, or not in the first message", () => {
-    const later =
-      `${JSON.stringify({ type: "user", message: { content: "do the thing" } })}\n` +
-      `${JSON.stringify({ type: "user", message: { content: PROMPT } })}\n`;
-    assert.equal(reviewRun(later), null);
-    assert.equal(reviewRun(JSON.stringify({ type: "user", message: { content: "see PANDO-REVIEW: x tier=y here" } })), null);
-    assert.equal(reviewRun(""), null);
-  });
-  it("skips tool_result user turns when looking for the prompt", () => {
-    const text =
-      `${JSON.stringify({ type: "user", message: { content: [{ type: "tool_result", content: "x" }] } })}\n` +
-      `${JSON.stringify({ type: "user", message: { content: [{ type: "text", text: PROMPT }] } })}\n`;
-    assert.equal(reviewRun(text)?.tier, "sonnet");
-  });
-});
 
 describe("bash policy", () => {
   /** @param {string} cmd */
@@ -176,11 +143,11 @@ describe("tool policy", () => {
     if (v.allow) assert.fail("Artifact should be denied");
     assert.match(v.why, /not on the review session's tool list/);
   });
-  it("denies subagents, which would carry no marker and so no policy", () => {
+  it("denies subagents, which the policy does not reach", () => {
     for (const name of ["Agent", "Task"]) {
       const v = toolVerdict(name, { prompt: "run the tests" }, RUN);
       if (v.allow) assert.fail(`${name} should be denied`);
-      assert.match(v.why, /carries no PANDO-REVIEW marker/);
+      assert.match(v.why, /policy does not reach/);
       assert.match(v.why, /could run the code this review may not run/);
     }
     // The task list is not a subagent: it spawns nothing.
@@ -400,7 +367,7 @@ describe("staged session", () => {
     assert.equal(r.status, 0);
   });
 
-  red.fails("ignores a PANDO-REVIEW prompt line: the order is the only receiver", () => {
+  it("ignores a PANDO-REVIEW prompt line: the order is the only receiver", () => {
     const s = stage();
     fs.writeFileSync(s.transcript, `${JSON.stringify({ type: "user", message: { content: PROMPT } })}\n`);
     const none = { CCR_TRIGGER_HEAD_REF: "" };

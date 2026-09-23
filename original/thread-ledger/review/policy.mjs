@@ -23,25 +23,11 @@
  */
 /** @typedef {{ allow: true } | { allow: false, why: string }} Verdict */
 
-// ------------------------------------------------------------ marker
+// ------------------------------------------------------------- order
 
-// The routine's saved prompt is the session's first user message, and
-// the only thing the hooks can read that was stored ahead of the run.
-// `PANDO-REVIEW: <pass> tier=<tier>` on its own line makes the session
-// a review session; nothing else does.
+// The order that fired the session, read as a review run
+// (SKILL.md, "Review sessions").
 const NAME = /^[a-z0-9-]+$/;
-const MARKER = /^PANDO-REVIEW:\s*([a-z0-9-]+)\s+tier=([a-z0-9-]+)\s*$/m;
-
-/**
- * The review run a transcript's first user message declares, or null.
- * @param {string} transcriptText
- * @returns {ReviewRun | null}
- */
-export function reviewRun(transcriptText) {
-  const first = firstUserText(transcriptText);
-  const m = first ? MARKER.exec(first) : null;
-  return m ? runFor(m[1], m[2]) : null;
-}
 
 /**
  * @param {string} pass
@@ -77,30 +63,6 @@ export function orderRun(orderText) {
   const tier = field("tier");
   if (field("role") !== "reviewer" || !NAME.test(pass) || !NAME.test(tier)) return null;
   return runFor(pass, tier);
-}
-
-/**
- * @param {string | null | undefined} text
- * @returns {string | null}
- */
-function firstUserText(text) {
-  for (const line of (text ?? "").split("\n")) {
-    let d;
-    try {
-      d = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    if (d?.type !== "user" || !d.message) continue;
-    const c = d.message.content;
-    if (typeof c === "string") return c;
-    if (Array.isArray(c)) {
-      const blocks = c.filter((b) => b?.type === "text").map((b) => b.text);
-      if (blocks.length) return blocks.join("\n");
-    }
-    // A tool_result user turn is not the prompt; keep looking.
-  }
-  return null;
 }
 
 // ------------------------------------------------------------- tools
@@ -155,7 +117,7 @@ export function toolVerdict(name, input, run) {
     return {
       allow: false,
       why:
-        `${name} spawns a session of its own, whose transcript carries no PANDO-REVIEW marker, so ` +
+        `${name} spawns a session of its own that this review's policy does not reach, so ` +
         "nothing in it is read-only: it could run the code this review may not run. Read the change " +
         "yourself with Read, Grep and Glob.",
     };

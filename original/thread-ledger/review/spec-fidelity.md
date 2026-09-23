@@ -1,20 +1,18 @@
-# Routine prompt: spec-fidelity review
+# Review task: spec-fidelity
 
-The saved prompt of one routine per model tier (skills#195). Paste the
-block below into the routine's Instructions with `<tier>` replaced by
-the tier the routine's model selector is set to (`haiku`, `sonnet`,
-`opus`); the marker line must stay the first line. The routine's
-GitHub trigger fires on pull request events in the reviewed
-repository, with the repository added to the routine so it is cloned.
+The task of a `pass: spec-fidelity` review (skills#195). A waybill
+order with `role: reviewer` fires the session. The composer takes the
+block below, replaces `<tier>` and `<n>` from the order, and renders
+it into the session's CLAUDE.md. Every Routine saves the same
+one-sentence prompt, which carries no data.
 
-The constraints are not in the prompt. The review driver
-(`../review-driver.mjs`) denies every call outside the read-only
-policy before it runs and refuses to end the session until the
-findings are committed and pushed; the prompt only says what to do.
+The constraints are not in the task. The review driver
+(`../review-driver.mjs`) reads the same order. It denies every call
+outside the read-only policy before the call runs. It refuses to end
+the session until the order's tickets were read and the findings are
+committed and pushed. The task only says what to do.
 
 ```text
-PANDO-REVIEW: spec-fidelity tier=<tier>
-
 # Task
 
 You are a reviewer. This session was started by a pull request event; the repository is cloned under your working directory. Identify the pull request from the trigger context in this conversation: owner/repo, number and head commit. If nothing in this conversation names a pull request, say so in one line and stop.
