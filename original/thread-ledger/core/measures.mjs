@@ -100,6 +100,9 @@ export function perCheck(records, turns, disputes = []) {
         check: name,
         turns: 0,
         unpromptedFail: 0,
+        // A shadowed check's would-be failure (skills#192): what the
+        // check would have refused had it been armed, billed to no one.
+        shadow: 0,
         unconfigured: 0,
         fired: 0,
         cleared: 0,
@@ -124,6 +127,7 @@ export function perCheck(records, turns, disputes = []) {
       }
       row.turns += 1;
       if (verdict === "fail") row.unpromptedFail += 1;
+      if (verdict === "shadow") row.shadow += 1;
       if (verdict === "unconfigured") row.unconfigured += 1;
     }
   }

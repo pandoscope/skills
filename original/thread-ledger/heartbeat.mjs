@@ -47,7 +47,7 @@ import { fileURLToPath } from "node:url";
 import { LedgerError } from "./core.mjs";
 import { digestOf, readLog, stretchOf } from "./diligence.mjs";
 import { append, push } from "./ledger.mjs";
-import { CHECKS } from "./checks/index.mjs";
+import { runChecks } from "./checks/index.mjs";
 import {
   complianceRecord,
   cycleOf,
@@ -85,7 +85,7 @@ const MAX_BLOCKS = 3;
  */
 export function run(input) {
   const ctx = context(input);
-  const verdicts = CHECKS.map((entry) => ({ check: entry.check, ...entry.run(ctx) }));
+  const verdicts = runChecks(ctx);
   const failed = verdicts.find((verdict) => verdict.verdict === "fail");
   const reported = verdicts.map(({ check, verdict, detail }) => ({ check, verdict, detail }));
   // What a passing check still has to say — printed when the turn ends
