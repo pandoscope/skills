@@ -83,6 +83,11 @@ Example, "Why does the React component re-render?":
   No clause between verb and complement.
 - Relative clause takes "that" or "which", or becomes its own sentence.
 - Every "the X" and "its" refers to something named in current or previous sentence.
+- Known before new: sentence opens with the thing the previous sentence named,
+  then adds the news.
+- Event is a verb, never a noun.
+  A noun for an event drags its participants in as prepositional phrases
+  and pushes the verb late.
 - Prefer shorter phrasing when it reads equally well.
 - Target: a skimming reader can stop after any sentence and have understood it.
 
@@ -95,6 +100,13 @@ It reads the `checkouts:` block of the order.
 For each repository named there, it switches that clone to the listed ref.
 It skips a clone with local changes and says so.
 It never touches the waybill clone."
+
+Not: "The waybill order is the only receiver.
+A fire of the waybill repository from an order branch carries it."
+Yes: "The waybill order is the only receiver.
+It arrives when the Routine fires from an order branch of the waybill repository."
+The first version turns the firing into a noun, hangs two prepositional phrases on it,
+and leaves the known thing as "it" at the end.
 
 ## Auto-Clarity Exception
 
