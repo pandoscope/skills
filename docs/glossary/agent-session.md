@@ -1,4 +1,4 @@
-## Session
+## Agent session
 
 <!-- d10e: auto-prune -->
 <!-- Copier-vendored from the agentic-engineering-template — do NOT edit
@@ -8,5 +8,5 @@
 
 One agent conversation with a defined working set (attached repos) and
 lifetime. Sessions are disposable — repos are the memory; anything durable a
-session produces must land in a repo, an issue, or a decision record before
-it ends.
+session produces must land in a repo, an issue, or a
+[decision record](decision-record.md) before it ends.
