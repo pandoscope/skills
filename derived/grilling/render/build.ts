@@ -44,7 +44,9 @@ function compileClientScript(): string {
         "--strict",
         "--outDir", outDir,
       ],
-      { encoding: "utf8" },
+      // cwd away from the repo root:
+      // a tsconfig.json there makes tsc 6 refuse a file list on the command line (TS5112).
+      { encoding: "utf8", cwd: outDir },
     );
     // Emitted order matters only for declarations page.ts uses at load
     // time; view-model.js must precede page.js in the concatenation.
