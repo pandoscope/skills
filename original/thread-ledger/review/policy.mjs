@@ -467,3 +467,27 @@ export function prNumber(doc) {
   const m = PR.exec(typeof pr === "string" ? pr : "");
   return m ? Number(m[1]) : null;
 }
+
+// ------------------------------------------------------------ tickets
+
+/**
+ * The tickets a waybill order names, as `owner/repo#n`, lowercase.
+ * Reads only the order's `tickets` key.
+ * @param {string} orderText the order file, YAML
+ * @returns {string[]}
+ */
+export function orderTickets(orderText) {
+  void orderText;
+  throw new Error("not implemented");
+}
+
+/**
+ * The tickets the session read, from its transcript:
+ * every issue read call whose result came back without an error, as `owner/repo#n`, lowercase.
+ * @param {string} transcriptText
+ * @returns {Set<string>}
+ */
+export function ticketsRead(transcriptText) {
+  void transcriptText;
+  throw new Error("not implemented");
+}
