@@ -1,6 +1,6 @@
 # Skills — Agent Guidelines
 
-Repo: <https://github.com/frankify-app/skills>
+Repo: <https://github.com/pandoscope/skills>
 
 ## Project Specifics
 
