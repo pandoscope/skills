@@ -33,7 +33,7 @@ Name the surface first: `chat`, `ticket`, `tracker` (pull request bodies and com
 4. Judge every M rule the run lists at its end.
 5. Repeat steps 3 and 4.
    From the second round on, fix findings in place.
-6. Layout comes last on Markdown surfaces.
+6. Layout comes last on the surfaces that read the layout rules.
    Once the content passes, place the semantic line breaks and run step 3 once more.
    A rewrap of lines the content work left alone is a reflow and goes in a style commit of its own, checked with `--style`.
 
