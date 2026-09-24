@@ -6,7 +6,7 @@ Each rules file names its surfaces in its opening line, and `check.sh --rules` h
 
 ## Register
 
-- `filler` [F] Cut filler words: just, really, basically, actually, simply.
+- `filler` [F] Cut filler words: "just", "really", "basically", "actually", "simply".
 - `pleasantry` [F] Cut pleasantries such as "sure", "certainly", "of course" and "happy to help".
 - `hedging` [H] Cut hedging, signposting and meta-commentary.
 - `not-just` [H] Say what a thing is, without the "not just X but Y" escalation.
