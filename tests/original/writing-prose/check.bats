@@ -252,3 +252,16 @@ rules_ids() {
   run "$REPO_ROOT/derived/writing-skills/check.sh" "$REPO_ROOT/original/writing-prose"
   [ "$status" -eq 0 ]
 }
+
+@test "frontmatter is not judged as prose" {
+  f=$(printf -- '---\nname: x\ndescription: >\n  Rules per surface, and the loop\n  that checks them.\n---\n\n# X\n' | text SKILL.md)
+  run "$CHECK" skill "$f"
+  [[ "$output" != *"H sembr"* ]]
+}
+
+@test "commit messages may state history" {
+  f=$(printf 'fix: restore the check\n\nThe hook no longer read the file; the flag was removed in 2.0.\n' | text msg)
+  run "$CHECK" commit "$f"
+  [[ "$output" != *"H present-tense"* ]]
+  [[ "$output" != *"H removed-mention"* ]]
+}
