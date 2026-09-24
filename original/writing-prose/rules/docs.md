@@ -26,6 +26,7 @@ These rules hold for every surface except chat: files, comments, commit messages
 
 ## References
 
+- `consistent-term` [M] Give one thing one name throughout a text, and never use that name for a second thing.
 - `drifting-ref` [H] Link a fact maintained elsewhere instead of restating it as a count, a far position or a section name, while adjacency words stay fine.
 - `one-home` [M] Keep each fact in one place and reference it from everywhere else, and let a declared copy name its source and update path.
 - `glossary-vocab` [M] Use the project's glossary terms in titles, test names and interfaces.
