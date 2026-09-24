@@ -279,3 +279,9 @@ rules_ids() {
   run "$CHECK" markdown "$f"
   [[ "$output" != *"H abbreviation"* ]]
 }
+
+@test "F code-placeholder passes a guillemet that is no placeholder" {
+  f=$(printf 'if (s ~ /[«»]/) exit 1  # matches either guillemet\n' | text c.awk)
+  run "$CHECK" comment "$f"
+  [[ "$output" != *"code-placeholder"* ]]
+}
