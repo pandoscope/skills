@@ -40,7 +40,7 @@ Ubiquitous language: `docs/glossary/`, one file per term, resolve via `uvx disam
 ## Rules
 
 - Edit skills here only. Local copies in consumers get overwritten on update.
-- Terse and flat — the docs mode of `derived/caveman` for skills, ADRs, tickets, docs. Save tokens by cutting fluff and optional function words, never by nesting clauses; readability sets the limit.
+- Prose follows `original/writing-prose` for skills, ADRs, tickets and docs; its `check.sh` runs the rules code can judge.
 - Skills stay tool-agnostic: no consumer-repo tooling (tracker CLIs etc.) hardcoded — defer to consumer's AGENTS.md conventions.
 - Descriptions state triggers only ("Use when ..."), never workflow.
 - Test artifacts live in `tests/`, never inside skill folders. Fixture manifests are named `SKILL.fixture.md` so discovery ignores them.

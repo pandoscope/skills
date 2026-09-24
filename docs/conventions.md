@@ -9,7 +9,7 @@ edit it freely.
 New skills go in `original/`; vendor derivations go in `derived/`. Follow the
 two-commit process in README.md "Adding a derived skill" — verbatim upstream
 copy first, derivation second — so the derivation is reviewable as a diff
-against what upstream actually published.
+against what upstream published.
 
 ## Each authored skill is self-contained on its own
 
@@ -37,9 +37,8 @@ agent works *in this repo*; it must not propagate into shipped skills.
 
 ## Prose
 
-Skills, ADRs, tickets and docs are terse and flat: the caveman skill's
-docs mode. Save tokens by cutting fluff and optional function words,
-never by nesting clauses; readability sets the limit.
+Skills, ADRs, tickets and docs follow the writing-prose skill in
+`original/writing-prose/`.
 
 ## Repo-local skill overrides
 
