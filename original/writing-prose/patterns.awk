@@ -181,7 +181,7 @@ in_front { if (/^---[ \t]*$/) in_front = 0; next }
     if (/^[ \t]*$/) end_para()
     else { if (para == "") para_start = FNR; para = para $0 "\n" }
     raw = $0
-    if (on("comment") && raw ~ /[«»]/)
+    if (on("comment") && raw ~ /«[^«» ]+»/)
         f("code-placeholder", "code takes <angle> placeholders, never guillemets")
     if (on("comment")) {
         if (raw !~ /^[ \t]*(#|\/\/|\/\*|\*|--|;)/ || raw ~ /^#!/) next
@@ -203,7 +203,7 @@ in_front { if (/^---[ \t]*$/) in_front = 0; next }
     if (!on("chat") && raw ~ /[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z-[a-z0-9]/)
         f("store-id", "state the reason in plain words, not a private record id")
     if (on("ticket tracker") && tracker_placeholders(prose))
-        f("tracker-placeholder", "tracker text takes «guillemet» placeholders")
+        f("tracker-placeholder", "tracker text takes guillemet placeholders")
     if (on("ticket tracker") && bare_hash(raw))
         f("commit-link", "link the commit: [short](repo-url/commit/full) or owner/repo@sha")
     candidates()
