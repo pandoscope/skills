@@ -22,9 +22,21 @@ function words(s,    n, w, i, out) {
     return out
 }
 
+# The text a line contributes to a paragraph.
+# On the comment surface, that is the comment without its marker.
+# A code line returns "\001" and ends the paragraph like a blank line.
+function para_text(line) {
+    if (!on("comment")) return line
+    if (line !~ /^[ \t]*(#|\/\/|\/\*|\*|--|;)/ || line ~ /^#!/) return "\001"
+    sub(/^[ \t]*(#+|\/\/+|\/\*+|\*+|--|;+)[ \t]*/, "", line)
+    return line
+}
+
+function para_break(t) { return t == "\001" || t ~ /^[ \t]*$/ }
+
 # Reads the --before text: its code blocks in order, and each paragraph
 # both as written and as a bare word sequence.
-function read_before(    line, fence, code, para, n) {
+function read_before(    line, fence, code, para, n, t) {
     while ((getline line < before) > 0) {
         if (line ~ /^[ \t]*(```|~~~)/) {
             if (fence) bcode[++nb] = code
@@ -33,10 +45,11 @@ function read_before(    line, fence, code, para, n) {
             continue
         }
         if (fence) { code = code line "\n"; continue }
-        if (line ~ /^[ \t]*$/) {
+        t = para_text(line)
+        if (para_break(t)) {
             if (para != "") { bwords[words(para)] = 1; braw[para] = 1 }
             para = ""
-        } else { para = para line "\n"; bline[line] = 1 }
+        } else { para = para t "\n"; bline[t] = 1 }
     }
     if (para != "") { bwords[words(para)] = 1; braw[para] = 1 }
     close(before)
@@ -46,7 +59,7 @@ function read_before(    line, fence, code, para, n) {
 # of the old text but breaks its lines differently.
 function end_para() {
     if (para == "") return
-    if (before != "" && !style && on("markdown skill primed") \
+    if (before != "" && !style && on(LAYOUT) \
         && (words(para) in bwords) && !(para in braw))
         f_at(para_start, "reflow", "untouched words, new line breaks: restore the old lines, or reflow in a style commit")
     para = ""
@@ -56,6 +69,7 @@ BEGIN {
     if (before != "") read_before()
     DOCS = "ticket tracker markdown skill primed comment commit"
     MD = "markdown skill primed"
+    LAYOUT = MD " comment"
     KNOWN = "ADR AGENTS API BATS CLAUDE LICENSE SKILL CI CLI CSS CSV DB DNS HTML HTTP HTTPS ID IDE JSON JWT LLM MCP OK OS PDF PR PRS README SDK SHA SQL SSH TDD TLS TODO TOML TTL UI URL URLS UTC UUID XML YAML"
 }
 
@@ -119,6 +133,8 @@ function candidates(    t, tok, lab, plain, rest, n, i, parts, comma) {
             if (lab ~ /^[a-z0-9 -]+$/) marked[lab] = FNR
             rest = substr(rest, RSTART + RLENGTH)
         }
+    }
+    if (on(LAYOUT)) {
         t = prose
         gsub(/\[[^]]*\]\([^)]*\)/, "LINK", t)
         gsub(/https?:\/\/[^ )>]*/, "URL", t)
@@ -182,9 +198,9 @@ in_front { if (/^---[ \t]*$/) in_front = 0; next }
         next
     }
     if (in_fence) { code = code $0 "\n"; next }
-    if (/^[ \t]*$/) prev_prose = 0
-    if (/^[ \t]*$/) end_para()
-    else { if (para == "") para_start = FNR; para = para $0 "\n" }
+    t = para_text($0)
+    if (para_break(t)) { prev_prose = 0; end_para() }
+    else { if (para == "") para_start = FNR; para = para t "\n" }
     raw = $0
     if (on("comment") && raw ~ /«[^«» ]+»/)
         f("code-placeholder", "code takes <angle> placeholders, never guillemets")
@@ -219,7 +235,7 @@ END {
     end_para()
     if (before == "") {
         print "skipped code-exact: no --before text to compare"
-        if (on("markdown skill primed")) print "skipped reflow: no --before text to compare"
+        if (on(LAYOUT)) print "skipped reflow: no --before text to compare"
     }
     else {
         for (i = 1; i <= (na > nb ? na : nb); i++)

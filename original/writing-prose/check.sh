@@ -26,10 +26,11 @@ rules_for() {
     case $1 in
         chat) set -- shared chat ;;
         ticket | tracker) set -- shared docs tracker ;;
-        markdown) set -- shared docs markdown ;;
-        skill) set -- shared docs markdown skill ;;
-        primed) set -- shared docs markdown primed ;;
-        comment | commit) set -- shared docs code ;;
+        markdown) set -- shared docs markdown layout ;;
+        skill) set -- shared docs markdown layout skill ;;
+        primed) set -- shared docs markdown layout primed ;;
+        comment) set -- shared docs code layout ;;
+        commit) set -- shared docs code ;;
     esac
     for r in "$@"; do echo "$here/rules/$r.md"; done
 }
