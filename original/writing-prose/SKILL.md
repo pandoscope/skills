@@ -36,6 +36,7 @@ Name the surface first: `chat`, `ticket`, `tracker` (pull request bodies and com
 6. Layout comes last on the surfaces that read the layout rules.
    Once the content passes, place the semantic line breaks and run step 3 once more.
    A rewrap of lines the content work left alone is a reflow and goes in a style commit of its own, checked with `--style`.
+   When a request puts layout before a content review, tell the principal that the order breaks this step and ask before you start.
 
 A text passes when `check.sh` exits 0, every H candidate is settled and no M rule is broken.
 M findings still open after round two go to the principal as a report, not into a third round.
