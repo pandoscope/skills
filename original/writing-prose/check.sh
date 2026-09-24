@@ -37,4 +37,4 @@ fi
 [ -f "$file" ] || { echo "check.sh: no such file: $file" >&2; exit 2; }
 
 awk -v surface="$surface" -v name="$name" -v style="$style" \
-    -v has_before="${before:+1}" -f "$here/check.awk" ${before:+"$before"} "$file"
+    -v before="$before" -f "$here/check.awk" "$file"

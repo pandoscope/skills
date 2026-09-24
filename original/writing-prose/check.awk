@@ -15,6 +15,44 @@ function has_word(s, words) {
 
 function on(surfaces) { return index(" " surfaces " ", " " surface " ") > 0 }
 
+function words(s,    n, w, i, out) {
+    n = split(s, w)
+    for (i = 1; i <= n; i++) out = out (i > 1 ? " " : "") w[i]
+    return out
+}
+
+# Reads the --before text: its code blocks in order, and each paragraph
+# both as written and as a bare word sequence.
+function read_before(    line, fence, code, para, n) {
+    while ((getline line < before) > 0) {
+        if (line ~ /^[ \t]*(```|~~~)/) {
+            if (fence) bcode[++nb] = code
+            fence = !fence; code = ""
+            if (para != "") { bwords[words(para)] = 1; braw[para] = 1; para = "" }
+            continue
+        }
+        if (fence) { code = code line "\n"; continue }
+        if (line ~ /^[ \t]*$/) {
+            if (para != "") { bwords[words(para)] = 1; braw[para] = 1 }
+            para = ""
+        } else para = para line "\n"
+    }
+    if (para != "") { bwords[words(para)] = 1; braw[para] = 1 }
+    close(before)
+}
+
+# A paragraph ended: fails when it holds the same words as a paragraph
+# of the old text but breaks its lines differently.
+function end_para() {
+    if (para == "") return
+    if (before != "" && !style && on("markdown skill primed") \
+        && (words(para) in bwords) && !(para in braw))
+        f_at(para_start, "reflow", "untouched words, new line breaks: restore the old lines, or reflow in a style commit")
+    para = ""
+}
+
+BEGIN { if (before != "") read_before() }
+
 # Angle placeholders outside code in tracker text; HTML tags pass.
 function tracker_placeholders(s,    tag) {
     while (match(s, /<[a-z][a-z0-9_-]*>/)) {
@@ -44,8 +82,16 @@ function bare_hash(s,    tok) {
 }
 
 {
-    if (/^[ \t]*(```|~~~)/) { in_fence = !in_fence; next }
-    if (in_fence) next
+    if (/^[ \t]*(```|~~~)/) {
+        if (in_fence) acode[++na] = code
+        else code_start[na + 1] = FNR
+        in_fence = !in_fence; code = ""
+        end_para()
+        next
+    }
+    if (in_fence) { code = code $0 "\n"; next }
+    if (/^[ \t]*$/) end_para()
+    else { if (para == "") para_start = FNR; para = para $0 "\n" }
     raw = $0
     if (on("comment") && raw ~ /[«»]/)
         f("code-placeholder", "code takes <angle> placeholders, never guillemets")
@@ -72,6 +118,18 @@ function bare_hash(s,    tok) {
 }
 
 END {
+    end_para()
+    if (before == "") {
+        print "skipped code-exact: no --before text to compare"
+        if (on("markdown skill primed")) print "skipped reflow: no --before text to compare"
+    }
+    else {
+        for (i = 1; i <= (na > nb ? na : nb); i++)
+            if (acode[i] != bcode[i]) {
+                f_at(i in code_start ? code_start[i] : 1, "code-exact", "code blocks come through a rewrite byte-identical")
+                break
+            }
+    }
     if (on("ticket") && low_all !~ /grill/)
         f_at(1, "ungrilled", "state whether the ticket was grilled")
     exit failed
