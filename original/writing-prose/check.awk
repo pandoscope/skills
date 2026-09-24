@@ -6,7 +6,8 @@
 
 function f_at(line, id, msg) { printf "%s:%d: F %s: %s\n", name, line, id, msg; failed = 1 }
 function f(id, msg) { f_at(FNR, id, msg) }
-function h(id, msg) { printf "%s:%d: H %s: %s\n", name, FNR, id, msg }
+function h_at(line, id, msg) { printf "%s:%d: H %s: %s\n", name, line, id, msg }
+function h(id, msg) { h_at(FNR, id, msg) }
 
 # True when alternation `words` occurs as a whole word in s.
 function has_word(s, words) {
@@ -35,7 +36,7 @@ function read_before(    line, fence, code, para, n) {
         if (line ~ /^[ \t]*$/) {
             if (para != "") { bwords[words(para)] = 1; braw[para] = 1 }
             para = ""
-        } else para = para line "\n"
+        } else { para = para line "\n"; bline[line] = 1 }
     }
     if (para != "") { bwords[words(para)] = 1; braw[para] = 1 }
     close(before)
@@ -51,7 +52,87 @@ function end_para() {
     para = ""
 }
 
-BEGIN { if (before != "") read_before() }
+BEGIN {
+    if (before != "") read_before()
+    DOCS = "ticket tracker markdown skill primed comment commit"
+    MD = "markdown skill primed"
+    KNOWN = "ADR AGENTS API BATS CLAUDE LICENSE SKILL CI CLI CSS CSV DB DNS HTML HTTP HTTPS ID IDE JSON JWT LLM MCP OK OS PDF PR PRS README SDK SHA SQL SSH TDD TLS TODO TOML TTL UI URL URLS UTC UUID XML YAML"
+}
+
+# A line of running prose, as opposed to list, heading, table, quote or HTML.
+function prose_line(s) { return s !~ /^[ \t]*$/ && s !~ /^[ \t]*([-*+>|#<]|[0-9]+[.)])/ }
+
+# H rules: patterns that find candidates; the agent confirms or dismisses.
+function candidates(    t, tok, lab, plain, rest, n, i, parts, comma) {
+    if (low ~ /(^|[^a-z])(might|perhaps|possibly|probably|arguably|somewhat|seems to|appears to|i think|i believe|note that|it's worth noting|importantly|let's|in this section|as mentioned|as noted|first of all|in summary|to summarize|before we|as we'll see|in other words)([^a-z]|$)/)
+        h("hedging", "cut the hedge, signpost or meta-comment")
+    if (low ~ /not (just|only|merely|simply) [^.]* but /)
+        h("not-just", "say what it is, without the escalation")
+    if (low ~ /not because [^.]* but because|most people (think|assume|believe)|isn't about [^.]*it's about|widely misunderstood|here's the (thing|kicker)/)
+        h("ai-pattern", "state the claim directly")
+    n = split(prose, parts, /[^A-Za-z0-9_]+/)
+    for (i = 1; i <= n; i++) {
+        tok = parts[i]
+        sub(/s$/, "", tok)
+        if (tok !~ /^[A-Z][A-Z]+$/ || length(tok) > 6 || index(" " KNOWN " ", " " tok " ") || (tok in seen_abbr)) continue
+        seen_abbr[tok] = 1
+        h("abbreviation", "spell out " tok " unless it is an established term")
+    }
+    if (on(DOCS)) {
+        t = prose; comma = gsub(/,/, ",", t)
+        if (comma >= 3 || (comma >= 1 && index(prose, ";")))
+            h("one-fact", "one fact per clause: split the sentence")
+        if (low ~ /^[ \t>*-]*(the |each |a |an )?(config|configuration|field|file|setting|key|option|value|flag|frontmatter|entry)s? (is|are|holds|contains|defines|sets|says|decides|controls|tells|lists)[ .,]/)
+            h("actor-subject", "make the actor the subject")
+        if (low ~ /^[ \t>*-]*(the|a|an|this|each|every) ([a-z0-9_-]+ ){0,3}[a-z0-9_-]+, [^.]*, /)
+            h("verb-distance", "bring the verb within four words of its subject")
+        if (low ~ /(the|a|an|each|every) [a-z]+ (named|called|built|made|written|created|stored|kept|held|found|given|sent|set|run|used|listed|passed) (by|in|from|with|under|on) /)
+            h("relative-clause", "use that/which, or a sentence of its own")
+        if (low ~ /[a-z]+(tion|m[e]nt|ance|ence|sion)s? of (the|a|an|its|each|every|this) /)
+            h("event-noun", "make the event a verb")
+        if (low ~ /no longer|previously|used to|formerly|originally|anymore|(was|were) (changed|renamed|replaced|moved)|now (uses|is|does|takes)|(old|new) (behavior|behaviour)/)
+            h("present-tense", "state the present; history goes to commits")
+        if (low ~ /no longer supported|deprecated|(was|were|has been|have been) removed|removed in /)
+            h("removed-mention", "erase the removed feature; migration notes go in the BREAKING CHANGE footer")
+        if (low ~ /(is|are) (optional|not required|ignored|tolerated|insignificant)|order (does not|doesn't) matter|may be omitted|need not|not necessary/)
+            h("non-requirement", "drop the non-requirement unless it simplifies the solution")
+        if (has_word(low, "powerful|seamless|seamlessly|robust|elegant|elegantly|effortless|effortlessly|blazing|cutting-edge|best-in-class|delightful|world-class|amazing|awesome|great"))
+            h("pitch", "cut the value word")
+        if (low ~ /(^|[^a-z])(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|[0-9]+) [a-z-]+( [a-z-]+)? (above|below|that follow|following)([^a-z]|$)|see (the )?section|in section [0-9]/)
+            h("drifting-ref", "link the target instead of restating its count or position")
+    }
+    if (on(MD)) {
+        if (low ~ /(^|[^a-z])lines? [0-9]|(^|[^a-z])l[0-9]+([^0-9]|$)|[a-z0-9_]\.(md|py|sh|mjs|js|ts|awk|ya?ml|json):[0-9]/)
+            h("line-ref", "quote anchor text instead of a line number")
+        plain = low
+        gsub(/\[[^]]*\]\([^)]*\)/, " ", plain)
+        gsub(/\*\*[^*]+\*\*/, " ", plain)
+        for (t in marked)
+            if (!(t in flagged_term) && has_word(plain, t)) {
+                flagged_term[t] = 1
+                h("glossary-marking", "mark the term: bold it, or reword to the everyday word")
+            }
+        rest = prose
+        while (match(rest, /\[[^]]+\]\([^)]*\.md[^)]*\)/)) {
+            lab = tolower(substr(rest, RSTART + 1, index(substr(rest, RSTART), "]") - 2))
+            if (lab ~ /^[a-z0-9 -]+$/) marked[lab] = FNR
+            rest = substr(rest, RSTART + RLENGTH)
+        }
+        if (!(raw in bline) && prose_line(raw) && raw !~ /^[ \t]*\|/) {
+            if (prose ~ /[a-z0-9)][.!?] +[A-Z]/)
+                h("sembr", "one sentence per line")
+            else if (prev_prose && prev !~ /[.!?:;,)]$/ && raw ~ /^[ \t]*[a-z]/)
+                h("sembr", "break at a sentence or clause, not mid-clause")
+        }
+    }
+    if (on("ticket tracker") && prose_line(raw) && prev_prose && !wrap_run) {
+        h_at(FNR - 1, "hard-wrap", "one paragraph per line; the tracker renders every newline")
+        wrap_run = 1
+    }
+    if (!prose_line(raw) || !prev_prose) wrap_run = 0
+    if (on("ticket") && raw ~ /[a-z0-9_.-]+\/[a-z0-9_.\/-]+\.(md|py|mjs|js|ts|sh|json|ya?ml|toml|awk)/)
+        h("ticket-code", "no file paths in ticket prose; they go stale")
+}
 
 # Angle placeholders outside code in tracker text; HTML tags pass.
 function tracker_placeholders(s,    tag) {
@@ -86,10 +167,13 @@ function bare_hash(s,    tok) {
         if (in_fence) acode[++na] = code
         else code_start[na + 1] = FNR
         in_fence = !in_fence; code = ""
+        if (on("ticket") && in_fence) h("ticket-code", "no code in ticket prose, except a prototype snippet that encodes a decision")
         end_para()
+        prev_prose = 0
         next
     }
     if (in_fence) { code = code $0 "\n"; next }
+    if (/^[ \t]*$/) prev_prose = 0
     if (/^[ \t]*$/) end_para()
     else { if (para == "") para_start = FNR; para = para $0 "\n" }
     raw = $0
@@ -115,6 +199,8 @@ function bare_hash(s,    tok) {
         f("tracker-placeholder", "tracker text takes «guillemet» placeholders")
     if (on("ticket tracker") && bare_hash(raw))
         f("commit-link", "link the commit: [short](repo-url/commit/full) or owner/repo@sha")
+    candidates()
+    prev = raw; prev_prose = prose_line(raw)
 }
 
 END {
