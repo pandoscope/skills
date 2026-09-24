@@ -285,3 +285,14 @@ rules_ids() {
   run "$CHECK" comment "$f"
   [[ "$output" != *"code-placeholder"* ]]
 }
+
+@test "H long-line flags a long prose line with no clause boundary" {
+  long='The runner reads every numbered file in the checked out steps directory of the environment repository in file name order today.'
+  candidate markdown long-line 1 "$long\n"
+}
+
+@test "H long-line stays quiet on a long line that is mostly a link" {
+  f=$(printf 'See [the steps](https://github.com/pandoscope/meta/blob/main/environment/hooks/session-start.d/README.md#the-numbered-steps-and-their-order).\n' | text a.md)
+  run "$CHECK" markdown "$f"
+  [[ "$output" != *"H long-line"* ]]
+}
