@@ -143,7 +143,8 @@ function candidates(    t, tok, lab, plain, rest, n, i, parts, comma) {
         if (!(raw in bline) && prose_line(raw) && raw !~ /^[ \t]*\|/) {
             if (prose ~ /[a-z0-9)][.!?] +[A-Z]/)
                 h("sembr", "one sentence per line")
-            else if (prev_prose && prev !~ /[.!?:;,)]$/ && raw ~ /^[ \t]*[a-z]/)
+            else if (prev_prose && prev !~ /[.!?:;,)]$/ && raw ~ /^[ \t]*[a-z]/ \
+                && raw !~ /^[ \t]*(and|but|or|nor|so|yet|because|since|while|whereas|although|though|unless|until|when|where|which|that|if|then)([^a-z]|$)/)
                 h("sembr", "break at a sentence or clause, not mid-clause")
         }
     }
