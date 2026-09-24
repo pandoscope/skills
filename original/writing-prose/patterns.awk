@@ -90,9 +90,9 @@ function candidates(    t, tok, lab, plain, rest, n, i, parts, comma) {
             h("relative-clause", "use that/which, or a sentence of its own")
         if (low ~ /[a-z]+(tion|m[e]nt|ance|ence|sion)s? of (the|a|an|its|each|every|this) /)
             h("event-noun", "make the event a verb")
-        if (low ~ /no longer|previously|used to|formerly|originally|anymore|(was|were) (changed|renamed|replaced|moved)|now (uses|is|does|takes)|(old|new) (behavior|behaviour)/)
+        if (!on("commit") && low ~ /no longer|previously|used to|formerly|originally|anymore|(was|were) (changed|renamed|replaced|moved)|now (uses|is|does|takes)|(old|new) (behavior|behaviour)/)
             h("present-tense", "state the present; history goes to commits")
-        if (low ~ /no longer supported|deprecated|(was|were|has been|have been) removed|removed in /)
+        if (!on("commit") && low ~ /no longer supported|deprecated|(was|were|has been|have been) removed|removed in /)
             h("removed-mention", "erase the removed feature; migration notes go in the BREAKING CHANGE footer")
         if (low ~ /(is|are) (optional|not required|ignored|tolerated|insignificant)|order (does not|doesn't) matter|may be omitted|need not|not necessary/)
             h("non-requirement", "drop the non-requirement unless it simplifies the solution")
@@ -161,6 +161,9 @@ function bare_hash(s,    tok) {
     }
     return 0
 }
+
+FNR == 1 && /^---[ \t]*$/ { in_front = 1; next }
+in_front { if (/^---[ \t]*$/) in_front = 0; next }
 
 {
     if (/^[ \t]*(```|~~~)/) {
