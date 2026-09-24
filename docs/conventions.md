@@ -32,7 +32,7 @@ together (`derived/tdd/` brings `tests.md` and `lint-red.sh` with its
 
 The rendered `AGENTS.md` does name `ghx`, because it is template-owned
 and the template has no tracker-agnostic answer to select (see
-frankify-app/agentic-engineering-template#68). That governs how an
+pandoscope/agentic-engineering-template#68). That governs how an
 agent works *in this repo*; it must not propagate into shipped skills.
 
 ## Prose

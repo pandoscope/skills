@@ -17,10 +17,10 @@ From a consumer repo:
 
 ```sh
 # list available skills
-npx skills add frankify-app/skills --list
+npx skills add pandoscope/skills --list
 
 # install selected skills (project scope, Claude Code)
-npx skills add frankify-app/skills --skill documenting-decisions -a claude-code -y
+npx skills add pandoscope/skills --skill documenting-decisions -a claude-code -y
 
 
 # restore on a fresh clone
@@ -50,7 +50,7 @@ Ubiquitous language: `docs/glossary/`, one file per term, resolve via `uvx disam
 1. `original/<name>/SKILL.md` — frontmatter `name` (matching the folder, letters/numbers/hyphens only) + `description`.
 2. Keep SKILL.md short; split heavy reference into separate files inside the skill folder.
 3. For discipline-enforcing skills: baseline-test against an agent without the skill first; scenarios go in `tests/<name>/`.
-4. Consumers pick it up via `npx skills add frankify-app/skills --skill <name>`.
+4. Consumers pick it up via `npx skills add pandoscope/skills --skill <name>`.
 
 ## Adding a derived skill
 
