@@ -1,7 +1,7 @@
-# writing-prose rules the code can judge. Reads the text under check
-# (after an optional --before file) and prints one line per finding:
-#   <file>:<line>: F <rule-id>: <message>   fails the run
-#   <file>:<line>: H <rule-id>: <message>   candidate for the agent
+# writing-prose rules the code can judge. check.sh runs this file on
+# the text under check and states what each tier means. The file
+# prints one line per finding:
+#   <file>:<line>: <tier> <rule-id>: <message>
 # Rule ids match the rules files beside SKILL.md.
 
 function f_at(line, id, msg) { printf "%s:%d: F %s: %s\n", name, line, id, msg; failed = 1 }
