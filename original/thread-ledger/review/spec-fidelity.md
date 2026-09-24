@@ -1,18 +1,3 @@
-# Review task: spec-fidelity
-
-The task of a `pass: spec-fidelity` review (skills#195). A waybill
-order with `role: reviewer` fires the session. The composer takes the
-block below, replaces `<tier>` and `<n>` from the order, and renders
-it into the session's CLAUDE.md. Every Routine saves the same
-one-sentence prompt, which carries no data.
-
-The constraints are not in the task. The review driver
-(`../review-driver.mjs`) reads the same order. It denies every call
-outside the read-only policy before the call runs. It refuses to end
-the session until the order's tickets were read and the findings are
-committed and pushed. The task only says what to do.
-
-```text
 # Task
 
 You are a reviewer of pull request <repo>#<n>: base branch `<base>`, head commit `<head>`. Its repository is cloned under your working directory. The tickets are <tickets>.
@@ -41,13 +26,31 @@ It states the departure, not a fix.
 
 # Output contract
 
-Write `reviews/spec-fidelity-<tier>/findings.json` in the clone (the Write tool creates the directory; `mkdir` is not a read command and is refused): a JSON object with `pr` (`<repo>#<n>`), `head` (`<head>`), `pass` (`spec-fidelity`), `tier` (`<tier>`) and `findings`, an array, empty when you found nothing, of objects with `file` (path in the pull request), `line` (integer, at the head commit), `rule` (the verbatim specification sentence), `input` (the input that shows the departure), `tier` (`hard` when the specification decides the case, `judgment` otherwise), `confidence` (0 to 100) and `finding` (one sentence). Order by severity, worst first.
+Write `reviews/spec-fidelity-<tier>/findings.json` in the clone.
+The Write tool creates the directory.
+The file holds one JSON object:
 
-Then commit and push the findings, and nothing else:
+- `pr`: `<repo>#<n>`
+- `head`: `<head>`
+- `pass`: `spec-fidelity`
+- `tier`: `<tier>`
+- `findings`: an array, empty when you found nothing.
+  Order it by severity, worst first.
+  Each finding is an object:
+  - `file`: the path in the pull request
+  - `line`: an integer, at the head commit
+  - `rule`: the verbatim specification sentence
+  - `input`: the input that shows the departure
+  - `tier`: `hard` when the specification decides the case, `judgment` otherwise
+  - `confidence`: 0 to 100
+  - `finding`: one sentence
 
-    git add reviews/spec-fidelity-<tier>
-    git commit -m "chore(review): spec-fidelity <tier> findings for pr<n>"
-    git push -u origin claude/review-spec-fidelity-<tier>-pr<n>
+Then commit and push the findings:
+
+```sh
+git add reviews/spec-fidelity-<tier>
+git commit -m "chore(review): spec-fidelity <tier> findings for pr<n>"
+git push -u origin claude/review-spec-fidelity-<tier>-pr<n>
+```
 
 When done, reply with at most three lines.
-```

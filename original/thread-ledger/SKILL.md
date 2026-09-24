@@ -475,20 +475,26 @@ every command fails.
 
 ## Review sessions
 
-A waybill order with `role: reviewer`, a `pass` and a `tier` makes
-the session it fires a review session (skills#195). The order is the
-only receiver: the driver finds it at `waybill/orders/<name>.yml`
-from the `order/<name>` head ref. Two hooks replace the heartbeat
-there. `review-driver.mjs` on `PreToolUse` denies every call outside
-the read-only policy in `review/policy.mjs`. The policy allows read
-commands, git read subcommands, the findings file, and the review
-branch's switch, add, commit and push. It posts nothing to the forge.
-On `Stop` the driver refuses to end the session until every ticket
-the order names was read. It then refuses until
-`reviews/<pass>-<tier>/findings.json` validates and sits committed
-and pushed on `claude/review-<pass>-<tier>-pr<n>`. The driver copies
-its denials and a trace of the session's calls and usage beside the
-findings. They travel on the same branch, which the collector reads.
-The sentinel skips the heartbeat when `review-driver.mjs --is-review`
-says so. The review task texts live in `review/`; the Stop reasons are
-pinned by `tests/original/review-driver/`.
+A waybill order with `role: reviewer`, a `pass` and a `tier` makes the session it fires a review session (skills#195).
+Only the order does that.
+The driver finds it at `waybill/orders/<name>.yml` from the `order/<name>` head ref.
+In a review session, two hooks replace the heartbeat.
+
+On `PreToolUse`, `review-driver.mjs` denies every call outside the read-only policy in `review/policy.mjs`.
+The policy allows read commands, git read subcommands and writes to the findings file.
+For the review branch it also allows creating it, staging the review directory, committing and pushing.
+It denies every forge write.
+
+On `Stop`, the driver refuses to end the session until the session has read every ticket the order names.
+It then refuses until `reviews/<pass>-<tier>/findings.json` validates
+and sits committed and pushed on `claude/review-<pass>-<tier>-pr<n>`.
+The driver writes its denials and a trace of the session's calls and usage beside the findings.
+They travel on the review branch, so a run is collected from its branch alone.
+The heartbeat's sentinel skips a session for which `review-driver.mjs --is-review` exits 0.
+
+The review tasks live in `review/`, one file per pass, e.g. `review/spec-fidelity.md`.
+Each file is the task and nothing else.
+The composer renders the whole file into the session's CLAUDE.md
+and fills its placeholders from the order and the pull request's clone.
+Every Routine saves the same one-sentence prompt, which carries no data.
+The driver enforces the constraints, so a task says only what to do.
