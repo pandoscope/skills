@@ -26,7 +26,8 @@ Name the surface first: `chat`, `ticket`, `tracker` (pull request bodies and com
 2. Draft.
    To rewrite, read the old block, draft it fresh from the rules, then cut.
    Never patch the old sentences.
-3. Run `check.sh <surface> <file>`, with `--before <old-file>` for a rewrite, or `-` to read stdin.
+3. Run `check.sh <surface> <file>`.
+   A rewrite adds `--before <old-file>`; `-` as file reads stdin.
    Fix every F finding.
    Confirm or dismiss every H candidate, and fix the confirmed ones.
 4. Judge every M rule the run lists at its end.
@@ -43,7 +44,8 @@ M findings still open after round two go to the principal as a report, not into 
   It sees only the text, the surface and the rules.
   Your own context misses audience drift and takes compliance claims at face value.
   Without subagents, review it yourself and say so.
-- M rules on repository files in a pull request: the project's prose review pass, where one runs; otherwise the subagent.
+- M rules on repository files in a pull request: the project's prose review pass.
+  Without one, the subagent reviews them.
 
 Chat takes no subagent.
 Apply its rules as you write.

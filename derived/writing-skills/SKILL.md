@@ -114,7 +114,7 @@ Hunt for passages that collapse into one [leading word](glossary/leading-word.md
 - State no fact an adjacent structure maintains. A count above a table is a second copy of the table, already drifting.
 - Prompt the positive. A prohibition survives only as a [negation](glossary/negation.md) guardrail that cannot be phrased positively, paired with what to do instead.
 - Instruct; give a reason only where it changes what the agent does. A paragraph defending the design argues with a reader already trying to follow it.
-- Write compressed, using the `caveman` skill; if not available notify the principal.
+- Write and check the prose with the `writing-prose` skill, surface `skill`; if not available notify the principal.
 
 ## Token budget
 
