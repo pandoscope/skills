@@ -201,3 +201,54 @@ candidate() {
   run "$CHECK" markdown "$f"
   [[ "$output" != *"glossary-marking"* ]]
 }
+
+# Rule ids with their tier from the rules files: "F filler", "M referent".
+rules_ids() {
+  sed -n 's/^- `\([a-z-]*\)` \[\([FHM]\)\] .*/\2 \1/p' "$REPO_ROOT"/original/writing-prose/rules/*.md | sort
+}
+
+@test "every rule id appears once across the rules files" {
+  run bash -c "$(declare -f rules_ids); REPO_ROOT=$REPO_ROOT; rules_ids | awk '{print \$2}' | sort | uniq -d"
+  [ -n "$(rules_ids)" ]
+  [ -z "$output" ]
+}
+
+@test "the check implements exactly the F and H rules of the rules files" {
+  run "$CHECK" --list
+  [ "$status" -eq 0 ]
+  [ "$(printf '%s\n' "$output" | sort)" = "$(rules_ids | grep -v '^M ')" ]
+}
+
+@test "every F rule has a failing and a passing test, every H rule a candidate test" {
+  for id in $(rules_ids | sed -n 's/^F //p'); do
+    grep -q "@test \"F $id fails" "$BATS_TEST_FILENAME" || { echo "no failing test for $id"; return 1; }
+    grep -q "@test \"F $id passes" "$BATS_TEST_FILENAME" || { echo "no passing test for $id"; return 1; }
+  done
+  for id in $(rules_ids | sed -n 's/^H //p'); do
+    grep -q "@test \"H $id flags" "$BATS_TEST_FILENAME" || { echo "no candidate test for $id"; return 1; }
+  done
+}
+
+@test "a run ends with the M rules of its surface as residue" {
+  f=$(printf 'The hook runs.\n' | text a.md)
+  run "$CHECK" markdown "$f"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"M referent:"* ]]
+  [[ "$output" != *"M chat-sentences"* ]]
+  run "$CHECK" chat "$f"
+  [[ "$output" == *"M chat-sentences:"* ]]
+  [[ "$output" != *"M referent"* ]]
+}
+
+@test "--rules names the rules files a surface reads" {
+  run "$CHECK" --rules skill
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"rules/shared.md"* ]]
+  [[ "$output" == *"rules/skill.md"* ]]
+  [[ "$output" != *"rules/tracker.md"* ]]
+}
+
+@test "the skill passes the writing-skills check" {
+  run "$REPO_ROOT/derived/writing-skills/check.sh" "$REPO_ROOT/original/writing-prose"
+  [ "$status" -eq 0 ]
+}
