@@ -296,3 +296,33 @@ rules_ids() {
   run "$CHECK" markdown "$f"
   [[ "$output" != *"H long-line"* ]]
 }
+
+@test "F reflow fails on a rewrapped comment block" {
+  old=$(printf 'x=1\n# The hook runs first. It reads\n# the order and exits.\ny=2\n' | text old.sh)
+  f=$(printf 'x=1\n# The hook runs first.\n# It reads the order and exits.\ny=2\n' | text a.sh)
+  run "$CHECK" comment "$f" --before "$old"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"a.sh:2: F reflow"* ]]
+}
+
+@test "F reflow passes an edited comment block and code-only changes" {
+  old=$(printf 'x=1\n# The hook runs first. It reads\n# the order and exits.\ny=2\n' | text old.sh)
+  f=$(printf 'x=3\n# The hook runs first.\n# It reads the order, then exits.\ny=4\n' | text a.sh)
+  run "$CHECK" comment "$f" --before "$old"
+  [ "$status" -eq 0 ]
+}
+
+@test "H sembr flags two sentences on one comment line" {
+  f=$(printf 'x=1\n# The hook runs. It exits.\n' | text a.sh)
+  run "$CHECK" comment "$f"
+  [[ "$output" == *"a.sh:2: H sembr"* ]]
+}
+
+@test "--rules gives comments the layout rules and Markdown keeps them" {
+  run "$CHECK" --rules comment
+  [[ "$output" == *"rules/layout.md"* ]]
+  run "$CHECK" --rules markdown
+  [[ "$output" == *"rules/layout.md"* ]]
+  run "$CHECK" --rules tracker
+  [[ "$output" != *"rules/layout.md"* ]]
+}
