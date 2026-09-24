@@ -119,6 +119,11 @@ function candidates(    t, tok, lab, plain, rest, n, i, parts, comma) {
             if (lab ~ /^[a-z0-9 -]+$/) marked[lab] = FNR
             rest = substr(rest, RSTART + RLENGTH)
         }
+        t = prose
+        gsub(/\[[^]]*\]\([^)]*\)/, "LINK", t)
+        gsub(/https?:\/\/[^ )>]*/, "URL", t)
+        if (!(raw in bline) && length(t) > 120 && tolower(t) !~ /[,;:]| (and|but|or|so|because|which|that|while|when|if|where|then) /)
+            h("long-line", "no clause to break at: split the sentence, or keep it on one line")
         if (!(raw in bline) && prose_line(raw) && raw !~ /^[ \t]*\|/) {
             if (prose ~ /[a-z0-9)][.!?] +[A-Z]/)
                 h("sembr", "one sentence per line")
