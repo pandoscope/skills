@@ -265,3 +265,17 @@ rules_ids() {
   [[ "$output" != *"H present-tense"* ]]
   [[ "$output" != *"H removed-mention"* ]]
 }
+
+@test "a quoted word is a mention, not a use" {
+  f=$(printf 'Cut filler words such as "just" and "really".\nCut openers like “sure”.\n' | text a.md)
+  run "$CHECK" markdown "$f"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"F filler"* ]]
+  [[ "$output" != *"F pleasantry"* ]]
+}
+
+@test "H abbreviation stays quiet on an all-caps phrase" {
+  f=$(printf 'ACTIVE EVERY RESPONSE once triggered.\nPut notes in the BREAKING CHANGE footer.\n' | text a.md)
+  run "$CHECK" markdown "$f"
+  [[ "$output" != *"H abbreviation"* ]]
+}
