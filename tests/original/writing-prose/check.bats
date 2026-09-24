@@ -326,3 +326,13 @@ rules_ids() {
   run "$CHECK" --rules tracker
   [[ "$output" != *"rules/layout.md"* ]]
 }
+
+@test "H sembr stays quiet on a break before a conjunction" {
+  f=$(printf 'The runner always exits 0\nand names the step that failed,\nor the file it did not run.\nIt logs what it saw\nso the next reader can check it.\n' | text a.md)
+  run "$CHECK" markdown "$f"
+  [[ "$output" != *"H sembr"* ]]
+}
+
+@test "H sembr still flags a break inside a clause" {
+  candidate markdown sembr 2 'The hook reads the\norder file.\n'
+}
