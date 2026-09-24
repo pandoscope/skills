@@ -74,6 +74,7 @@ function candidates(    t, tok, lab, plain, rest, n, i, parts, comma) {
     for (i = 1; i <= n; i++) {
         tok = parts[i]
         sub(/s$/, "", tok)
+        if (parts[i - 1] ~ /^[A-Z][A-Z]+$/ || parts[i + 1] ~ /^[A-Z][A-Z]+$/) continue
         if (tok !~ /^[A-Z][A-Z]+$/ || length(tok) > 6 || index(" " KNOWN " ", " " tok " ") || (tok in seen_abbr)) continue
         seen_abbr[tok] = 1
         h("abbreviation", "spell out " tok " unless it is an established term")
@@ -189,6 +190,9 @@ in_front { if (/^---[ \t]*$/) in_front = 0; next }
     low_all = low_all tolower(raw) " "
     prose = raw
     gsub(/`[^`]*`/, "", prose)
+    # A quoted word is a mention, not a use.
+    gsub(/“/, "\"", prose); gsub(/”/, "\"", prose)
+    gsub(/"[^"]*"/, "\"\"", prose)
     low = tolower(prose)
 
     if (has_word(low, "just|really|basically|actually|simply"))
