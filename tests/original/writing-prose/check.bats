@@ -118,3 +118,44 @@ text() {
   run "$CHECK" ticket "$f"
   [[ "$output" != *"ungrilled"* ]]
 }
+
+@test "without --before the run says which rules it skipped" {
+  f=$(printf 'The hook runs.\n' | text a.md)
+  run "$CHECK" markdown "$f"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"skipped code-exact"* ]]
+  [[ "$output" == *"skipped reflow"* ]]
+}
+
+@test "F code-exact fails when a rewrite changes a code block" {
+  old=$(printf 'Run this:\n\n```sh\nmake test\n```\n' | text old.md)
+  f=$(printf 'Run:\n\n```sh\nmake tests\n```\n' | text a.md)
+  run "$CHECK" markdown "$f" --before "$old"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"a.md:3: F code-exact"* ]]
+}
+
+@test "F code-exact passes when only prose changed" {
+  old=$(printf 'Run this now:\n\n```sh\nmake test\n```\n' | text old.md)
+  f=$(printf 'Run:\n\n```sh\nmake test\n```\n' | text a.md)
+  run "$CHECK" markdown "$f" --before "$old"
+  [ "$status" -eq 0 ]
+}
+
+@test "F reflow fails on a paragraph rewrapped without a word changed" {
+  old=$(printf 'The hook runs first. It reads\nthe order and exits.\n' | text old.md)
+  f=$(printf 'The hook runs first.\nIt reads the order and exits.\n' | text a.md)
+  run "$CHECK" markdown "$f" --before "$old"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"a.md:1: F reflow"* ]]
+}
+
+@test "F reflow passes an edited paragraph and a style commit's rewrap" {
+  old=$(printf 'The hook runs first. It reads\nthe order and exits.\n' | text old.md)
+  f=$(printf 'The hook runs first.\nIt reads the order, then exits.\n' | text a.md)
+  run "$CHECK" markdown "$f" --before "$old"
+  [ "$status" -eq 0 ]
+  g=$(printf 'The hook runs first.\nIt reads the order and exits.\n' | text b.md)
+  run "$CHECK" markdown "$g" --before "$old" --style
+  [ "$status" -eq 0 ]
+}
