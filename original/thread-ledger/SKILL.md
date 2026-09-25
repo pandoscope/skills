@@ -475,9 +475,12 @@ every command fails.
 
 ## Review sessions
 
+The waybill is the repository of orders, one YAML file per order.
+A pull request that opens from a branch `order/<name>` fires a Routine,
+and the Routine starts a session that works from `orders/<name>.yml`.
 A waybill order with `role: reviewer`, a `pass` and a `model_tier` makes the session it fires a review session (skills#195).
-Only the order does that.
-The driver finds it at `waybill/orders/<name>.yml` from the `order/<name>` head ref.
+The Routine's prompt and the session's environment never make a session a review; the order alone does.
+The driver finds the order at `waybill/orders/<name>.yml` from the `order/<name>` head ref.
 In a review session, two hooks replace the heartbeat.
 
 On `PreToolUse`, `review-driver.mjs` denies every call outside the read-only policy in `review/policy.mjs`.
@@ -498,7 +501,14 @@ The composer renders the whole file into the session's CLAUDE.md,
 with variables from the order and the pull request's clone:
 `repo`, `n`, `pass`, `model_tier`, `tickets`, `base` and `head`.
 An undefined variable is a composer error.
-The order's `model_tier` names the model tier;
-a finding's `finding_basis` says whether the specification decided it.
+The order's `model_tier` names the model tier the Routine runs,
+lowercase and without a version:
+`opus`, `sonnet` or `haiku` for Claude models,
+`qwen-coder` or `gpt` for others.
+A finding's `finding_basis` takes one of two values:
+
+- `decided`: the specification settles the case, and the finding quotes the sentence that settles it.
+- `judged`: the specification leaves the case open, and the finding is the reviewer's reading of it.
+
 Every Routine saves the same one-sentence prompt, which carries no data.
 The driver enforces the constraints, so a task says only what to do.
