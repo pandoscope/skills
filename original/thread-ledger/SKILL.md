@@ -504,10 +504,12 @@ with variables from the order and the pull request's clone:
 `repo`, `n`, `pass`, `model_tier`, `tickets`, `base`, `head` and `branch`,
 plus `findings_contract`, the schema rendered as a field list.
 An undefined variable is a composer error.
-The order's `model_tier` names the model tier the Routine runs,
-lowercase and without a version:
-`opus`, `sonnet` or `haiku` for Claude models,
-`qwen-coder` or `gpt` for others.
+The order's `model_tier` is a name the principal chooses for a Routine, in lowercase with hyphens:
+a model name such as `opus-5-5` or `qwen3-coder`, or a role name such as `senior` or `eva`.
+The Routine's configuration decides which model runs under that name.
+Keep one model per name, so that runs under one name stay comparable.
+The task passes the name on as an opaque label and never tells the reviewer that it is the reviewer's model.
+Nothing checks the name against the model that served the session; the run trace records that model.
 A finding's `finding_basis` takes one of two values:
 
 - `decided`: the specification settles the case, and the finding quotes the sentence that settles it.

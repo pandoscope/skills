@@ -10,7 +10,7 @@
     "pr": {"type": "string", "pattern": "^[\\w.-]+/[\\w.-]+#\\d+$", "description": "the pull request, as `owner/repo#n`"},
     "head": {"type": "string", "pattern": "^[0-9a-f]{7,40}$", "description": "the head commit sha that was reviewed"},
     "pass": {"type": "string", "pattern": "^[a-z0-9-]+$", "description": "the review pass the order names"},
-    "model_tier": {"type": "string", "pattern": "^[a-z0-9-]+$", "description": "the model tier the order names"},
+    "model_tier": {"type": "string", "pattern": "^[a-z0-9-]+$", "description": "the order's model_tier label, copied as given"},
     "findings": {
       "type": "array",
       "description": "the findings, worst first; empty when nothing was found",
