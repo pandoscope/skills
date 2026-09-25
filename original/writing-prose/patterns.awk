@@ -115,6 +115,8 @@ function candidates(    t, tok, lab, plain, rest, n, i, parts, comma) {
             h("pitch", "cut the value word")
         if (low ~ /(^|[^a-z])(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|[0-9]+) [a-z-]+( [a-z-]+)? (above|below|that follow|following)([^a-z]|$)|see (the )?section|in section [0-9]/)
             h("drifting-ref", "link the target instead of restating its count or position")
+        if (low ~ /(^|[^a-z])off(-| (the|its|their|a|an) )(schema|pattern|spec|specification|contract|format|grammar|convention|template|standard|allowlist)s?([^a-z]|$)/)
+            h("named-criterion", "name the criterion the thing fails")
     }
     if (on(MD)) {
         if (low ~ /(^|[^a-z])lines? [0-9]|(^|[^a-z])l[0-9]+([^0-9]|$)|[a-z0-9_]\.(md|py|sh|mjs|js|ts|awk|ya?ml|json):[0-9]/)
