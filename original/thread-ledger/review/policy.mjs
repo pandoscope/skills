@@ -218,10 +218,14 @@ export function bashVerdict(command, run) {
   const body = stripHeredocs(command);
   const redirect = findRedirect(body);
   if (redirect) return deny(`\`${redirect}\` writes a file. A review session redirects to /dev/null only.`);
-  for (const segment of segments(body)) {
-    const words = tokens(segment);
-    if (!words.length) continue;
-    const [cmd, ...args] = words;
+  /** @type {string[]} */
+  const quoted = [];
+  for (const segment of segments(body, quoted)) {
+    const marked = tokens(segment, quoted);
+    if (!marked.length) continue;
+    const [cmd, ...args] = marked.map((w) => blankQuoted(w, quoted));
+    // sed and awk read their script from a quoted argument.
+    const script = marked.slice(1).map((w) => unquote(w, quoted));
     if (cmd === "git") {
       const why = gitWhy(args, run);
       if (why) return deny(why);
@@ -236,11 +240,15 @@ export function bashVerdict(command, run) {
     if (cmd === "sed" && args.some((a) => /^-i/.test(a) || a === "--in-place")) {
       return deny("`sed -i` edits in place. Read with sed; write only the findings file.");
     }
+    if (cmd === "sed") {
+      const why = sedWhy(script);
+      if (why) return deny(why);
+    }
     if (cmd === "find" && args.some((a) => /^-(exec|execdir|ok|okdir|delete|fprint|fls)/.test(a))) {
       return deny("`find` with -exec, -ok or -delete executes or removes. List only.");
     }
-    if (cmd === "awk" && args.some((a) => /system\s*\(|\|\s*"|>\s*"/.test(a))) {
-      return deny("`awk` with system() or an output pipe executes or writes. Print only.");
+    if (cmd === "awk" && script.some((a) => /system\s*\(|\|\s*"|"\s*\|(?!\|)|\|&|>\s*"/.test(a))) {
+      return deny("`awk` with system() or a pipe executes, and one with an output redirect writes. Print only.");
     }
   }
   return { allow: true };
@@ -351,35 +359,106 @@ function findRedirect(body) {
   return null;
 }
 
+// sed's read forms:
+// line and pattern ranges with p, d, q, = or l,
+// and s/// without the e and w flags.
+const SED_ADDR = String.raw`(?:\d+|\$|/(?:[^/\\]|\\.)*/)`;
+const SED_CMD =
+  String.raw`\s*(?:${SED_ADDR}(?:\s*,\s*${SED_ADDR})?)?\s*!?\s*` +
+  String.raw`(?:[pdq=l]|s/(?:[^/\\]|\\.)*/(?:[^/\\]|\\.)*/[gpiIm0-9]*)\s*`;
+const SED_SCRIPT = new RegExp(`^${SED_CMD}(?:;${SED_CMD})*;?$`);
+
+/**
+ * Why a sed call leaves the read forms, or null when it stays in them.
+ * @param {string[]} args the arguments with quotes removed
+ * @returns {string | null}
+ */
+function sedWhy(args) {
+  /** @type {string[]} */
+  const scripts = [];
+  let explicit = false;
+  let first = null;
+  for (let i = 0; i < args.length; i += 1) {
+    const a = args[i];
+    if (a === "-f" || a.startsWith("--file")) {
+      return "`sed -f` runs a script this policy cannot read. Pass the script inline.";
+    }
+    if (a === "-e" || a === "--expression") {
+      scripts.push(args[i + 1] ?? "");
+      explicit = true;
+      i += 1;
+    } else if (a.startsWith("--expression=")) {
+      scripts.push(a.slice("--expression=".length));
+      explicit = true;
+    } else if (first === null && !a.startsWith("-")) {
+      first = a;
+    }
+  }
+  if (!explicit && first !== null) scripts.push(first);
+  const bad = scripts.find((s) => !SED_SCRIPT.test(s));
+  if (bad === undefined) return null;
+  return (
+    `\`sed '${bad}'\` is outside the read forms: line and pattern ranges with p, d, q, = or l, ` +
+    "and s/// without the e or w flag. Print a range with sed -n 'A,Bp'."
+  );
+}
+
 /** @param {string} text @returns {string} */
 function dropQuoted(text) {
   return text.replace(/'[^']*'/g, "''").replace(/"(?:[^"\\]|\\.)*"/g, '""');
 }
 
-/** @param {string} body @returns {string[]} */
-function segments(body) {
-  // Subshells and substitutions are commands too: a `$(python ...)`
-  // inside an allowed command is still python running.
-  return dropQuoted(body)
+/**
+ * The command's segments, with each quoted string replaced by a marker that indexes `quoted`,
+ * so a check can still read the quoted text.
+ * @param {string} body
+ * @param {string[]} quoted collects the quoted strings, quotes included
+ * @returns {string[]}
+ */
+function segments(body, quoted) {
+  // Subshells and substitutions are commands too:
+  // a `$(python ...)` inside an allowed command is still python running.
+  const mark = (/** @type {string} */ q) => `\u0001${quoted.push(q) - 1}\u0002`;
+  return body
+    .replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, mark)
     .replace(/\$\(/g, "; ")
     .replace(/`/g, "; ")
     .replace(/[()]/g, " ")
     .split(/&&|\|\||;|\||\n/);
 }
 
-/** @param {string} segment @returns {string[]} */
-function tokens(segment) {
-  // Redirects were judged by findRedirect over the whole command; what
-  // is left of one here is punctuation, and leaving it in made
-  // `git push … 2>&1` read as a push naming a branch called "2>&1"
+const MARKER = /\u0001(\d+)\u0002/g;
+
+/**
+ * A word with each quoted string blanked to '' or "",
+ * as the checks other than sed's and awk's expect.
+ * @param {string} word @param {string[]} quoted @returns {string}
+ */
+function blankQuoted(word, quoted) {
+  return word.replace(MARKER, (_, i) => (quoted[Number(i)][0] === "'" ? "''" : '""'));
+}
+
+/**
+ * A word with each quoted string restored without its quotes.
+ * @param {string} word @param {string[]} quoted @returns {string}
+ */
+function unquote(word, quoted) {
+  return word.replace(MARKER, (_, i) => quoted[Number(i)].slice(1, -1));
+}
+
+/** @param {string} segment @param {string[]} quoted @returns {string[]} */
+function tokens(segment, quoted) {
+  // Redirects were judged by findRedirect over the whole command;
+  // what is left of one here is punctuation,
+  // and leaving it in made `git push … 2>&1` read as a push naming a branch called "2>&1"
   // (measured, skills#195).
   const words = segment
     .replace(/\d?(?:>>?|&>)&?\s*\S*/g, " ")
     .trim()
     .split(/\s+/)
     .filter(Boolean);
-  // Leading VAR=value assignments and the empty quotes dropQuoted left.
-  while (words.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0]) || words[0] === "''" || words[0] === '""')) {
+  // Leading `VAR=value` assignments, and the empty quotes that dropQuoted left.
+  while (words.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0]) || /^['"]{2}$/.test(blankQuoted(words[0], quoted)))) {
     words.shift();
   }
   if (words[0] === "<<HEREDOC") return [];
