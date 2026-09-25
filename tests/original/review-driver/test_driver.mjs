@@ -416,8 +416,8 @@ describe("staged session", () => {
 
 });
 
-// `tier` alone was ambiguous next to a finding's grade; the order and
-// the findings file name the model tier `model_tier`.
+// `tier` alone was ambiguous next to a finding's grade;
+// the order and the findings file name the model tier `model_tier`, snake case like `pull_request`.
 describe("model tier", () => {
   const order = "id: x\nrole: reviewer\npass: spec-fidelity\nmodel_tier: opus\n";
   it("is read from the order's model_tier", () => {
@@ -429,14 +429,5 @@ describe("model tier", () => {
     const doc = { pr: "pandoscope/meta#1", head: "22056ce0", pass: "spec-fidelity", model_tier: "opus", findings: [] };
     assert.deepEqual(findingsProblems(doc, run), []);
     assert.match(findingsProblems({ ...doc, model_tier: "sonnet" }, run).join("\n"), /`model_tier` must be `opus`/);
-  });
-});
-
-describe("model tier key", () => {
-  it("is model_tier, snake case like pull_request", () => {
-    const run = orderRun("id: x\nrole: reviewer\npass: spec-fidelity\nmodel_tier: opus\n");
-    assert.equal(run?.modelTier, "opus");
-    const doc = { pr: "pandoscope/meta#1", head: "22056ce0", pass: "spec-fidelity", model_tier: "opus", findings: [] };
-    assert.deepEqual(findingsProblems(doc, /** @type {NonNullable<typeof run>} */ (run)), []);
   });
 });
