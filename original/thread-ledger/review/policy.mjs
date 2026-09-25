@@ -25,8 +25,7 @@
 
 // ------------------------------------------------------------- order
 
-// The order that fired the session, read as a review run
-// (SKILL.md, "Review sessions").
+// The order that fired the session, read as a review run (SKILL.md, "Review sessions").
 const NAME = /^[a-z0-9-]+$/;
 
 /**
@@ -171,12 +170,10 @@ const SECRET_PATH = /\/proc\/[^\s'"]*\/environ\b|\bsession\.env\b|(?:~|\$HOME|\$
 
 // The harness persists a large tool result to a file under the config directory
 // and hands back its path;
-// reading it is how the session gets the content it just asked for.
-// Measured on the first haiku run (skills#195):
-// the rule above refused one of those,
-// the review carried on from a truncated `head -200` of the diff and reported nothing.
+// reading that file is how the session gets back the content it asked for.
+// Refusing it leaves the review with a truncated read, and the review then reports nothing (skills#195).
 // A check that is followed must not be wrong (skills#130),
-// so the one readable subtree is carved out —
+// so this one subtree stays readable —
 // transcripts and the config files themselves stay refused.
 const HARNESS_CONTENT = /\/\.claude\/projects\/[^\s'"]*\/tool-results\//;
 
@@ -247,8 +244,9 @@ export function bashVerdict(command, run) {
     if (cmd === "find" && args.some((a) => /^-(exec|execdir|ok|okdir|delete|fprint|fls)/.test(a))) {
       return deny("`find` with -exec, -ok or -delete executes or removes. List only.");
     }
-    if (cmd === "awk" && script.some((a) => /system\s*\(|\|\s*"|"\s*\|(?!\|)|\|&|>\s*"/.test(a))) {
-      return deny("`awk` with system() or a pipe executes, and one with an output redirect writes. Print only.");
+    if (cmd === "awk") {
+      const why = awkWhy(script);
+      if (why) return deny(why);
     }
   }
   return { allow: true };
@@ -403,6 +401,45 @@ function sedWhy(args) {
   );
 }
 
+// awk options that load a program or an extension from elsewhere.
+const AWK_LOADS = /^(-f|--file|-i|--include|-l|--load|-E|--exec)(=|$)/;
+// awk options that take the next argument as their value.
+const AWK_VALUED = new Set(["-F", "-v", "--field-separator", "--assign"]);
+
+/**
+ * Why an awk call is not a print-only script given inline, or null.
+ * A print-only script calls no system(), opens no pipe or coprocess,
+ * redirects no print, and reads neither ENVIRON nor PROCINFO.
+ * @param {string[]} args the arguments with quotes removed
+ * @returns {string | null}
+ */
+function awkWhy(args) {
+  let program = null;
+  for (let i = 0; i < args.length; i += 1) {
+    const a = args[i];
+    const load = a.match(AWK_LOADS);
+    if (load) return `\`awk ${load[1]}\` loads a program this policy cannot read. Pass the program inline.`;
+    if (AWK_VALUED.has(a)) {
+      i += 1;
+    } else if (!a.startsWith("-")) {
+      program = a;
+      break;
+    }
+  }
+  if (program === null) return null;
+  const code = program.replace(/"(?:[^"\\]|\\.)*"/g, '""');
+  const leaves =
+    /\bsystem\s*\(/.test(code) ||
+    /\|/.test(code.replace(/\|\|/g, "")) ||
+    /\bprintf?\b[^;{}\n]*>/.test(code) ||
+    /\b(ENVIRON|PROCINFO)\b/.test(code);
+  if (!leaves) return null;
+  return (
+    `\`awk '${program}'\` is not print-only: no system(), pipe, coprocess, print redirect, ` +
+    "ENVIRON or PROCINFO. Print to standard output only."
+  );
+}
+
 /** @param {string} text @returns {string} */
 function dropQuoted(text) {
   return text.replace(/'[^']*'/g, "''").replace(/"(?:[^"\\]|\\.)*"/g, '""');
@@ -480,10 +517,9 @@ const PR = /^[\w.-]+\/[\w.-]+#(\d+)$/;
 /**
  * Problems with a parsed findings file, in field order; empty when valid.
  *
- * The contract is X8's finding shape (skills#41) under a header that
- * names what was reviewed: the collector and the falsifier need the
- * PR and the head commit, and a finding without a verbatim rule
- * sentence is not a finding.
+ * The contract is X8's finding shape (skills#41) under a header that names what was reviewed:
+ * the collector and the falsifier need the PR and the head commit,
+ * and a finding without a verbatim rule sentence is not a finding.
  * @param {unknown} doc
  * @param {ReviewRun} run
  * @returns {string[]}
