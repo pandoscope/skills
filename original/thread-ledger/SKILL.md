@@ -505,7 +505,9 @@ with variables from the order and the pull request's clone:
 plus `findings_contract`, the schema rendered as a field list.
 A pass file that uses `candidates` also gets the writing-prose check's F findings and H candidates on the lines that the pull request adds.
 `review/prose.md` is such a file.
-An undefined variable is a composer error.
+The pass files include `review/_task.md`, the task preamble they share.
+A pass name holds no underscore, so `_task.md` is never a pass.
+An undefined variable is a composer error, and so is an include of a missing file.
 The order's `model_tier` is a name the principal chooses for a Routine, in lowercase with hyphens:
 a model name such as `opus-5-5` or `qwen3-coder`, or a role name such as `senior` or `eva`.
 The Routine's configuration decides which model runs under that name.
