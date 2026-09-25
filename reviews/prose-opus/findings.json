@@ -1,0 +1,53 @@
+{
+  "pr": "pandoscope/skills#230",
+  "head": "feffae025265df21120411b37019ca903c7b004f",
+  "pass": "prose",
+  "model_tier": "opus",
+  "findings": [
+    {
+      "file": "original/thread-ledger/review/prose.md",
+      "line": 44,
+      "rule": "Keep each fact in one place and reference it from everywhere else, and let a declared copy name its source and update path.",
+      "input": "Skip the F hits: they are left to CI, not to this review. [...] Report no F rule.",
+      "finding_basis": "judged",
+      "confidence": 65,
+      "finding": "The paragraph that handles the check's hits gives the instruction to leave F rules out twice, once at its start and again as its last sentence."
+    },
+    {
+      "file": "original/thread-ledger/review/prose.md",
+      "line": 66,
+      "rule": "Keep each fact in one place and reference it from everywhere else, and let a declared copy name its source and update path.",
+      "input": "In each finding, `rule` quotes the rules-file sentence,",
+      "finding_basis": "judged",
+      "confidence": 55,
+      "finding": "The Output contract paragraph repeats that `rule` quotes the rules-file sentence, which the Review section already states in \"Every finding quotes, verbatim, the rules-file sentence it violates.\", so the same instruction lives in two places in one file."
+    },
+    {
+      "file": "original/thread-ledger/review/prose.md",
+      "line": 1,
+      "rule": "State a contract several things share once, then give each instance only its deltas.",
+      "input": "Its repository is cloned under your working directory. [...] Read every ticket above with the issue read tool, and every further ticket that the body references (CLOSES, FIXES, ADVANCES).",
+      "finding_basis": "judged",
+      "confidence": 50,
+      "finding": "The Task section restates, nearly word for word and without naming a source, the preamble that `review/spec-fidelity.md` already holds (clone, diff, pull request body, tickets), even though every pass shares it, when it could state the shared part once and keep only the prose pass's deltas here."
+    },
+    {
+      "file": "original/thread-ledger/review/prose.md",
+      "line": 37,
+      "rule": "Give one thing one name throughout a text, and never use that name for a second thing.",
+      "input": "Its hits:\n\n```text\n{{ candidates }}\n```\n\nEach hit names a file, a line, a tier and a rule. [...] Confirm or reject each H hit",
+      "finding_basis": "judged",
+      "confidence": 40,
+      "finding": "The block calls the check's output \"hits\" but fills it from `candidates`, and it tells the reviewer to \"reject\" H hits, while the writing-prose SKILL.md that it sends the reviewer to calls the same output a \"candidate\" that one confirms or \"dismisses\"."
+    },
+    {
+      "file": "original/writing-prose/SKILL.md",
+      "line": 14,
+      "rule": "Delete a sentence the model already obeys without it.",
+      "input": "- **F** (fully): `check.sh` decides, and a finding is final.",
+      "finding_basis": "judged",
+      "confidence": 30,
+      "finding": "The glosses (fully), (heuristic) and (model) added to the tier list change nothing the agent does, and \"fully\" is an adverb that names no tier, so the list now carries labels meant for human readers instead of instructions for the agent."
+    }
+  ]
+}
