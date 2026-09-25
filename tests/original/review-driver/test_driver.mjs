@@ -456,3 +456,34 @@ describe("findings schema", () => {
     assert.match(findingsProblems(extra, RUN).join("\n"), /severity/);
   });
 });
+
+// The reviewer runs no git steps (#224): the composer stages the review
+// branch, and the driver commits and pushes the findings at Stop.
+describe("driver publishes", () => {
+  it("commits and pushes valid findings itself at Stop", () => {
+    const s = stage();
+    sh(s.clone, "git", "switch", "-q", "-c", "claude/review-spec-fidelity-sonnet-pr143");
+    const dir = path.join(s.clone, "reviews", "spec-fidelity-sonnet");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "findings.json"), JSON.stringify({ pr: "pandoscope/meta#143", head: "22056ce0", pass: "spec-fidelity", model_tier: "sonnet", findings: [] }));
+    const stop = fire(s, { hook_event_name: "Stop" });
+    assert.equal(stop.code, 0, stop.err);
+    assert.match(stop.err, /Review complete/);
+    const pushed = sh(s.clone, "git", "ls-tree", "-r", "--name-only", "origin/claude/review-spec-fidelity-sonnet-pr143");
+    assert.match(pushed, /reviews\/spec-fidelity-sonnet\/findings.json/);
+    const subject = sh(s.clone, "git", "log", "-1", "--format=%s", "origin/claude/review-spec-fidelity-sonnet-pr143");
+    assert.equal(subject, "chore(review): spec-fidelity sonnet findings for pr143");
+  });
+  it("denies the reviewer every git write", () => {
+    for (const cmd of [
+      "git switch -c claude/review-spec-fidelity-sonnet-pr143",
+      "git add reviews/spec-fidelity-sonnet",
+      "git commit -m x",
+      "git push -u origin claude/review-spec-fidelity-sonnet-pr143",
+    ]) {
+      const v = bashVerdict(cmd, RUN);
+      assert.equal(v.allow, false, cmd);
+      assert.match(v.allow ? "" : v.why, /driver (commits|publishes)/, cmd);
+    }
+  });
+});
