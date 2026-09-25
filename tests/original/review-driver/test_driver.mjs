@@ -176,7 +176,7 @@ describe("findings contract", () => {
     head: "22056ce0",
     pass: "spec-fidelity",
     tier: "sonnet",
-    findings: [{ file: "src/x.py", line: 3, rule: "The parser accepts owner/repo!n references.", input: "owner/repo!7", tier: "hard", confidence: 80, finding: "Bang references raise." }],
+    findings: [{ file: "src/x.py", line: 3, rule: "The parser accepts owner/repo!n references.", input: "owner/repo!7", finding_basis: "decided", confidence: 80, finding: "Bang references raise." }],
   };
   it("accepts the contract and an empty findings array", () => {
     assert.deepEqual(findingsProblems(good, RUN), []);
@@ -188,7 +188,7 @@ describe("findings contract", () => {
     assert.match(p.join("\n"), /`head` must be/);
     assert.match(p.join("\n"), /`tier` must be `sonnet`/);
     assert.match(p.join("\n"), /findings\[0\]\.rule must quote/);
-    assert.match(p.join("\n"), /findings\[0\]\.tier must be hard or judgment/);
+    assert.match(p.join("\n"), /findings\[0\]\.finding_basis must be decided or judged/);
     assert.match(findingsProblems([], RUN)[0], /not a JSON object/);
   });
 });
