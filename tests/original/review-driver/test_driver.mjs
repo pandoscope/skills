@@ -405,3 +405,28 @@ describe("staged session", () => {
   });
 
 });
+
+// `tier` also names a finding's grade (hard, judgment); the order and
+// the findings file name the model tier `model-tier`.
+describe("model tier", () => {
+  const order = "id: x\nrole: reviewer\npass: spec-fidelity\nmodel-tier: opus\n";
+  it("is read from the order's model-tier", () => {
+    assert.equal(orderRun(order)?.modelTier, "opus");
+    assert.equal(orderRun("id: x\nrole: reviewer\npass: spec-fidelity\ntier: opus\n"), null);
+  });
+  it("is the findings file's model-tier", () => {
+    const run = /** @type {NonNullable<ReturnType<typeof orderRun>>} */ (orderRun(order));
+    const doc = { pr: "pandoscope/meta#1", head: "22056ce0", pass: "spec-fidelity", "model-tier": "opus", findings: [] };
+    assert.deepEqual(findingsProblems(doc, run), []);
+    assert.match(findingsProblems({ ...doc, "model-tier": "sonnet" }, run).join("\n"), /`model-tier` must be `opus`/);
+  });
+});
+
+describe("model tier key", () => {
+  it("is model_tier, snake case like pull_request", () => {
+    const run = orderRun("id: x\nrole: reviewer\npass: spec-fidelity\nmodel_tier: opus\n");
+    assert.equal(run?.modelTier, "opus");
+    const doc = { pr: "pandoscope/meta#1", head: "22056ce0", pass: "spec-fidelity", model_tier: "opus", findings: [] };
+    assert.deepEqual(findingsProblems(doc, /** @type {NonNullable<typeof run>} */ (run)), []);
+  });
+});
