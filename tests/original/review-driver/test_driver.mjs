@@ -30,7 +30,7 @@ const PROMPT = "PANDO-REVIEW: spec-fidelity tier=sonnet\n\nReview the pull reque
 // Every kata session is dispatched by this order.
 // The Routine's prompt, DISPATCH below, carries no data (skills#195, waybill#1).
 const ORDER =
-  "id: review-spec-fidelity-sonnet-pr143\nrole: reviewer\npass: spec-fidelity\ntier: sonnet\n" +
+  "id: review-spec-fidelity-sonnet-pr143\nrole: reviewer\npass: spec-fidelity\nmodel_tier: sonnet\n" +
   "pull_request: pandoscope/meta#143\ntickets:\n  - pandoscope/skills#195\n";
 const ORDER_REF = "order/review-spec-fidelity-sonnet-pr143";
 const DISPATCH = "A waybill order dispatched this autonomous session. Read CLAUDE.md and follow it.";
@@ -175,7 +175,7 @@ describe("findings contract", () => {
     pr: "pandoscope/meta#143",
     head: "22056ce0",
     pass: "spec-fidelity",
-    tier: "sonnet",
+    model_tier: "sonnet",
     findings: [{ file: "src/x.py", line: 3, rule: "The parser accepts owner/repo!n references.", input: "owner/repo!7", finding_basis: "decided", confidence: 80, finding: "Bang references raise." }],
   };
   it("accepts the contract and an empty findings array", () => {
@@ -183,10 +183,10 @@ describe("findings contract", () => {
     assert.deepEqual(findingsProblems({ ...good, findings: [] }, RUN), []);
   });
   it("names every missing field", () => {
-    const p = findingsProblems({ ...good, pr: "143", head: "x", tier: "opus", findings: [{}] }, RUN);
+    const p = findingsProblems({ ...good, pr: "143", head: "x", model_tier: "opus", findings: [{}] }, RUN);
     assert.match(p.join("\n"), /`pr` must be `owner\/repo#n`/);
     assert.match(p.join("\n"), /`head` must be/);
-    assert.match(p.join("\n"), /`tier` must be `sonnet`/);
+    assert.match(p.join("\n"), /`model_tier` must be `sonnet`/);
     assert.match(p.join("\n"), /findings\[0\]\.rule must quote/);
     assert.match(p.join("\n"), /findings\[0\]\.finding_basis must be decided or judged/);
     assert.match(findingsProblems([], RUN)[0], /not a JSON object/);
@@ -259,17 +259,17 @@ function issueRead(id, owner, repo, n, error = false) {
 }
 
 describe("order run", () => {
-  it("reads pass and tier from a reviewer order", () => {
+  it("reads pass and model tier from a reviewer order", () => {
     const r = orderRun(ORDER);
     assert.equal(r?.pass, "spec-fidelity");
-    assert.equal(r?.tier, "sonnet");
+    assert.equal(r?.modelTier, "sonnet");
     assert.equal(r?.findings, "reviews/spec-fidelity-sonnet/findings.json");
     assert.equal(r?.branchForm, "claude/review-spec-fidelity-sonnet-pr<n>");
   });
-  it("is null for another role, or a reviewer order without pass or tier", () => {
+  it("is null for another role, or a reviewer order without pass or model tier", () => {
     assert.equal(orderRun("id: x\nrole: implementer\npull_request: pandoscope/meta#1\n"), null);
-    assert.equal(orderRun("id: x\nrole: reviewer\ntier: sonnet\n"), null);
-    assert.equal(orderRun("id: x\nrole: reviewer\npass: Spec Fidelity\ntier: sonnet\n"), null);
+    assert.equal(orderRun("id: x\nrole: reviewer\nmodel_tier: sonnet\n"), null);
+    assert.equal(orderRun("id: x\nrole: reviewer\npass: Spec Fidelity\nmodel_tier: sonnet\n"), null);
     assert.equal(orderRun(""), null);
   });
 });
@@ -327,12 +327,12 @@ describe("staged session", () => {
 
     const dir = path.join(s.clone, "reviews", "spec-fidelity-sonnet");
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, "findings.json"), JSON.stringify({ pr: "pandoscope/meta#143", head: "22056ce0", pass: "spec-fidelity", tier: "sonnet", findings: "no" }));
+    fs.writeFileSync(path.join(dir, "findings.json"), JSON.stringify({ pr: "pandoscope/meta#143", head: "22056ce0", pass: "spec-fidelity", model_tier: "sonnet", findings: "no" }));
     stop = fire(s, { hook_event_name: "Stop" });
     assert.equal(stop.code, 2);
     assert.match(stop.err, /`findings` must be an array/);
 
-    fs.writeFileSync(path.join(dir, "findings.json"), JSON.stringify({ pr: "pandoscope/meta#143", head: "22056ce0", pass: "spec-fidelity", tier: "sonnet", findings: [] }));
+    fs.writeFileSync(path.join(dir, "findings.json"), JSON.stringify({ pr: "pandoscope/meta#143", head: "22056ce0", pass: "spec-fidelity", model_tier: "sonnet", findings: [] }));
     stop = fire(s, { hook_event_name: "Stop" });
     assert.equal(stop.code, 2);
     assert.match(stop.err, /git -C \S+ switch -c claude\/review-spec-fidelity-sonnet-pr143/);
@@ -406,19 +406,19 @@ describe("staged session", () => {
 
 });
 
-// `tier` also names a finding's grade (hard, judgment); the order and
-// the findings file name the model tier `model-tier`.
+// `tier` alone was ambiguous next to a finding's grade; the order and
+// the findings file name the model tier `model_tier`.
 describe("model tier", () => {
-  const order = "id: x\nrole: reviewer\npass: spec-fidelity\nmodel-tier: opus\n";
-  it("is read from the order's model-tier", () => {
+  const order = "id: x\nrole: reviewer\npass: spec-fidelity\nmodel_tier: opus\n";
+  it("is read from the order's model_tier", () => {
     assert.equal(orderRun(order)?.modelTier, "opus");
     assert.equal(orderRun("id: x\nrole: reviewer\npass: spec-fidelity\ntier: opus\n"), null);
   });
-  it("is the findings file's model-tier", () => {
+  it("is the findings file's model_tier", () => {
     const run = /** @type {NonNullable<ReturnType<typeof orderRun>>} */ (orderRun(order));
-    const doc = { pr: "pandoscope/meta#1", head: "22056ce0", pass: "spec-fidelity", "model-tier": "opus", findings: [] };
+    const doc = { pr: "pandoscope/meta#1", head: "22056ce0", pass: "spec-fidelity", model_tier: "opus", findings: [] };
     assert.deepEqual(findingsProblems(doc, run), []);
-    assert.match(findingsProblems({ ...doc, "model-tier": "sonnet" }, run).join("\n"), /`model-tier` must be `opus`/);
+    assert.match(findingsProblems({ ...doc, model_tier: "sonnet" }, run).join("\n"), /`model_tier` must be `opus`/);
   });
 });
 

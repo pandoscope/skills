@@ -1,12 +1,16 @@
 # Task
 
-You are a reviewer of pull request <repo>#<n>: base branch `<base>`, head commit `<head>`. Its repository is cloned under your working directory. The tickets are <tickets>.
+You are a reviewer of pull request {{ repo }}#{{ n }}: base branch `{{ base }}`, head commit `{{ head }}`.
+Its repository is cloned under your working directory.
+The tickets are {{ tickets }}.
 
 Stage the review with git and the GitHub read tools, in that clone:
 
-1. Read the pull request body with the GitHub pull request read tool. Then `git fetch origin <base>` and `git fetch origin pull/<n>/head:refs/remotes/origin/pr-<n>`; `origin/pr-<n>` must be `<head>`.
-2. `git switch -c claude/review-spec-fidelity-<tier>-pr<n> origin/pr-<n>` — the files on disk are now the pull request's head.
-3. `git diff origin/<base>...HEAD` is the change under review. Read every ticket above with the issue read tool, and every further ticket the body references (CLOSES, FIXES, ADVANCES).
+1. Read the pull request body with the GitHub pull request read tool. Then `git fetch origin {{ base }}` and `git fetch origin pull/{{ n }}/head:refs/remotes/origin/pr-{{ n }}`; `origin/pr-{{ n }}` must be `{{ head }}`.
+2. `git switch -c claude/review-spec-fidelity-{{ model_tier }}-pr{{ n }} origin/pr-{{ n }}` — the files on disk are now the pull request's head.
+3. `git diff origin/{{ base }}...HEAD` is the change under review.
+   Read every ticket above with the issue read tool,
+   and every further ticket the body references (CLOSES, FIXES, ADVANCES).
 
 Read every changed file in full at the head commit before judging it.
 Read a large file in successive ranges until you reach its end.
@@ -26,14 +30,14 @@ It states the departure, not a fix.
 
 # Output contract
 
-Write `reviews/spec-fidelity-<tier>/findings.json` in the clone.
+Write one JSON object to `reviews/spec-fidelity-{{ model_tier }}/findings.json` in the clone.
 The Write tool creates the directory.
-The file holds one JSON object:
+Give the object these fields:
 
-- `pr`: `<repo>#<n>`
-- `head`: `<head>`
+- `pr`: `{{ repo }}#{{ n }}`
+- `head`: `{{ head }}`
 - `pass`: `spec-fidelity`
-- `tier`: `<tier>`
+- `model_tier`: `{{ model_tier }}`
 - `findings`: an array, empty when you found nothing.
   Order it by severity, worst first.
   Each finding is an object:
@@ -48,9 +52,9 @@ The file holds one JSON object:
 Then commit and push the findings:
 
 ```sh
-git add reviews/spec-fidelity-<tier>
-git commit -m "chore(review): spec-fidelity <tier> findings for pr<n>"
-git push -u origin claude/review-spec-fidelity-<tier>-pr<n>
+git add reviews/spec-fidelity-{{ model_tier }}
+git commit -m "chore(review): spec-fidelity {{ model_tier }} findings for pr{{ n }}"
+git push -u origin claude/review-spec-fidelity-{{ model_tier }}-pr{{ n }}
 ```
 
 When done, reply with at most three lines.

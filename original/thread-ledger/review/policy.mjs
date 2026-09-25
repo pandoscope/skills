@@ -15,7 +15,7 @@
 /**
  * @typedef {object} ReviewRun
  * @property {string} pass       the review pass, e.g. spec-fidelity
- * @property {string} tier       the model tier the routine runs
+ * @property {string} modelTier  the model tier the routine runs
  * @property {string} dir        the review directory, relative to the clone
  * @property {string} findings   the findings file, relative to the clone
  * @property {RegExp} branch     the review branch, capturing the PR number
@@ -31,25 +31,25 @@ const NAME = /^[a-z0-9-]+$/;
 
 /**
  * @param {string} pass
- * @param {string} tier
+ * @param {string} modelTier
  * @returns {ReviewRun}
  */
-function runFor(pass, tier) {
+function runFor(pass, modelTier) {
   return {
     pass,
-    tier,
-    // Relative to the clone of the reviewed repository — the only
-    // directory the session may write, and the one the collector reads.
-    dir: `reviews/${pass}-${tier}`,
-    findings: `reviews/${pass}-${tier}/findings.json`,
-    branch: new RegExp(`^claude/review-${pass}-${tier}-pr(\\d+)$`),
-    branchForm: `claude/review-${pass}-${tier}-pr<n>`,
+    modelTier,
+    // Relative to the clone of the reviewed repository — the only directory the session may write,
+    // and the one the collector reads.
+    dir: `reviews/${pass}-${modelTier}`,
+    findings: `reviews/${pass}-${modelTier}/findings.json`,
+    branch: new RegExp(`^claude/review-${pass}-${modelTier}-pr(\\d+)$`),
+    branchForm: `claude/review-${pass}-${modelTier}-pr<n>`,
   };
 }
 
 /**
- * The review run a waybill order declares, or null: the order names
- * `role: reviewer` with its `pass` and `tier`.
+ * The review run a waybill order declares, or null:
+ * the order names `role: reviewer` with its `pass` and `model_tier`.
  * @param {string} orderText the order file, YAML
  * @returns {ReviewRun | null}
  */
@@ -60,9 +60,9 @@ export function orderRun(orderText) {
     return m ? m[1].replace(/\s+#.*$/, "").trim().replace(/^["']|["']$/g, "") : "";
   };
   const pass = field("pass");
-  const tier = field("tier");
-  if (field("role") !== "reviewer" || !NAME.test(pass) || !NAME.test(tier)) return null;
-  return runFor(pass, tier);
+  const modelTier = field("model_tier");
+  if (field("role") !== "reviewer" || !NAME.test(pass) || !NAME.test(modelTier)) return null;
+  return runFor(pass, modelTier);
 }
 
 // ------------------------------------------------------------- tools
@@ -324,8 +324,8 @@ function gitWhy(args, run) {
 }
 
 /**
- * Whether a path is the review directory or lies inside it — by path
- * segment, so `reviews/<pass>-<tier>-other/x` is outside.
+ * Whether a path is the review directory or lies inside it — by path segment,
+ * so `reviews/<pass>-<model_tier>-other/x` is outside.
  * @param {string} p
  * @param {ReviewRun} run
  */
@@ -492,7 +492,7 @@ export function findingsProblems(doc, run) {
   /** @type {string[]} */
   const out = [];
   if (!doc || typeof doc !== "object" || Array.isArray(doc)) {
-    return ["the file is not a JSON object with pr, head, pass, tier and findings"];
+    return ["the file is not a JSON object with pr, head, pass, model_tier and findings"];
   }
   const d = /** @type {Record<string, unknown>} */ (doc);
   if (typeof d.pr !== "string" || !PR.test(d.pr)) out.push("`pr` must be `owner/repo#n`");
@@ -500,7 +500,7 @@ export function findingsProblems(doc, run) {
     out.push("`head` must be the PR head commit sha that was reviewed");
   }
   if (d.pass !== run.pass) out.push(`\`pass\` must be \`${run.pass}\``);
-  if (d.tier !== run.tier) out.push(`\`tier\` must be \`${run.tier}\``);
+  if (d.model_tier !== run.modelTier) out.push(`\`model_tier\` must be \`${run.modelTier}\``);
   if (!Array.isArray(d.findings)) {
     out.push("`findings` must be an array, empty when nothing was found");
     return out;

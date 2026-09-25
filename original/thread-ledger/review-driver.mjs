@@ -1,12 +1,11 @@
 #!/usr/bin/env node
-// The review driver — the hooks that make a waybill-fired session a
-// review session (skills#195).
+// The review driver — the hooks that make a waybill-fired session a review session (skills#195).
 //
-// Registered for `PreToolUse` and `Stop`. Reads the hook's JSON on
-// stdin. When the waybill order that fired the session names
-// `role: reviewer` with its pass and tier, the session is a review
-// session. Otherwise every event exits 0 untouched, and the ledger
-// heartbeat keeps the session.
+// Registered for `PreToolUse` and `Stop`.
+// Reads the hook's JSON on stdin.
+// When the waybill order that fired the session names `role: reviewer` with its pass and model tier,
+// the session is a review session.
+// Otherwise every event exits 0 untouched, and the ledger heartbeat keeps the session.
 //
 //     PreToolUse   exit 2 + stderr   the call is denied; the reason
 //                                    names the rule and the alternative
@@ -16,13 +15,13 @@
 //                                    command that meets it
 //     exit 0                         allowed, or complete
 //
-// Why two hooks: a Stop hook fires after the turn, so it can refuse
-// completion but cannot undo code that ran or a comment that was
-// posted. Prohibitions therefore fire BEFORE the call, and the Stop
-// hook keeps only the completion criterion. Policy: `review/policy.mjs`.
+// Why two hooks: a Stop hook fires after the turn,
+// so it can refuse completion but cannot undo code that ran or a comment that was posted.
+// Prohibitions therefore fire before the call,
+// and the Stop hook keeps only the completion criterion.
+// Policy: `review/policy.mjs`.
 //
-// The driver's denials and a trace of the session's calls and usage
-// are the measurement this exists for.
+// The driver's denials and a trace of the session's calls and usage are the measurement this exists for.
 // The driver writes them beside the findings, on the review branch.
 //
 //     HEARTBEAT_REPO_ROOT   directory holding the session's clones
@@ -168,7 +167,7 @@ export function stopVerdict(run, ctx) {
       reason:
         `The review is not complete until ${run.findings} exists in the clone of the reviewed ` +
         `repository${where}: a JSON object with pr (owner/repo#n), head (the reviewed commit sha), ` +
-        `pass ("${run.pass}"), tier ("${run.tier}") and findings (an array, empty when nothing was found). ` +
+        `pass ("${run.pass}"), model_tier ("${run.modelTier}") and findings (an array, empty when nothing was found). ` +
         "Write it with the Write tool.",
     };
   }
@@ -197,10 +196,11 @@ export function stopVerdict(run, ctx) {
     };
   }
   const n = prNumber(doc);
-  const branch = `claude/review-${run.pass}-${run.tier}-pr${n}`;
-  // The driver's observations ride the same branch. Written once, when
-  // the findings first validate: rewriting after the commit would dirty
-  // the tree again and turn the completion check into a loop.
+  const branch = `claude/review-${run.pass}-${run.modelTier}-pr${n}`;
+  // The driver's observations ride the same branch.
+  // Written once, when the findings first validate:
+  // rewriting after the commit would dirty the tree again
+  // and turn the completion check into a loop.
   const dir = path.join(clone, run.dir);
   // driver.jsonl holds the denials up to this point — written even when there were none,
   // so an empty file says "measured, nothing denied" and a missing one says "never written".
@@ -230,7 +230,7 @@ export function stopVerdict(run, ctx) {
       detail: `${run.dir} has uncommitted changes`,
       reason:
         `The review is not complete until ${run.dir}/ is committed:\n\n` +
-        `  git -C ${clone} add ${run.dir} && git -C ${clone} commit -m "chore(review): ${run.pass} ${run.tier} findings for pr${n}"`,
+        `  git -C ${clone} add ${run.dir} && git -C ${clone} commit -m "chore(review): ${run.pass} ${run.modelTier} findings for pr${n}"`,
     };
   }
   const head = git(clone, "rev-parse", "HEAD");
@@ -260,8 +260,7 @@ function readState(file) {
 }
 
 /**
- * The session's review run and where it came from
- * (SKILL.md, "Review sessions").
+ * The session's review run and where it came from (SKILL.md, "Review sessions").
  * @param {HookInput} input
  */
 function session(input) {
@@ -301,7 +300,7 @@ export function run(input) {
       why: verdict.why,
     });
     process.stderr.write(
-      `${verdict.why}\n\nThis is a ${review.pass} review session (tier ${review.tier}): read-only, ` +
+      `${verdict.why}\n\nThis is a ${review.pass} review session (model tier ${review.modelTier}): read-only, ` +
         `one findings file, one branch, nothing posted. The denial is logged.\n`,
     );
     return 2;
