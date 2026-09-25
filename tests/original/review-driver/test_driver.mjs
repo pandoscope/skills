@@ -89,6 +89,16 @@ describe("bash policy", () => {
     deny("awk 'BEGIN{system(\"id\")}'", "awk", "system");
     deny("awk '{print | \"sh\"}' src/x.py", "awk");
   });
+  it("allows awk only as a print-only script given inline", () => {
+    allow("awk -F: '$3 > 5 {print $1}' src/x.py");
+    allow("awk 'NR==1 || /def/ {print NR\": \"$0}' src/x.py");
+    deny("awk '{print > f}' src/x.py", "awk", "print-only");
+    deny("awk '{printf \"%s\", $0 > out}' src/x.py", "awk", "print-only");
+    deny("awk '{\"date\" | getline d}' src/x.py", "awk", "print-only");
+    deny("awk 'BEGIN{print ENVIRON[\"GH_TOKEN\"]}'", "awk", "print-only");
+    deny("awk -f prog.awk src/x.py", "awk -f");
+    deny("awk -i inplace '{print}' src/x.py", "awk -i");
+  });
   it("denies reading the session's own secrets", () => {
     deny("cat /proc/self/environ", "session's own secrets");
     deny("cat ~/.claude/session.env", "session's own secrets");
