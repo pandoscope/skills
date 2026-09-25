@@ -503,6 +503,8 @@ The composer renders the whole file into the session's CLAUDE.md,
 with variables from the order and the pull request's clone:
 `repo`, `n`, `pass`, `model_tier`, `tickets`, `base`, `head` and `branch`,
 plus `findings_contract`, the schema rendered as a field list.
+A pass file that uses `candidates` also gets the writing-prose check's F findings and H candidates on the lines that the pull request adds.
+`review/prose.md` is such a file.
 An undefined variable is a composer error.
 The order's `model_tier` is a name the principal chooses for a Routine, in lowercase with hyphens:
 a model name such as `opus-5-5` or `qwen3-coder`, or a role name such as `senior` or `eva`.
