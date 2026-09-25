@@ -474,7 +474,7 @@ function trim(command) {
 
 // ---------------------------------------------------------- findings
 
-const TIERS = new Set(["hard", "judgment"]);
+const BASES = new Set(["decided", "judged"]);
 const PR = /^[\w.-]+\/[\w.-]+#(\d+)$/;
 
 /**
@@ -515,7 +515,9 @@ export function findingsProblems(doc, run) {
       out.push(`${at}.rule must quote the ticket or spec sentence verbatim`);
     }
     if (typeof f.input !== "string" || !f.input) out.push(`${at}.input must name the input that shows the departure`);
-    if (typeof f.tier !== "string" || !TIERS.has(f.tier)) out.push(`${at}.tier must be hard or judgment`);
+    if (typeof f.finding_basis !== "string" || !BASES.has(f.finding_basis)) {
+      out.push(`${at}.finding_basis must be decided or judged`);
+    }
     if (typeof f.confidence !== "number" || f.confidence < 0 || f.confidence > 100) {
       out.push(`${at}.confidence must be 0 to 100`);
     }

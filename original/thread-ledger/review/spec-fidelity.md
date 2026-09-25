@@ -41,7 +41,7 @@ The file holds one JSON object:
   - `line`: an integer, at the head commit
   - `rule`: the verbatim specification sentence
   - `input`: the input that shows the departure
-  - `tier`: `hard` when the specification decides the case, `judgment` otherwise
+  - `finding_basis`: `decided` when the specification decides the case, `judged` otherwise
   - `confidence`: 0 to 100
   - `finding`: one sentence
 
