@@ -194,12 +194,12 @@ describe("findings contract", () => {
   });
   it("names every missing field", () => {
     const p = findingsProblems({ ...good, pr: "143", head: "x", model_tier: "opus", findings: [{}] }, RUN);
-    assert.match(p.join("\n"), /`pr` must be `owner\/repo#n`/);
+    assert.match(p.join("\n"), /`pr` must be the pull request, as `owner\/repo#n`/);
     assert.match(p.join("\n"), /`head` must be/);
     assert.match(p.join("\n"), /`model_tier` must be `sonnet`/);
-    assert.match(p.join("\n"), /findings\[0\]\.rule must quote/);
-    assert.match(p.join("\n"), /findings\[0\]\.finding_basis must be decided or judged/);
-    assert.match(findingsProblems([], RUN)[0], /not a JSON object/);
+    assert.match(p.join("\n"), /`findings\[0\]\.rule` is missing: the sentence the finding violates/);
+    assert.match(p.join("\n"), /`findings\[0\]\.finding_basis` is missing/);
+    assert.match(findingsProblems([], RUN)[0], /`the file` must be/);
   });
 });
 

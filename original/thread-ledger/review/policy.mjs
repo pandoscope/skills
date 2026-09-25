@@ -12,6 +12,10 @@
 // A denylist of the ways to run code is a list the next detour is not on,
 // so what is allowed is enumerated and everything else is refused with the rule.
 
+import fs from "node:fs";
+
+import { schemaProblems } from "./schema.mjs";
+
 /**
  * @typedef {object} ReviewRun
  * @property {string} pass       the review pass, e.g. spec-fidelity
@@ -511,54 +515,29 @@ function trim(command) {
 
 // ---------------------------------------------------------- findings
 
-const BASES = new Set(["decided", "judged"]);
 const PR = /^[\w.-]+\/[\w.-]+#(\d+)$/;
+const FINDINGS_SCHEMA = /** @type {import("./schema.mjs").Schema} */ (
+  JSON.parse(fs.readFileSync(new URL("./findings.schema.json", import.meta.url), "utf8"))
+);
 
 /**
  * Problems with a parsed findings file, in field order; empty when valid.
  *
- * The contract is X8's finding shape (skills#41) under a header that names what was reviewed:
- * the collector and the falsifier need the PR and the head commit,
- * and a finding without a verbatim rule sentence is not a finding.
+ * The contract is `findings.schema.json` (skills#225): X8's finding shape (skills#41)
+ * under a header that names what was reviewed. The order adds what no schema knows:
+ * `pass` and `model_tier` must be the run's.
  * @param {unknown} doc
  * @param {ReviewRun} run
  * @returns {string[]}
  */
 export function findingsProblems(doc, run) {
-  /** @type {string[]} */
-  const out = [];
-  if (!doc || typeof doc !== "object" || Array.isArray(doc)) {
-    return ["the file is not a JSON object with pr, head, pass, model_tier and findings"];
-  }
+  const out = schemaProblems(FINDINGS_SCHEMA, doc);
+  if (!doc || typeof doc !== "object" || Array.isArray(doc)) return out;
   const d = /** @type {Record<string, unknown>} */ (doc);
-  if (typeof d.pr !== "string" || !PR.test(d.pr)) out.push("`pr` must be `owner/repo#n`");
-  if (typeof d.head !== "string" || !/^[0-9a-f]{7,40}$/.test(d.head)) {
-    out.push("`head` must be the PR head commit sha that was reviewed");
+  if (typeof d.pass === "string" && d.pass !== run.pass) out.push(`\`pass\` must be \`${run.pass}\``);
+  if (typeof d.model_tier === "string" && d.model_tier !== run.modelTier) {
+    out.push(`\`model_tier\` must be \`${run.modelTier}\``);
   }
-  if (d.pass !== run.pass) out.push(`\`pass\` must be \`${run.pass}\``);
-  if (d.model_tier !== run.modelTier) out.push(`\`model_tier\` must be \`${run.modelTier}\``);
-  if (!Array.isArray(d.findings)) {
-    out.push("`findings` must be an array, empty when nothing was found");
-    return out;
-  }
-  /** @type {unknown[]} */ (d.findings).forEach((entry, i) => {
-    const at = `findings[${i}]`;
-    if (!entry || typeof entry !== "object") return out.push(`${at} is not an object`);
-    const f = /** @type {Record<string, unknown>} */ (entry);
-    if (typeof f.file !== "string" || !f.file) out.push(`${at}.file must name the file in the PR`);
-    if (!Number.isInteger(f.line)) out.push(`${at}.line must be an integer`);
-    if (typeof f.rule !== "string" || f.rule.trim().length < 10) {
-      out.push(`${at}.rule must quote the ticket or spec sentence verbatim`);
-    }
-    if (typeof f.input !== "string" || !f.input) out.push(`${at}.input must name the input that shows the departure`);
-    if (typeof f.finding_basis !== "string" || !BASES.has(f.finding_basis)) {
-      out.push(`${at}.finding_basis must be decided or judged`);
-    }
-    if (typeof f.confidence !== "number" || f.confidence < 0 || f.confidence > 100) {
-      out.push(`${at}.confidence must be 0 to 100`);
-    }
-    if (typeof f.finding !== "string" || !f.finding) out.push(`${at}.finding must be one sentence`);
-  });
   return out;
 }
 
