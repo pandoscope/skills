@@ -142,7 +142,7 @@ export function toolVerdict(name, input, run) {
       allow: false,
       why:
         `${name} writes to the forge. A review session posts nothing: no comments, no reviews, ` +
-        `no issues, no pull requests. Findings go to ${run.findings} and are pushed on ${run.branchForm}.`,
+        `no issues, no pull requests. Findings go to ${run.findings}; the driver pushes them on ${run.branchForm}.`,
     };
   }
   return {
@@ -279,7 +279,7 @@ function gitWhy(args, run) {
   if (GIT_READ.has(sub)) {
     const write = GIT_WRITE_FLAGS[sub];
     if (write && rest.some((x) => write.test(x))) {
-      return `\`git ${sub} ${rest.join(" ")}\` writes. Read subcommands only, plus the findings commit and push.`;
+      return `\`git ${sub} ${rest.join(" ")}\` writes. Read subcommands only; the driver commits and pushes the findings.`;
     }
     if (sub === "fetch" && rest.some((x) => /^--(force|refmap)$|^-f$|^\+/.test(x))) {
       return "`git fetch` with --force or a + refspec overwrites refs. Fetch plainly.";
@@ -296,44 +296,13 @@ function gitWhy(args, run) {
     if (!nonFlags.length || rest.some((x) => x === "-l" || x === "--list")) return null;
     return "`git tag <name>` creates a tag; `git tag` and `git tag -l` are the read forms.";
   }
-  if (sub === "switch" || sub === "checkout") {
-    const flag = rest.findIndex((x) => x === "-c" || x === "-b" || x === "--create");
-    if (flag > -1 && run.branch.test(rest[flag + 1] ?? "")) return null;
+  if (["switch", "checkout", "add", "commit", "push"].includes(sub)) {
     return (
-      `\`git ${sub}\` may only create the review branch: git switch -c ${run.branchForm}. ` +
-      "The clone stays at the checkout the session started on otherwise."
+      `\`git ${sub}\` writes. The driver commits and pushes ${run.dir}/ on ${run.branchForm} at Stop; ` +
+      `write ${run.findings} and stop.`
     );
   }
-  if (sub === "add") {
-    if (nonFlags.length && nonFlags.every((p) => insideReviewDir(p, run))) return null;
-    return `\`git add\` may only stage ${run.dir}/. Nothing else in the clone changes.`;
-  }
-  if (sub === "commit") {
-    if (rest.some((x) => /^--amend|^-a$|^--all$|^--no-verify|^-n$/.test(x))) {
-      return "`git commit` without --amend, -a or --no-verify: commit what `git add` staged.";
-    }
-    return null;
-  }
-  if (sub === "push") {
-    if (rest.some((x) => /^-f$|^--force|^--delete|^-d$|^--mirror|^--all$|:/.test(x))) {
-      return "`git push` without --force, --delete or a refspec: push the review branch only.";
-    }
-    const named = nonFlags.filter((x) => x !== "origin");
-    if (named.length && named.every((b) => run.branch.test(b))) return null;
-    return `\`git push\` names the review branch: git push -u origin ${run.branchForm}.`;
-  }
-  return `\`git ${sub}\` is not a read subcommand. Allowed: ${[...GIT_READ].slice(0, 8).join(", ")}, …, plus switch -c, add, commit and push for the findings.`;
-}
-
-/**
- * Whether a path is the review directory or lies inside it — by path segment,
- * so `reviews/<pass>-<model_tier>-other/x` is outside.
- * @param {string} p
- * @param {ReviewRun} run
- */
-function insideReviewDir(p, run) {
-  const clean = p.replace(/^\.\//, "").replace(/\/+$/, "");
-  return clean === run.dir || clean.startsWith(`${run.dir}/`) || clean.endsWith(`/${run.dir}`) || clean.includes(`/${run.dir}/`);
+  return `\`git ${sub}\` is not a read subcommand. Allowed: ${[...GIT_READ].slice(0, 8).join(", ")}, …; the driver commits and pushes the findings.`;
 }
 
 // ----------------------------------------------------------- parsing

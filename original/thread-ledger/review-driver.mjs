@@ -213,33 +213,40 @@ export function stopVerdict(run, ctx) {
       : [];
     fs.writeFileSync(path.join(dir, "driver.jsonl"), denials.map((l) => `${l}\n`).join(""));
   }
+  // The driver publishes, not the reviewer (skills#224): the composer staged
+  // the review branch, and the policy denies the session every git write.
   const current = git(clone, "rev-parse", "--abbrev-ref", "HEAD");
-  if (current !== branch) {
+  if (current !== branch && git(clone, "switch", "-q", "-c", branch) === null) {
     return {
       check: "review-branch",
-      detail: `${path.basename(clone)} on ${current}, expected ${branch}`,
+      detail: `${path.basename(clone)} on ${current}, and ${branch} could not be created`,
       reason:
-        `The review is not complete until the findings sit on the review branch: ` +
-        `${path.basename(clone)} is on ${current}.\n\n  git -C ${clone} switch -c ${branch}`,
+        `The review is not complete: ${path.basename(clone)} is on ${current}, not ${branch}, ` +
+        "and the driver could not create the branch. Stop again; the principal is told if it persists.",
     };
   }
   const dirty = git(clone, "status", "--porcelain", "--", run.dir);
   if (dirty === null || dirty.length) {
-    return {
-      check: "findings-committed",
-      detail: `${run.dir} has uncommitted changes`,
-      reason:
-        `The review is not complete until ${run.dir}/ is committed:\n\n` +
-        `  git -C ${clone} add ${run.dir} && git -C ${clone} commit -m "chore(review): ${run.pass} ${run.modelTier} findings for pr${n}"`,
-    };
+    const message = `chore(review): ${run.pass} ${run.modelTier} findings for pr${n}`;
+    if (git(clone, "add", "--", run.dir) === null || git(clone, "commit", "-q", "--no-verify", "-m", message, "--", run.dir) === null) {
+      return {
+        check: "findings-committed",
+        detail: `the driver could not commit ${run.dir}`,
+        reason: `The review is not complete: the driver could not commit ${run.dir}/. Stop again to retry.`,
+      };
+    }
   }
   const head = git(clone, "rev-parse", "HEAD");
-  const remote = git(clone, "rev-parse", "--verify", "-q", `refs/remotes/origin/${branch}`);
+  let remote = git(clone, "rev-parse", "--verify", "-q", `refs/remotes/origin/${branch}`);
+  if (head && remote !== head) {
+    git(clone, "push", "-q", "-u", "origin", branch);
+    remote = git(clone, "rev-parse", "--verify", "-q", `refs/remotes/origin/${branch}`);
+  }
   if (!head || remote !== head) {
     return {
       check: "findings-pushed",
       detail: `origin/${branch} is ${remote ? remote.slice(0, 7) : "absent"}, HEAD ${head?.slice(0, 7)}`,
-      reason: `The review is not complete until the branch is pushed:\n\n  git -C ${clone} push -u origin ${branch}`,
+      reason: `The review is not complete: the driver's push of ${branch} did not land. Stop again to retry.`,
     };
   }
   return null;

@@ -111,22 +111,12 @@ describe("bash policy", () => {
     allow("cat /root/.claude/projects/-home-user-x/tool-results/toolu_01.json");
     deny("cat /root/.claude/projects/-home-user-x/session.jsonl", "session's own secrets");
   });
-  it("allows exactly the findings branch, add, commit and push", () => {
-    allow("git switch -c claude/review-spec-fidelity-sonnet-pr143");
-    allow("git checkout -b claude/review-spec-fidelity-sonnet-pr143");
-    allow("git add reviews/spec-fidelity-sonnet && git commit -m 'chore(review): findings'");
-    allow("git push -u origin claude/review-spec-fidelity-sonnet-pr143");
-    // A trailing redirect is punctuation by the time the arguments are judged:
-    // it must not read as a branch name.
-    allow("git push -u origin claude/review-spec-fidelity-sonnet-pr143 2>&1 | tail -5");
-    allow("git add reviews/spec-fidelity-sonnet && git commit -m 'x' && git push -u origin claude/review-spec-fidelity-sonnet-pr143 2>&1");
-    deny("git switch -c claude/sk143-fix", "review branch", "claude/review-spec-fidelity-sonnet-pr<n>");
-    deny("git checkout main", "review branch");
-    deny("git add -A", "only stage reviews/spec-fidelity-sonnet/");
-    deny("git add src/x.py reviews/spec-fidelity-sonnet/findings.json", "only stage");
-    deny("git commit --amend --no-edit", "--amend");
-    deny("git push --force origin claude/review-spec-fidelity-sonnet-pr143", "--force");
-    deny("git push origin main", "names the review branch");
+  it("denies every git write; the driver publishes the findings", () => {
+    deny("git switch -c claude/review-spec-fidelity-sonnet-pr143", "driver commits and pushes");
+    deny("git checkout main", "driver commits and pushes");
+    deny("git add reviews/spec-fidelity-sonnet", "driver commits and pushes");
+    deny("git commit -m 'chore(review): findings'", "driver commits and pushes");
+    deny("git push -u origin claude/review-spec-fidelity-sonnet-pr143 2>&1 | tail -5", "driver commits and pushes");
     deny("git reset --hard", "not a read subcommand");
     deny("git branch -D main", "writes");
     deny("git -c core.hooksPath=/dev/null commit -m x", "git -c");
@@ -135,8 +125,6 @@ describe("bash policy", () => {
     allow("git stash list");
     deny("git tag v9", "creates a tag");
     allow("git tag -l");
-    deny("git add reviews/spec-fidelity-sonnet-other/notes.txt", "only stage reviews/spec-fidelity-sonnet/");
-    allow("git add ./reviews/spec-fidelity-sonnet/");
   });
 });
 
@@ -322,7 +310,7 @@ describe("staged session", () => {
     assert.match(stop.err, /not complete until reviews\/spec-fidelity-sonnet\/findings.json exists/);
   });
 
-  it("denies at PreToolUse, logs it, and walks the Stop criteria to completion", () => {
+  it("denies at PreToolUse, logs it, and publishes once the criteria hold", () => {
     const s = stage();
     const denied = fire(s, { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "python3 -m pytest" } });
     assert.equal(denied.code, 2);
@@ -344,8 +332,8 @@ describe("staged session", () => {
 
     fs.writeFileSync(path.join(dir, "findings.json"), JSON.stringify({ pr: "pandoscope/meta#143", head: "22056ce0", pass: "spec-fidelity", model_tier: "sonnet", findings: [] }));
     stop = fire(s, { hook_event_name: "Stop" });
-    assert.equal(stop.code, 2);
-    assert.match(stop.err, /git -C \S+ switch -c claude\/review-spec-fidelity-sonnet-pr143/);
+    assert.equal(stop.code, 0, stop.err);
+    assert.match(stop.err, /Review complete/);
     assert.ok(fs.existsSync(path.join(dir, "trace.json")), "trace written once the findings validate");
     assert.ok(fs.existsSync(path.join(dir, "driver.jsonl")), "denial log written beside the findings");
     const denials = fs.readFileSync(path.join(dir, "driver.jsonl"), "utf8").trim().split("\n");
@@ -356,21 +344,7 @@ describe("staged session", () => {
     assert.equal(trace.calls[0].arg, "git diff");
     assert.equal(trace.usage["claude-sonnet"].input, 10);
 
-    sh(s.clone, "git", "switch", "-q", "-c", "claude/review-spec-fidelity-sonnet-pr143");
-    stop = fire(s, { hook_event_name: "Stop" });
-    assert.equal(stop.code, 2);
-    assert.match(stop.err, /git -C \S+ add reviews\/spec-fidelity-sonnet && git -C \S+ commit -m "chore\(review\)/);
-
-    sh(s.clone, "git", "add", "reviews/spec-fidelity-sonnet");
-    sh(s.clone, "git", "commit", "-q", "-m", "chore(review): spec-fidelity sonnet findings for pr143");
-    stop = fire(s, { hook_event_name: "Stop" });
-    assert.equal(stop.code, 2);
-    assert.match(stop.err, /git -C \S+ push -u origin claude\/review-spec-fidelity-sonnet-pr143/);
-
-    sh(s.clone, "git", "push", "-q", "-u", "origin", "claude/review-spec-fidelity-sonnet-pr143");
-    stop = fire(s, { hook_event_name: "Stop" });
-    assert.equal(stop.code, 0, stop.err);
-    assert.match(stop.err, /Review complete/);
+    assert.equal(sh(s.clone, "git", "rev-parse", "--abbrev-ref", "HEAD"), "claude/review-spec-fidelity-sonnet-pr143");
   });
 
   it("releases a guarded Stop whose reason was already delivered", () => {
