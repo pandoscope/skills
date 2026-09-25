@@ -431,3 +431,28 @@ describe("model tier", () => {
     assert.match(findingsProblems({ ...doc, model_tier: "sonnet" }, run).join("\n"), /`model_tier` must be `opus`/);
   });
 });
+
+// One schema defines the findings contract (#225). The driver validates
+// against it, and the composer renders it into the pass file.
+describe("findings schema", () => {
+  const file = path.join(HERE, "../../../original/thread-ledger/review/findings.schema.json");
+  const good = {
+    pr: "pandoscope/meta#143",
+    head: "22056ce0",
+    pass: "spec-fidelity",
+    model_tier: "sonnet",
+    findings: [{ file: "src/x.py", line: 3, rule: "The parser accepts owner/repo!n references.", input: "owner/repo!7", finding_basis: "decided", confidence: 80, finding: "Bang references raise." }],
+  };
+  it("is a JSON schema that describes every field", () => {
+    const schema = JSON.parse(fs.readFileSync(file, "utf8"));
+    assert.equal(schema.$schema, "https://json-schema.org/draft/2020-12/schema");
+    const finding = schema.properties.findings.items;
+    for (const s of [schema, finding]) {
+      for (const [key, prop] of Object.entries(s.properties)) assert.ok(prop.description, key);
+    }
+  });
+  it("rejects a field the schema does not name", () => {
+    const extra = { ...good, findings: [{ ...good.findings[0], severity: "high" }] };
+    assert.match(findingsProblems(extra, RUN).join("\n"), /severity/);
+  });
+});
