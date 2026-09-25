@@ -11,9 +11,9 @@ description: >
 
 Rules live in `rules/`, one sentence each, with an id and a tier:
 
-- **F**: `check.sh` decides, and a finding is final.
-- **H**: `check.sh` prints a candidate, and you confirm or dismiss it.
-- **M**: you judge the rule by reading.
+- **F** (fully): `check.sh` decides, and a finding is final.
+- **H** (heuristic): `check.sh` prints a candidate, and you confirm or dismiss it.
+- **M** (model): you judge the rule by reading.
 
 ## Surfaces
 
