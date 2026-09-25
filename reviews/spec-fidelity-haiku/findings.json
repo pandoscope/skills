@@ -1,0 +1,17 @@
+{
+  "pr": "pandoscope/skills#230",
+  "head": "feffae025265df21120411b37019ca903c7b004f",
+  "pass": "spec-fidelity",
+  "model_tier": "haiku",
+  "findings": [
+    {
+      "file": "original/thread-ledger/review/prose.md",
+      "line": 46,
+      "rule": "confirm or reject each H candidate, and judge the M rules and the rules that span documents;",
+      "input": "Confirm or reject each H hit by reading its line in context.",
+      "finding_basis": "judged",
+      "confidence": 75,
+      "finding": "Prose.md uses 'hit' instead of 'candidate' for H-tier results, inconsistent with specification (ticket #221) and writing-prose SKILL.md terminology."
+    }
+  ]
+}
