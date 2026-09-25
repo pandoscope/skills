@@ -75,6 +75,20 @@ describe("bash policy", () => {
     deny("mkdir -p reviews/spec-fidelity-sonnet", "mkdir", "not a read command");
     deny("touch notes.txt", "touch");
   });
+  it("reads a quoted sed or awk script before allowing it", () => {
+    allow("sed -n '10,20p' src/x.py");
+    allow("sed -n -e 1p -e '$p' src/x.py");
+    allow("sed -n '/^def /,/^$/p' src/x.py");
+    allow("sed 's/a/b/g' src/x.py | head");
+    allow("awk '{print $1}' src/x.py");
+    deny("sed -n '1e id' src/x.py", "sed", "read forms");
+    deny("sed 's/a/b/e' src/x.py", "sed", "read forms");
+    deny("sed -n 'w out.txt' src/x.py", "sed", "read forms");
+    deny("sed -n '1{e id\n}' src/x.py", "sed", "read forms");
+    deny("sed -f edit.sed src/x.py", "sed -f");
+    deny("awk 'BEGIN{system(\"id\")}'", "awk", "system");
+    deny("awk '{print | \"sh\"}' src/x.py", "awk");
+  });
   it("denies reading the session's own secrets", () => {
     deny("cat /proc/self/environ", "session's own secrets");
     deny("cat ~/.claude/session.env", "session's own secrets");
