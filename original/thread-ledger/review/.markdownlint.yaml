@@ -1,0 +1,6 @@
+# Pass files are review tasks, rendered whole into a session's CLAUDE.md.
+# Their placeholders look like HTML tags,
+# and each file carries its own top-level headings.
+MD013: false
+MD025: false
+MD033: false

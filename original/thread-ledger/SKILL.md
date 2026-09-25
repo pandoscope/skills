@@ -472,3 +472,48 @@ failure banner carrying a ready-to-paste debugging prompt.
 
 `SESSION_MEMORY_URL` names the store events are written to. Unset,
 every command fails.
+
+## Review sessions
+
+The waybill is the repository of orders, one YAML file per order.
+A pull request that opens from a branch `order/<name>` fires a Routine,
+and the Routine starts a session that works from `orders/<name>.yml`.
+A waybill order with `role: reviewer`, a `pass` and a `model_tier` makes the session it fires a review session (skills#195).
+The Routine's prompt and the session's environment never make a session a review; the order alone does.
+The driver finds the order at `waybill/orders/<name>.yml` from the `order/<name>` head ref.
+In a review session, two hooks replace the heartbeat.
+
+On `PreToolUse`, `review-driver.mjs` denies every call outside the read-only policy in `review/policy.mjs`.
+The policy allows read commands, git read subcommands and writes to the findings file.
+It denies every git write and every forge write.
+
+On `Stop`, the driver refuses to end the session until the session has read every ticket the order names.
+It then refuses until `reviews/<pass>-<model_tier>/findings.json` validates
+against `review/findings.schema.json`, the one definition of the findings contract.
+Once it validates, the driver writes its denials and a trace of the session's calls and usage beside the findings,
+then commits the review directory and pushes it on `claude/review-<pass>-<model_tier>-pr<n>`.
+The composer switched the clone to that branch at the pull request head before the session started,
+so the reviewer runs no git step.
+They travel on the review branch, so a run is collected from its branch alone.
+The heartbeat's sentinel skips a session for which `review-driver.mjs --is-review` exits 0.
+
+The review tasks live in `review/`, one file per pass, e.g. `review/spec-fidelity.md`.
+Write each pass file as a Jinja template that holds the task and nothing else.
+The composer renders the whole file into the session's CLAUDE.md,
+with variables from the order and the pull request's clone:
+`repo`, `n`, `pass`, `model_tier`, `tickets`, `base`, `head` and `branch`,
+plus `findings_contract`, the schema rendered as a field list.
+An undefined variable is a composer error.
+The order's `model_tier` is a name the principal chooses for a Routine, in lowercase with hyphens:
+a model name such as `opus-5-5` or `qwen3-coder`, or a role name such as `senior` or `eva`.
+The Routine's configuration decides which model runs under that name.
+Keep one model per name, so that runs under one name stay comparable.
+The task passes the name on as an opaque label and never tells the reviewer that it is the reviewer's model.
+Nothing checks the name against the model that served the session; the run trace records that model.
+A finding's `finding_basis` takes one of two values:
+
+- `decided`: the specification settles the case, and the finding quotes the sentence that settles it.
+- `judged`: the specification leaves the case open, and the finding is the reviewer's reading of it.
+
+Every Routine saves the same one-sentence prompt, which carries no data.
+The driver enforces the constraints, so a task says only what to do.

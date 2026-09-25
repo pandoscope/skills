@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/pandoscope/skills/original/thread-ledger/review/findings.schema.json",
+  "title": "Review findings",
+  "description": "The one output of a review session (skills#195, skills#225). The driver validates it at Stop; the composer renders it into the pass file.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["pr", "head", "pass", "model_tier", "findings"],
+  "properties": {
+    "pr": {"type": "string", "pattern": "^[\\w.-]+/[\\w.-]+#\\d+$", "description": "the pull request, as `owner/repo#n`"},
+    "head": {"type": "string", "pattern": "^[0-9a-f]{7,40}$", "description": "the head commit sha that was reviewed"},
+    "pass": {"type": "string", "pattern": "^[a-z0-9-]+$", "description": "the review pass the order names"},
+    "model_tier": {"type": "string", "pattern": "^[a-z0-9-]+$", "description": "the order's model_tier label, copied as given"},
+    "findings": {
+      "type": "array",
+      "description": "the findings, worst first; empty when nothing was found",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["file", "line", "rule", "input", "finding_basis", "confidence", "finding"],
+        "properties": {
+          "file": {"type": "string", "minLength": 1, "description": "the path in the pull request"},
+          "line": {"type": "integer", "minimum": 1, "description": "the line, at the head commit"},
+          "rule": {"type": "string", "minLength": 10, "description": "the sentence the finding violates, quoted verbatim"},
+          "input": {"type": "string", "minLength": 1, "description": "the input that shows the departure"},
+          "finding_basis": {"enum": ["decided", "judged"], "description": "`decided` when the rule settles the case, `judged` when the finding is the reviewer's reading"},
+          "confidence": {"type": "number", "minimum": 0, "maximum": 100, "description": "confidence, 0 to 100"},
+          "finding": {"type": "string", "minLength": 1, "description": "the departure, in one sentence"}
+        }
+      }
+    }
+  }
+}
