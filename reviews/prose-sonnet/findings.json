@@ -1,0 +1,17 @@
+{
+  "pr": "pandoscope/skills#230",
+  "head": "feffae025265df21120411b37019ca903c7b004f",
+  "pass": "prose",
+  "model_tier": "sonnet",
+  "findings": [
+    {
+      "file": "original/thread-ledger/review/prose.md",
+      "line": 37,
+      "rule": "Give one thing one name throughout a text, and never use that name for a second thing.",
+      "input": "Its hits:\n\n```text\n{{ candidates }}\n```\n\nEach hit names a file, a line, a tier and a rule.\nSkip the F hits: they are left to CI, not to this review.\nConfirm or reject each H hit by reading its line in context.\nA confirmed H hit is a finding.",
+      "finding_basis": "judged",
+      "confidence": 75,
+      "finding": "This block calls check.sh's per-line output a \"hit\" throughout, while writing-prose/SKILL.md (which this same file tells the reviewer to read first for the tier definitions, and which this PR itself edits) calls the identical H-tier output a \"candidate\" in three places (\"check.sh prints a candidate\", \"Confirm or dismiss every H candidate\", \"every H candidate is settled\"), so the same object now carries two names across the two documents."
+    }
+  ]
+}
