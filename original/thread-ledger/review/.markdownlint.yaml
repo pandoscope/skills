@@ -1,6 +1,11 @@
 # Pass files are review tasks, rendered whole into a session's CLAUDE.md.
-# Their placeholders look like HTML tags,
-# and each file carries its own top-level headings.
+# Each disabled rule names what in a pass file it misreads.
+
+# MD013 line length: a task line runs as long as its sentence.
 MD013: false
-MD025: false
-MD033: false
+# MD022 blank lines around headings: the include line renders as the
+# included text and a blank line, so the heading after it looks unspaced.
+MD022: false
+# MD041 first line a heading: a pass file opens with the include line,
+# and the heading comes from the included _task.md.
+MD041: false
