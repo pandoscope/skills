@@ -183,6 +183,12 @@ candidate() {
 @test "H non-requirement flags a stated non-requirement" { candidate markdown non-requirement 1 'Key order does not matter.\n'; }
 @test "H pitch flags value words" { candidate markdown pitch 1 'A powerful, seamless check.\n'; }
 @test "H drifting-ref flags a count tied to position" { candidate markdown drifting-ref 1 'The seven examples above show it.\n'; }
+@test "H drifting-ref flags a count that the list after it states" { candidate markdown drifting-ref 1 'The composer writes six keys to the answers file: `detected` and `order`.\n'; }
+@test "H drifting-ref leaves a count that no list restates" {
+  f=$(printf 'The loop retries three times.\nCheck 3 fires: the ledger has no event.\n' | text x.md)
+  run "$CHECK" markdown "$f"
+  [[ "$output" != *"drifting-ref"* ]]
+}
 @test "H line-ref flags a line-number reference" { candidate markdown line-ref 1 'See check.awk:42 for the rule.\n'; }
 @test "H glossary-marking flags a plain mention after the term's link" { candidate markdown glossary-marking 2 'The [drift](drift.md) check runs.\nIt reports drift per file.\n'; }
 @test "H sembr flags two sentences on one line" { candidate markdown sembr 1 'The hook runs. It exits.\n'; }
