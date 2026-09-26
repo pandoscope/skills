@@ -21,6 +21,12 @@ const BOOLS = ["conversation-only", "no-push", "no-pull"];
 // several tickets, and "last one wins" would silently drop the rest.
 const MULTI = ["no-update"];
 
+// Comma-list flags: a repeat joins its value onto the list, so
+// `--tickets a --tickets b` equals `--tickets a,b` (skills#207). Every
+// other flag given twice is refused, since keeping the last value
+// silently drops the first.
+const LISTS = ["tickets", "rulings", "deps"];
+
 
 /**
  * Split argv into a command and its options.
@@ -50,7 +56,9 @@ export function parseArgs(argv) {
     } else if (FLAGS.includes(name)) {
       i += 1;
       if (i >= argv.length) throw new LedgerError(`--${name} needs a value`);
-      opts[name] = argv[i];
+      if (opts[name] === undefined) opts[name] = argv[i];
+      else if (LISTS.includes(name)) opts[name] += `,${argv[i]}`;
+      else throw new LedgerError(`--${name} given twice; pass it once`);
     } else if (name === "help") {
       cmd = cmd ?? "help";
     } else {
