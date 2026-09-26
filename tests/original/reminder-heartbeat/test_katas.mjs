@@ -73,10 +73,18 @@ function stage(name) {
   // turn, so its mtime has to sit after the turn began. Copying resets
   // mtimes to now, which would be true by accident; stamping it makes
   // the kata state deliberate and lets a kata express staleness.
-  const summary = path.join(dir, "home", ".claude", "turn-summary.txt");
-  const stamp = readSpec(dir).summary_written_at;
-  if (stamp && fs.existsSync(summary)) {
-    fs.utimesSync(summary, new Date(stamp), new Date(stamp));
+  const spec = readSpec(dir);
+  const summaries = [
+    path.join(dir, "home", ".claude", "turn-summary.txt"),
+    // A kata that names a v2 location (skills#153) stages its summary
+    // there, and that file needs the same deliberate mtime.
+    ...(spec.turn_summary_path ? [path.join(dir, spec.turn_summary_path)] : []),
+  ];
+  const stamp = spec.summary_written_at;
+  for (const summary of summaries) {
+    if (stamp && fs.existsSync(summary)) {
+      fs.utimesSync(summary, new Date(stamp), new Date(stamp));
+    }
   }
   return dir;
 }
@@ -201,6 +209,12 @@ function fire(dir, spec, script = HEARTBEAT) {
       // absent, which is a session's first Stop before the composer
       // has written anything (skills#181).
       ...(spec.answers_path ? { REINSET_ANSWERS: path.join(dir, spec.answers_path) } : {}),
+      // Only set when the kata names it (fixture-relative), so every
+      // other kata keeps exercising the unset-variable path — which is
+      // the legacy fallback until skills#159 removes it.
+      ...(spec.turn_summary_path
+        ? { TURN_SUMMARY_PATH: path.join(dir, spec.turn_summary_path) }
+        : {}),
     },
   });
   assert.equal(result.error, undefined, `the hook did not run: ${result.error}`);
@@ -414,6 +428,16 @@ function assertKata(name, dir, spec, result) {
       record.verdicts.find((item) => item.check === check)?.verdict,
       verdict,
       `${name}: what the log says ${check} established`,
+    );
+  }
+  // A kata may pin the DETAIL a named check reports, not just its
+  // verdict: the summary-path katas exist for the deprecation note,
+  // which lives nowhere but here.
+  for (const [check, detail] of Object.entries(spec.verdict_details ?? {})) {
+    assert.equal(
+      record.verdicts.find((verdict) => verdict.check === check)?.detail,
+      expand(detail, dir, spec),
+      `${name}: the detail check ${check} reports`,
     );
   }
   assert.equal(record.guarded, spec.stop_hook_active ?? false);
