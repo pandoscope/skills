@@ -11,7 +11,7 @@
  * static; data arrives only as JSON, never as concatenated HTML.
  */
 
-import { buildViewModel } from "./view-model.ts";
+import { buildViewModel, exportAnswers } from "./view-model.ts";
 import type { QuestionViewModel } from "./view-model.ts";
 import type { GrillingSession, AnswerState } from "./decision-context.ts";
 
@@ -464,28 +464,9 @@ class GrillingPage {
     this.root.append(footer);
   }
 
-  /**
-   * Serialize the answer state for pasting into chat / decision memory.
-   *
-   * @returns Pretty-printed JSON keyed by question id, e.g.
-   *   {"session": 1, "answers": {"S1Q1": {"answer": "A3", ...}}}.
-   */
+  /** Serialize the answer state; see exportAnswers in view-model.ts. */
   private exportJson(): string {
-    const answers: Record<string, unknown> = {};
-    this.session.questions.forEach((q, i) => {
-      const state = this.answers.get(q.seq);
-      if (!state || (state.chosen === undefined && !state.skipped)) return;
-      const id = this.vm.questions[i].id;
-      answers[id] = {
-        ...(state.chosen !== undefined && { answer: `A${state.chosen}` }),
-        ...(state.freeText && { freeText: state.freeText }),
-        ...(state.rejectionReasons?.length && { rejectionReasons: state.rejectionReasons }),
-        ...(state.correction && { correction: state.correction }),
-        ...(state.disconfirmedPreferences?.length && { disconfirmedPreferences: state.disconfirmedPreferences }),
-        ...(state.skipped && { skipped: true }),
-      };
-    });
-    return JSON.stringify({ session: this.session.session, answers }, null, 2);
+    return exportAnswers(this.session, this.answers);
   }
 }
 

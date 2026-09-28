@@ -325,14 +325,14 @@ test("committed template.html is the build output of its sources", () => {
 // slot. The fixture's S1Q1 lists two options, so A3 is its free-text slot.
 const VIEW_MODEL_TS = join(HERE, "../../../derived/grilling/render/view-model.ts");
 
-red.fails("free text typed before choosing a listed slot stays out of the export", async () => {
+test("free text typed before choosing a listed slot stays out of the export", async () => {
   const { exportAnswers } = await import(VIEW_MODEL_TS);
   const answers = new Map([[1, { chosen: 2, freeText: "typed before switching" }]]);
   const exported = JSON.parse(exportAnswers(validSession(), answers));
   assert.deepEqual(exported.answers.S1Q1, { answer: "A2" });
 });
 
-red.fails("free text on the free-text slot is exported with the answer", async () => {
+test("free text on the free-text slot is exported with the answer", async () => {
   const { exportAnswers } = await import(VIEW_MODEL_TS);
   const answers = new Map([[1, { chosen: 3, freeText: "my own ruling" }]]);
   const exported = JSON.parse(exportAnswers(validSession(), answers));

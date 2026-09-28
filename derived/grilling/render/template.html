@@ -378,6 +378,36 @@ function buildViewModel(session) {
     };
 }
 /**
+ * Serialize the answer state for pasting into chat / decision memory.
+ *
+ * The free-text box keeps its text while another slot is chosen, so a
+ * switch back restores it; only the free-text slot exports it
+ * (skills#238).
+ *
+ * @param session - The session the answers belong to.
+ * @param answers - Answer state per question seq.
+ * @returns Pretty-printed JSON keyed by question id, e.g.
+ *   {"session": 1, "answers": {"S1Q1": {"answer": "A3", ...}}}.
+ */
+function exportAnswers(session, answers) {
+    const out = {};
+    for (const q of session.questions) {
+        const state = answers.get(q.seq);
+        if (!state || (state.chosen === undefined && !state.skipped))
+            continue;
+        const freeTextSlot = q.options.length + 1;
+        out[`S${session.session}Q${q.seq}`] = {
+            ...(state.chosen !== undefined && { answer: `A${state.chosen}` }),
+            ...(state.chosen === freeTextSlot && state.freeText && { freeText: state.freeText }),
+            ...(state.rejectionReasons?.length && { rejectionReasons: state.rejectionReasons }),
+            ...(state.correction && { correction: state.correction }),
+            ...(state.disconfirmedPreferences?.length && { disconfirmedPreferences: state.disconfirmedPreferences }),
+            ...(state.skipped && { skipped: true }),
+        };
+    }
+    return JSON.stringify({ session: session.session, answers: out }, null, 2);
+}
+/**
  * Build the display form of one question.
  *
  * @param q - The question.
@@ -981,29 +1011,9 @@ class GrillingPage {
         footer.append(el("p", "answer-hint", this.vm.answerHint));
         this.root.append(footer);
     }
-    /**
-     * Serialize the answer state for pasting into chat / decision memory.
-     *
-     * @returns Pretty-printed JSON keyed by question id, e.g.
-     *   {"session": 1, "answers": {"S1Q1": {"answer": "A3", ...}}}.
-     */
+    /** Serialize the answer state; see exportAnswers in view-model.ts. */
     exportJson() {
-        const answers = {};
-        this.session.questions.forEach((q, i) => {
-            const state = this.answers.get(q.seq);
-            if (!state || (state.chosen === undefined && !state.skipped))
-                return;
-            const id = this.vm.questions[i].id;
-            answers[id] = {
-                ...(state.chosen !== undefined && { answer: `A${state.chosen}` }),
-                ...(state.freeText && { freeText: state.freeText }),
-                ...(state.rejectionReasons?.length && { rejectionReasons: state.rejectionReasons }),
-                ...(state.correction && { correction: state.correction }),
-                ...(state.disconfirmedPreferences?.length && { disconfirmedPreferences: state.disconfirmedPreferences }),
-                ...(state.skipped && { skipped: true }),
-            };
-        });
-        return JSON.stringify({ session: this.session.session, answers }, null, 2);
+        return exportAnswers(this.session, this.answers);
     }
 }
 const dataTag = document.getElementById("decision-context");
