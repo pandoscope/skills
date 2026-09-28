@@ -5,7 +5,7 @@ These rules hold for every surface except chat: files, comments, commit messages
 ## Sentence shape
 
 - `articles` [M] Omit articles only where the sentence still reads naturally and every referent resolves.
-- `one-fact` [H] Put one fact in each clause, since more sentences are fine and denser ones are not.
+- `end-weight` [H] Put the main clause first, and let at most one reason, consequence or example trail it.
 - `actor-subject` [H] Make the actor the subject, and keep config, fields and files as objects.
 - `verb-distance` [H] Bring the verb within four words of its subject, with no clause between verb and complement.
 - `relative-clause` [H] Open a relative clause with "that" or "which", or give it a sentence of its own.

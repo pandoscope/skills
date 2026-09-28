@@ -94,9 +94,10 @@ function candidates(    t, tok, lab, plain, rest, n, i, parts, comma) {
         h("abbreviation", "spell out " tok " unless it is an established term")
     }
     if (on(DOCS)) {
-        t = prose; comma = gsub(/,/, ",", t)
-        if (comma >= 3 || (comma >= 1 && index(prose, ";")))
-            h("one-fact", "one fact per clause: split the sentence")
+        # A subordinator after the first word opens a trailing clause.
+        t = " " low " "; trailing = gsub(/[ ,](which|because|since|so that|while|although|unless|whereas|when) /, "", t)
+        if (trailing >= 2)
+            h("end-weight", "main clause first, at most one clause trailing it")
         if (low ~ /^[ \t>*-]*(the |each |a |an )?(config|configuration|field|file|setting|key|option|value|flag|frontmatter|entry)s? (is|are|holds|contains|defines|sets|says|decides|controls|tells|lists)[ .,]/)
             h("actor-subject", "make the actor the subject")
         if (low ~ /^[ \t>*-]*(the|a|an|this|each|every) ([a-z0-9_-]+ ){0,3}[a-z0-9_-]+, [^.]*, /)
