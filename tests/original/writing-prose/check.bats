@@ -174,6 +174,12 @@ candidate() {
 @test "H ai-pattern flags stock rhetorical frames" { candidate markdown ai-pattern 1 'Not because it fails, but because it drifts.\n'; }
 @test "H abbreviation flags an unknown abbreviation once" { candidate markdown abbreviation 1 'The QZX runs. The QZX stops.\n'; }
 @test "H one-fact flags a clause-dense sentence" { candidate markdown one-fact 1 'The hook reads the order, checks the clone, switches the ref, and exits.\n'; }
+@test "H end-weight flags two clauses trailing the main clause" { candidate markdown end-weight 1 'The hook exits early because the clone is dirty, which the log reports when the run ends.\n'; }
+@test "H end-weight leaves one trailing reason" {
+  f=$(printf 'The hook exits early because the clone is dirty.\n' | text x.md)
+  run "$CHECK" markdown "$f"
+  [[ "$output" != *"end-weight"* ]]
+}
 @test "H actor-subject flags a config as subject" { candidate markdown actor-subject 1 'The config decides which clone runs.\n'; }
 @test "H verb-distance flags a subject held apart from its verb" { candidate markdown verb-distance 1 'The hook, between the two steps, runs.\n'; }
 @test "H relative-clause flags a reduced relative" { candidate markdown relative-clause 1 'Each clone named in the block switches.\n'; }
@@ -252,6 +258,17 @@ rules_ids() {
   [[ "$output" == *"rules/shared.md"* ]]
   [[ "$output" == *"rules/skill.md"* ]]
   [[ "$output" != *"rules/tracker.md"* ]]
+}
+
+@test "--rules gives the argued register to docs and tickets, not to instruction files" {
+  for surface in markdown ticket tracker; do
+    run "$CHECK" --rules "$surface"
+    [[ "$output" == *"rules/argued.md"* ]] || { echo "$surface lacks argued.md"; return 1; }
+  done
+  for surface in skill primed comment commit; do
+    run "$CHECK" --rules "$surface"
+    [[ "$output" != *"rules/argued.md"* ]] || { echo "$surface reads argued.md"; return 1; }
+  done
 }
 
 @test "the skill passes the writing-skills check" {
