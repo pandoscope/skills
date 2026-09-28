@@ -35,21 +35,11 @@ These rules hold for every surface except chat: files, comments, commit messages
 
 ## Examples
 
-Not: "The hook, between ensure-repos and the composer,
-switches each clone the order's `checkouts:` block names to its ref,
-leaves a clone with local changes alone,
-and never touches the waybill clone itself."
-
-Yes: "Hook runs between ensure-repos and composer.
-It reads the `checkouts:` block of the order.
-For each repository named there, it switches that clone to the listed ref.
-It skips a clone with local changes and says so.
-It never touches the waybill clone."
-
 Not: "The waybill order is the only receiver.
 A fire of the waybill repository from an order branch carries it."
 
 Yes: "The waybill order is the only receiver.
 It arrives when the Routine fires from an order branch of the waybill repository."
 
-The first version of each turns an event into a noun, hangs prepositional phrases on it, and holds the subject apart from its verb.
+The first version turns an event into a noun and hangs prepositional phrases on it.
+Whole passages per register live in `examples/`.

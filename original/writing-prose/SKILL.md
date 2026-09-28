@@ -20,9 +20,17 @@ Rules live in `rules/`, one sentence each, with an id and a tier:
 Name the surface first: `chat`, `ticket`, `tracker` (pull request bodies and comments), `markdown`, `skill`, `primed` (files loaded into every session), `comment` (code comments and help text) or `commit`.
 `check.sh --rules <surface>` names the rules files the surface reads.
 
+## Examples
+
+`examples/` holds before-and-after passages from real prose, one file per register.
+Read the file for your surface before you draft:
+`argued.md` for `markdown`, `ticket` and `tracker`,
+`comment.md` for `comment`,
+and `commit.md` for `commit`.
+
 ## Loop
 
-1. Read the surface's rules files.
+1. Read the surface's rules files and its examples file.
 2. Draft.
    To rewrite, read the old block, draft it fresh from the rules, then cut.
    Never patch the old sentences.
