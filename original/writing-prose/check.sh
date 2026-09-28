@@ -25,8 +25,8 @@ valid_surface() { case " $surfaces " in *" $1 "*) return 0 ;; *) return 1 ;; esa
 rules_for() {
     case $1 in
         chat) set -- shared chat ;;
-        ticket | tracker) set -- shared docs tracker ;;
-        markdown) set -- shared docs markdown layout ;;
+        ticket | tracker) set -- shared docs tracker argued ;;
+        markdown) set -- shared docs markdown layout argued ;;
         skill) set -- shared docs markdown layout skill ;;
         primed) set -- shared docs markdown layout primed ;;
         comment) set -- shared docs code layout ;;
