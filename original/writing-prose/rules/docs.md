@@ -12,7 +12,8 @@ These rules hold for every surface except chat: files, comments, commit messages
 - `referent` [M] Make every "the X" and "its" point to something named in the current or previous sentence.
 - `known-new` [M] Open each sentence with what the previous one named, then add the news.
 - `event-noun` [H] Write an event as a verb, never as a noun.
-- `skimmable` [M] Let a skimming reader stop after any sentence and have understood it.
+- `skimmable` [M] Open each paragraph with a sentence that stands alone, and let every later sentence lean on at most the one before it.
+- `connect` [M] When a sentence gives the cause, consequence or exception of the one before, say so with a connective.
 
 ## Content
 
