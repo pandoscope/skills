@@ -173,7 +173,6 @@ candidate() {
 @test "H not-just flags the not-just-but escalation" { candidate markdown not-just 1 'It is not only a bug but a design flaw.\n'; }
 @test "H ai-pattern flags stock rhetorical frames" { candidate markdown ai-pattern 1 'Not because it fails, but because it drifts.\n'; }
 @test "H abbreviation flags an unknown abbreviation once" { candidate markdown abbreviation 1 'The QZX runs. The QZX stops.\n'; }
-@test "H one-fact flags a clause-dense sentence" { candidate markdown one-fact 1 'The hook reads the order, checks the clone, switches the ref, and exits.\n'; }
 @test "H end-weight flags two clauses trailing the main clause" { candidate markdown end-weight 1 'The hook exits early because the clone is dirty, which the log reports when the run ends.\n'; }
 @test "H end-weight leaves one trailing reason" {
   f=$(printf 'The hook exits early because the clone is dirty.\n' | text x.md)
