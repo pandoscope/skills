@@ -179,6 +179,11 @@ candidate() {
   run "$CHECK" markdown "$f"
   [[ "$output" != *"end-weight"* ]]
 }
+@test "H end-weight counts per sentence, not per line" {
+  f=$(printf 'The hook exits early when the clone is dirty. It logs the result because the caller reads it.\n' | text x.md)
+  run "$CHECK" tracker "$f"
+  [[ "$output" != *"end-weight"* ]]
+}
 @test "H actor-subject flags a config as subject" { candidate markdown actor-subject 1 'The config decides which clone runs.\n'; }
 @test "H verb-distance flags a subject held apart from its verb" { candidate markdown verb-distance 1 'The hook, between the two steps, runs.\n'; }
 @test "H relative-clause flags a reduced relative" { candidate markdown relative-clause 1 'Each clone named in the block switches.\n'; }
