@@ -95,7 +95,13 @@ function candidates(    t, tok, lab, plain, rest, n, i, parts, comma) {
     }
     if (on(DOCS)) {
         # A subordinator after the first word opens a trailing clause.
-        t = " " low " "; trailing = gsub(/[ ,](which|because|since|so that|while|although|unless|whereas|when) /, "", t)
+        # A tracker line holds a whole paragraph, so count per sentence.
+        trailing = 0; ns = split(low, sent, /[.?!] +/)
+        for (si = 1; si <= ns; si++) {
+            t = " " sent[si] " "
+            c = gsub(/[ ,](which|because|since|so that|while|although|unless|whereas|when) /, "", t)
+            if (c > trailing) trailing = c
+        }
         if (trailing >= 2)
             h("end-weight", "main clause first, at most one clause trailing it")
         if (low ~ /^[ \t>*-]*(the |each |a |an )?(config|configuration|field|file|setting|key|option|value|flag|frontmatter|entry)s? (is|are|holds|contains|defines|sets|says|decides|controls|tells|lists)[ .,]/)
