@@ -243,6 +243,14 @@ candidate() {
 @test "H glossary-marking flags a plain mention after the term's link" { candidate markdown glossary-marking 2 'The [drift](drift.md) check runs.\nIt reports drift per file.\n'; }
 @test "H sembr flags two sentences on one line" { candidate markdown sembr 1 'The hook runs. It exits.\n'; }
 @test "H hard-wrap flags a wrapped tracker paragraph" { candidate tracker hard-wrap 1 'The hook runs first and\nthen exits.\n'; }
+@test "H only-place flags only before a verb" { candidate markdown only-place 1 'The script only reports owners.\n'; }
+
+@test "H only-place passes only before what it limits" {
+  f=$(printf 'The policy allows redirects only to `/dev/null`.\nGive each instance only its deltas.\n' | text a.md)
+  run "$CHECK" markdown "$f"
+  [[ "$output" != *"only-place"* ]]
+}
+
 @test "H ticket-code flags a path in a ticket" { candidate ticket ticket-code 2 'Not grilled.\nEdit original/writing-prose/check.awk.\n'; }
 
 @test "H sembr stays quiet on lines a rewrite left unchanged" {
