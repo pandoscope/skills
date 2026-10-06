@@ -14,6 +14,7 @@ These rules hold for every surface except chat: files, comments, commit messages
 - `event-noun` [H] Write an event as a verb, never as a noun.
 - `skimmable` [M] Open each paragraph with a sentence that stands alone, and let every later sentence lean on at most the one before it.
 - `connect` [M] When a sentence gives the cause, consequence or exception of the one before, say so with a connective.
+- `only-place` [H] Put "only" directly before the word it limits.
 
 ## Content
 
@@ -24,12 +25,15 @@ These rules hold for every surface except chat: files, comments, commit messages
 - `pitch` [H] Cut pitch and value words.
 - `store-id` [F] Name no private record id in public text, and state the reason in plain words instead.
 - `shared-contract` [M] State a contract several things share once, then give each instance only its deltas.
+- `state-norm` [M] Before calling a behaviour wrong, state the intended behaviour it breaks.
+- `list-cases` [M] Give parallel cases one list item each, with the effect first and its cause after it.
 
 ## References
 
 - `consistent-term` [M] Give one thing one name throughout a text, and never use that name for a second thing.
 - `drifting-ref` [H] Link a fact maintained elsewhere instead of restating it as a count, a far position or a section name, and drop a count that the list after it states, while adjacency words stay fine.
 - `one-home` [M] Keep each fact in one place and reference it from everywhere else, and let a declared copy name its source and update path.
+- `stated-once` [M] State each fact once within a text, and pair an effect with its cause instead of listing effects and causes apart.
 - `glossary-vocab` [M] Use the project's glossary terms in titles, test names and interfaces.
 - `ignore-hint` [M] Reword or link before suppressing a glossary finding, because a suppression is the last resort.
 
@@ -42,4 +46,10 @@ Yes: "The waybill order is the only receiver.
 It arrives when the Routine fires from an order branch of the waybill repository."
 
 The first version turns an event into a noun and hangs prepositional phrases on it.
+
+Not: "The review policy denies read-only commands that redirect to `/dev/null`."
+
+Yes: "The review policy allows output redirects only to `/dev/null`, but its redirect check denies some of them."
+
+Under `consistent-term`, the rule and the code that enforces it take separate names, and only the code passes or denies.
 Whole passages per register live in `examples/`.
