@@ -100,6 +100,46 @@ text() {
   [[ "$output" == *"t.md:2: F commit-link"* ]]
 }
 
+@test "H ticket-code skips a path inside a link" {
+  f=$(printf 'The [check](https://github.com/o/r/blob/main/review/policy.mjs#L3) denies it.\n' | text t.md)
+  run "$CHECK" ticket "$f"
+  [[ "$output" != *"ticket-code"* ]]
+}
+
+@test "F relative-link fails on a relative link in tracker text" {
+  f=$(printf 'See [the check](original/review/policy.mjs).\nAnd [root](/docs/a.md).\n' | text t.md)
+  run "$CHECK" tracker "$f"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"t.md:1: F relative-link"* ]]
+  [[ "$output" == *"t.md:2: F relative-link"* ]]
+}
+
+@test "F relative-link passes absolute, anchor and code links in tracker text" {
+  f=$(printf 'See [it](https://github.com/o/r/blob/main/a.md), [below](#spec) and `[x](y.md)`.\n' | text t.md)
+  run "$CHECK" tracker "$f"
+  [ "$status" -eq 0 ]
+}
+
+@test "F pinned-anchor fails on a line anchor on a branch link in tracker text" {
+  f=$(printf 'See [check](https://github.com/o/r/blob/main/a.mjs#L319-L331).\n' | text t.md)
+  run "$CHECK" tracker "$f"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"t.md:1: F pinned-anchor"* ]]
+}
+
+@test "F pinned-anchor passes a line anchor on a commit link in tracker text" {
+  f=$(printf 'See [check](https://github.com/o/r/blob/bad438c5ac69e01eebef31f27bd0c0552e0dc524/a.mjs#L319-L331) and [file](https://github.com/o/r/blob/main/a.mjs).\n' | text t.md)
+  run "$CHECK" tracker "$f"
+  [ "$status" -eq 0 ]
+}
+
+@test "H repo-link flags an absolute repository link in markdown" {
+  f=$(printf 'See [the check](https://github.com/o/r/blob/main/a.mjs).\n' | text a.md)
+  run "$CHECK" markdown "$f"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"a.md:1: H repo-link"* ]]
+}
+
 @test "F commit-link passes linked hashes and owner/repo@sha" {
   f=$(printf 'Fixed in [9020b19](https://github.com/o/r/commit/9020b19abc).\nAlso o/r@1ea7679.\nThe word deadbeef and 1234567 are no hashes.\n' | text t.md)
   run "$CHECK" tracker "$f"
