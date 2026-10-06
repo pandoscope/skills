@@ -162,7 +162,10 @@ function candidates(    t, tok, lab, plain, rest, n, i, parts, comma) {
         wrap_run = 1
     }
     if (!prose_line(raw) || !prev_prose) wrap_run = 0
-    if (on("ticket") && raw ~ /[a-z0-9_.-]+\/[a-z0-9_.\/-]+\.(md|py|mjs|js|ts|sh|json|ya?ml|toml|awk)/)
+    t = raw
+    gsub(/\]\([^)]*\)/, "]", t)
+    gsub(/https?:\/\/[^ )>]*/, " ", t)
+    if (on("ticket") && t ~ /[a-z0-9_.-]+\/[a-z0-9_.\/-]+\.(md|py|mjs|js|ts|sh|json|ya?ml|toml|awk)/)
         h("ticket-code", "no file paths in ticket prose; they go stale")
 }
 
@@ -191,6 +194,43 @@ function bare_hash(s,    tok) {
         if (s ~ /^[0-9A-Za-z_]/ || length(tok) > 40) continue
         if (tok ~ /[a-f]/ && tok ~ /[0-9]/) return 1
     }
+    return 0
+}
+
+# Markdown link targets outside code, separated by spaces.
+function link_targets(s,    out) {
+    gsub(/`[^`]*`/, " ", s)
+    while (match(s, /\]\([^) ]+/)) {
+        out = out " " substr(s, RSTART + 2, RLENGTH - 2)
+        s = substr(s, RSTART + RLENGTH)
+    }
+    return out
+}
+
+# A link target that is neither a URL nor an anchor on the same page.
+function relative_link(s,    n, t, i) {
+    n = split(link_targets(s), t)
+    for (i = 1; i <= n; i++)
+        if (t[i] !~ /^([a-z][a-z0-9+.-]*:|#)/) return 1
+    return 0
+}
+
+# A line anchor on a repository file at a branch rather than a full commit.
+function branch_anchor(s,    n, t, i, ref) {
+    gsub(/`[^`]*`/, " ", s)
+    n = split(s, t, /[ ()<>]/)
+    for (i = 1; i <= n; i++) {
+        if (t[i] !~ /^https:\/\/github\.com\/[^\/]+\/[^\/]+\/blob\/[^\/]+\/.*#L[0-9]/) continue
+        split(t[i], ref, "/")
+        if (length(ref[7]) != 40 || ref[7] ~ /[^0-9a-f]/) return 1
+    }
+    return 0
+}
+
+function repo_url(s,    n, t, i) {
+    n = split(link_targets(s), t)
+    for (i = 1; i <= n; i++)
+        if (t[i] ~ /^https:\/\/github\.com\/[^\/]+\/[^\/]+\/(blob|tree)\//) return 1
     return 0
 }
 
@@ -237,6 +277,12 @@ in_front { if (/^---[ \t]*$/) in_front = 0; next }
         f("tracker-placeholder", "tracker text takes guillemet placeholders")
     if (on("ticket tracker") && bare_hash(raw))
         f("commit-link", "link the commit: [short](repo-url/commit/full) or owner/repo@sha")
+    if (on("ticket tracker") && relative_link(raw))
+        f("relative-link", "the tracker resolves a relative link against the page: link the absolute URL")
+    if (on("ticket tracker") && branch_anchor(raw))
+        f("pinned-anchor", "pin a line anchor to a commit: blob/<full sha>/path#L1")
+    if (on("markdown skill primed") && repo_url(raw))
+        h("repo-link", "a file in this repository takes a relative link")
     candidates()
     prev = raw; prev_prose = prose_line(raw)
 }
