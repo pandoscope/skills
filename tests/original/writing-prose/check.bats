@@ -245,6 +245,8 @@ candidate() {
 @test "H hard-wrap flags a wrapped tracker paragraph" { candidate tracker hard-wrap 1 'The hook runs first and\nthen exits.\n'; }
 @test "H only-place flags only before a verb" { candidate markdown only-place 1 'The script only reports owners.\n'; }
 
+@test "H only-place flags only before an irregular past" { candidate markdown only-place 1 'They only ran in CI.\n'; }
+
 @test "H only-place passes only before what it limits" {
   f=$(printf 'The policy allows redirects only to `/dev/null`.\nGive each instance only its deltas.\n' | text a.md)
   run "$CHECK" markdown "$f"
