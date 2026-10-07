@@ -248,7 +248,7 @@ candidate() {
 @test "H only-place flags only before an irregular past" { candidate markdown only-place 1 'They only ran in CI.\n'; }
 
 @test "H only-place passes only before what it limits" {
-  f=$(printf 'The policy allows redirects only to `/dev/null`.\nGive each instance only its deltas.\n' | text a.md)
+  f=$(printf 'The policy allows redirects only to `/dev/null`.\nGive each instance only its deltas.\nThe behaviour-only findings are correct.\n' | text a.md)
   run "$CHECK" markdown "$f"
   [[ "$output" != *"only-place"* ]]
 }
