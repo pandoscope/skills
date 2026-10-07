@@ -12,7 +12,7 @@ when you cannot spawn one, run the steps yourself in order and say so.
 2. **Overreach.** Check each confirmed or corrected claim against every case its reader meets, and add only the one condition that makes it true.
 3. **Edit in place.** When no claim is corrected, edit the original text instead of drafting, change only the lines `check.sh` flags, and stop.
 4. **Draft.** Draft the text from the claims under the loop in SKILL.md, in the shape of its place (see Shapes below).
-   Keep every list or table the `layout:` line names.
+   Keep every list or table the `layout:` line names, and give parallel cases one list item each, effect first, even where the source used a paragraph.
 5. **Relevance.** Cut each sentence the reader does not need there, then each qualifier.
    Keep the reason a rule or design exists, its evidence, and each limit: what the code does not do or cannot enforce, with what it does instead.
    Cut how the code formats or labels its output.
