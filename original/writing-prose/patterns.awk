@@ -104,7 +104,7 @@ function candidates(    t, tok, lab, plain, rest, n, i, parts, comma) {
         }
         if (trailing >= 2)
             h("end-weight", "main clause first, at most one clause trailing it")
-        if (low ~ /(^|[^a-z])only ([a-z]+(s|ed)|ran|made|took|got|went|saw|did|kept|left|sent|found|gave|held|put|set|let|told|brought|caught|ate|wrote|built|ran)([^a-z]|$)/ \
+        if (low ~ /(^|[^a-z-])only ([a-z]+(s|ed)|ran|made|took|got|went|saw|did|kept|left|sent|found|gave|held|put|set|let|told|brought|caught|ate|wrote|built|ran)([^a-z]|$)/ \
             && low !~ /(^|[^a-z])only (its|this|those|these|as|us|yes|ones|was|is|has|does)([^a-z]|$)/)
             h("only-place", "put \"only\" directly before the word it limits")
         if (low ~ /^[ \t>*-]*(the |each |a |an )?(config|configuration|field|file|setting|key|option|value|flag|frontmatter|entry)s? (is|are|holds|contains|defines|sets|says|decides|controls|tells|lists)[ .,]/)
