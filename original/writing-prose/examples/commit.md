@@ -85,3 +85,71 @@ gap: a codespell failure there surfaced first in CI.
 
 A fix opens with the intended behaviour and what went wrong, and its evidence closes the body.
 Each stream ensure-repos handles is named, and the reason the script continues is stated.
+
+## A feature that stated its mechanism as labels
+
+Before:
+
+```text
+feat(environment): dispatch the composed role's hooks per event
+
+The CLI captures hook registration at startup. So setup.sh registers
+~/.claude/reinset-hook.sh once for PreCompact and once for the
+post-compaction SessionStart, in place of the two handing-off shims.
+pandoscope compose renders the file that the dispatcher reads at every
+fire. REINSET_HOOKS names that file and is pinned through session.env
+beside REINSET_ANSWERS.
+
+The dispatcher passes stdin through and returns the first non-zero
+exit. It names a composed script that is missing on disk. While no
+file exists, it blocks compaction, so a session without a guard is
+gated rather than silently unguarded.
+```
+
+After:
+
+```text
+feat(environment): dispatch the composed role's hooks per event
+
+The session composer, `pandoscope compose`, sets up the hooks that the
+session's role lists in its profile. But until now it could not register
+them: the CLI captures hook registration at startup, before the composer
+runs, so setup.sh registered two fixed handing-off shims instead. With
+this commit, setup.sh now registers one dispatcher,
+`~/.claude/reinset-hook.sh`, for the CLI's hook events PreCompact, which
+fires before the CLI compacts the conversation, and SessionStart with
+the matcher `compact`, which fires right after it. The composer renders
+the role's hooks into a hooks file, and the dispatcher reads that file
+at every fire.
+
+The environment variable REINSET_HOOKS holds the path of that file.
+setup.sh always writes its assignment to `~/.claude/session.env` as a
+default, `${REINSET_HOOKS:-$HOME/.claude/reinset/hooks.json}`. The
+dispatcher sources that file at every fire, so a REINSET_HOOKS that
+the session's environment already sets keeps its value, and otherwise
+the default applies. REINSET_ANSWERS works the same way.
+
+The dispatcher passes stdin to each hook of the event and exits with the
+first non-zero status. If a hook's script is not executable, for example
+because it was removed after the composer ran, the dispatcher prints the
+hook's path, skips it and runs the rest, as the composer leaves out a
+missing script when it renders the file. The skipped hook does not
+change the exit status, so a missing guard script lets compaction
+proceed.
+
+Without a hooks file, for example in a session that no waybill order
+reached, the dispatcher acts only around compaction:
+
+- PreCompact blocks, so a session without a handoff guard is gated
+  rather than silently unguarded; PRECOMPACT_GUARD=off overrides.
+- The SessionStart after compaction tells the session that no
+  handoff verification ran.
+
+If the role's profile lists no hook for an event, the dispatcher exits
+0, so a role whose profile lists no PreCompact hook compacts without a
+guard.
+```
+
+The body opens with whose job it is and why it could not be done until now.
+Each behaviour says what the code does, and each proper name is glossed at its first mention.
+The reason a skipped hook keeps the dispatcher running belongs in the dispatcher's own comment.

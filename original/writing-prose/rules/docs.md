@@ -9,6 +9,7 @@ These rules hold for every surface except chat: files, comments, commit messages
 - `actor-subject` [H] Make the actor the subject, and keep config, fields and files as objects.
 - `verb-distance` [H] Bring the verb within four words of its subject, with no clause between verb and complement.
 - `relative-clause` [H] Open a relative clause with "that" or "which", or give it a sentence of its own.
+- `first-mention` [M] Gloss a proper name or identifier at its first mention with what kind of thing it is.
 - `referent` [M] Make every "the X" and "its" point to something named in the current or previous sentence.
 - `known-new` [M] Open each sentence with what the previous one named, then add the news.
 - `event-noun` [H] Write an event as a verb, never as a noun.
@@ -25,6 +26,7 @@ These rules hold for every surface except chat: files, comments, commit messages
 - `pitch` [H] Cut pitch and value words.
 - `store-id` [F] Name no private record id in public text, and state the reason in plain words instead.
 - `shared-contract` [M] State a contract several things share once, then give each instance only its deltas.
+- `keep-running` [M] When a failure does not stop the process, say why it must keep running, and put that reason in the code comment where the behaviour lives.
 - `state-norm` [M] Before calling a behaviour wrong, state the intended behaviour it breaks.
 - `list-cases` [M] Give parallel cases one list item each, with the effect first and its cause after it.
 
@@ -52,4 +54,16 @@ Not: "The review policy denies read-only commands that redirect to `/dev/null`."
 Yes: "The review policy allows output redirects only to `/dev/null`, but its redirect check denies some of them."
 
 Under `consistent-term`, the rule and the code that enforces it take separate names, and only the code passes or denies.
+
+Not: "It names a composed script that is missing on disk."
+
+Yes: "The dispatcher prints the hook's path, skips it and runs the rest."
+
+Under `precise-word`, say what the code does, not a label for its outcome.
+
+Not: "A rendered file with no hook for an event is the role's choice."
+
+Yes: "If the role's profile lists no hook for an event, the dispatcher exits 0."
+
+Under `actor-subject`, a choice belongs to the artifact that encodes it, not to an abstraction.
 Whole passages per register live in `examples/`.
