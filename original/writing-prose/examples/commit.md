@@ -153,3 +153,68 @@ guard.
 The body opens with whose job it is and why it could not be done until now.
 Each behaviour says what the code does, and each proper name is glossed at its first mention.
 The reason a skipped hook keeps the dispatcher running belongs in the dispatcher's own comment.
+
+## Results that used undefined lab terms
+
+Before:
+
+```text
+test(dojo): falsifier verdicts for skills!230, two passes
+
+Both opus passes agree on all eight findings:
+one confirmed (spec-fidelity opus: cross-document H rules went unjudged),
+two refuted, five behaviour-only.
+The five are prose findings.
+The falsifier judges against the specification, so a correct prose finding reads as behaviour-only.
+```
+
+After:
+
+```text
+test(dojo): falsifier verdicts for skills!230, two passes
+
+The falsifier is the step that tests each review finding against the
+specification of the reviewed change. It gives each finding a verdict:
+confirmed, refuted or behaviour-only. A behaviour-only finding describes
+real behaviour that the specification neither requires nor forbids. This
+commit adds the falsifier's verdicts on the eight findings that the
+review passes made on skills!230. A review pass, such as prose or
+spec-fidelity, runs once per model tier, so prose-opus names the prose
+pass on opus.
+
+map.json names each finding F001 to F008 and maps it to its pass and
+tier, and the list at the end says what each one found. Two falsifier
+passes on opus, in verdicts.json and verdicts-r2.json, agreed on every
+verdict:
+
+- confirmed: F008;
+- refuted: F005 and F007;
+- behaviour-only: F001 to F004 and F006, all from the prose pass.
+
+The behaviour-only findings are correct: each describes a real flaw in
+prose.md, the prose pass's instructions. The falsifier judges them
+against skills#221, which specifies what the prose pass must do but not
+how prose.md words it, so a correct prose finding reads as
+behaviour-only.
+
+Findings:
+
+- F001 (prose-opus): prose.md says twice that the fully checked (F)
+  rules go unreported.
+- F002 (prose-opus): it says twice that each finding quotes its rule
+  verbatim.
+- F003 (prose-opus): its opening copies the one in spec-fidelity.md
+  without naming the source.
+- F004 (prose-opus): it calls the candidates that check.sh prints
+  "hits", while writing-prose calls them candidates.
+- F005 (prose-opus): the tier glosses added to writing-prose's SKILL.md
+  are sentences the model obeys without them.
+- F006 (prose-sonnet): the same as F004.
+- F007 (spec-fidelity-haiku): prose.md's "confirm or reject each H hit"
+  departs from skills#221's "each H candidate".
+- F008 (spec-fidelity-opus): prose.md never has the reviewer judge the
+  heuristic (H) rules that span documents, which skills#221 requires.
+```
+
+Each lab term is glossed at its first mention, and the lab's "cell" gives way to the glossary's review pass and model tier.
+The findings list repeats what the data files hold, which a commit may do as a snapshot.
