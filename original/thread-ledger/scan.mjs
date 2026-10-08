@@ -10,15 +10,6 @@
 // came from — because echoing the value would put the secret in the
 // very channel this scanner guards.
 
-/**
- * The terms to scan for, labeled by source.
- *
- * Built-ins are the store URL values, taken from the environment
- * automatically. User terms come from `PUSH_BLOCKLIST`, |-separated
- * (newlines get truncated by some layers and `=` confuses parsers; a
- * literal `|` in a term is not expressible — documented as reserved).
- * Unset means built-in scan only: the variable is optional by design.
- */
 const STORE_VARS = ["SESSION_MEMORY_URL", "DECISION_MEMORY_URL", "EVIDENCE_MEMORY_URL"];
 
 // A clone URL ends in `.git`; a link to a file in the store does not.
@@ -27,6 +18,14 @@ function storeBase(url) {
   return url?.replace(/\.git$/, "").replace(/\/+$/, "");
 }
 
+/**
+ * The terms to scan for, labeled by source.
+ *
+ * Built-ins are the store URLs, taken from the environment automatically, each without a trailing `.git` or slash.
+ * User terms come from `PUSH_BLOCKLIST`, |-separated (newlines get truncated by some layers and `=` confuses parsers;
+ * a literal `|` in a term is not expressible — documented as reserved).
+ * Unset means built-in scan only: the variable is optional by design.
+ */
 export function blocklistTerms(env) {
   const terms = [];
   for (const name of STORE_VARS) {

@@ -16,10 +16,11 @@
 // believed the work happened. Every failure in this org's catalogue
 // would have been ticked.
 //
-// Discipline: checks run in priority order and the FIRST failure wins.
-// A wall of failures recreates checklist fatigue, and a reason phrased
-// as instructions makes a model start new work in a loop — so a reason
-// is a completion criterion plus the exact command, nothing else.
+// Discipline: checks run in priority order and the first failure wins: a block names one reason.
+// On a guarded re-fire the first failing check whose reason this turn has not delivered wins instead.
+// A wall of failures recreates checklist fatigue,
+// and a reason phrased as instructions makes a model start new work in a loop —
+// so a reason is a completion criterion plus the exact command, nothing else.
 //
 // Contract authority: this comment, SKILL.md next to it, and the katas
 // in tests/original/reminder-heartbeat/.

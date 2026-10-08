@@ -517,8 +517,7 @@ describe("StoreUrls", () => {
     });
 
   it("masks a store URL an old event carries on the rendered page", () => {
-    // The log is append-only: an event that already links a store file by URL must still render clean,
-    // or check 7 fails every turn.
+    // An old event that links a store file by URL renders clean (maskStoreUrls in scan.mjs).
     const root = tempStore();
     writeLog(root, "s1", [opened("t", { note: `see ${STORE}/blob/main/handoffs/h.md` })]);
     const out = path.join(root, "page.html");

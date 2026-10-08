@@ -86,15 +86,8 @@ export function main(argv) {
   // that session's message count onto the workflow's events.
   const transcript = opts.by ? null : findTranscript(opts.transcript);
 
-  // Identity is resolved for WRITES only. A write has to know which
-  // conversation it belongs to; a read folds every log in the store and
-  // never asks. Resolving it up front for all three commands is what
-  // stopped the store rendering the moment it held a second
-  // conversation — the requirement was real, it was just in the wrong
-  // place.
   if (cmd === "append") {
-    // A blocked term in an event is permanent: the log is append-only (skills#242).
-    // Refused here, before anything is written.
+    // Refused before anything is written, for the reason maskStoreUrls in scan.mjs gives.
     const terms = blocklistTerms(process.env);
     for (const field of ["note", "title"]) {
       const labels = scanText(opts[field] ?? "", terms);
@@ -108,6 +101,13 @@ export function main(argv) {
         );
       }
     }
+    // Identity is resolved for writes only. A write has to know which
+    // conversation it belongs to; a read folds every log in the store and
+    // never asks. Resolving it up front for all three commands is what
+    // stopped the store rendering the moment it held a second
+    // conversation — the requirement was real, it was in the wrong
+    // place.
+    //
     // A writer that is not a conversation names itself and skips session
     // resolution, which exists to answer "which conversation is this".
     // Routed through it, the workflow would inherit a session's name and
