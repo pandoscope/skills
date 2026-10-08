@@ -500,3 +500,40 @@ describe("summary path resolution (skills#153)", () => {
     }
   });
 });
+
+// ------------------------------------------------- store URLs (skills#242)
+
+describe("StoreUrls", () => {
+  const STORE = "https://github.com/o/session-memory";
+  const env = () => ({
+    PATH: process.env.PATH,
+    HOME: fs.mkdtempSync(path.join(os.tmpdir(), "nohome-")),
+    SESSION_MEMORY_URL: `${STORE}.git`,
+  });
+  const run = (root, ...args) =>
+    spawnSync(process.execPath, [path.join(SKILL, "ledger.mjs"), "--root", root, ...args], {
+      encoding: "utf8",
+      env: env(),
+    });
+
+  it("masks a store URL an old event carries on the rendered page", () => {
+    // The log is append-only: an event that already links a store file
+    // by URL must still render clean, or check 7 fails every turn.
+    const root = tempStore();
+    writeLog(root, "s1", [opened("t", { note: `see ${STORE}/blob/main/handoffs/h.md` })]);
+    const out = path.join(root, "page.html");
+    const result = run(root, "render", "--no-pull", "--out", out);
+    assert.equal(result.status, 0, result.stderr);
+    const page = fs.readFileSync(out, "utf8");
+    assert.ok(!page.includes(STORE));
+    assert.ok(page.includes("«store»/blob/main/handoffs/h.md"));
+  });
+
+  it("refuses an append whose note carries a store URL", () => {
+    const root = tempStore();
+    const result = run(root, "append", "--ev", "note", "--thread", "t", "--note", `${STORE}/blob/main/x.md`);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /--note carries the value of SESSION_MEMORY_URL/);
+    assert.ok(!result.stderr.includes(STORE));
+  });
+});

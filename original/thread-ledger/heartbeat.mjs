@@ -173,11 +173,16 @@ export function run(input) {
   // was given can be observed at all.
   if (ctx.guarded) {
     const file = localFile("reminder-compliance.jsonl");
+    // Every failing check is a candidate, not only the first: a check
+    // that keeps failing in first place otherwise hides every later
+    // one, which then fails silently on each re-fire (skills#242).
     const delivered = deliveredThisTurn(file, ctx);
-    const unheard = delivered.size > 0 && !delivered.has(failed.check);
+    const unheard =
+      delivered.size > 0 &&
+      verdicts.find((verdict) => verdict.verdict === "fail" && !delivered.has(verdict.check));
     if (unheard && cycleOf(file, ctx) <= MAX_BLOCKS) {
-      logCompliance(ctx, reported, "blocked", failed.check);
-      process.stderr.write(`${failed.reason}\n`);
+      logCompliance(ctx, reported, "blocked", unheard.check);
+      process.stderr.write(`${unheard.reason}\n`);
       return 2;
     }
     logCompliance(ctx, reported, "unsealed", failed.check);

@@ -25,6 +25,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 import { LedgerError, fold } from "./core.mjs";
+import { blocklistTerms, maskStoreUrls, scanText } from "./scan.mjs";
 import { renderBody, renderMarkdown } from "./views.mjs";
 import {
   readAll,
@@ -92,6 +93,18 @@ export function main(argv) {
   // conversation — the requirement was real, it was just in the wrong
   // place.
   if (cmd === "append") {
+    // A blocked term in an event is permanent: the log is append-only
+    // (skills#242). Refused here, before anything is written.
+    const terms = blocklistTerms(process.env);
+    for (const field of ["note", "title"]) {
+      const labels = scanText(opts[field] ?? "", terms);
+      if (labels.length) {
+        throw new LedgerError(
+          `--${field} carries the value of ${labels.join(", ")}; ` +
+            "name a store-relative path such as handoffs/<file>.md instead",
+        );
+      }
+    }
     // A writer that is not a conversation names itself and skips session
     // resolution, which exists to answer "which conversation is this".
     // Routed through it, the workflow would inherit a session's name and
@@ -173,7 +186,7 @@ export function main(argv) {
   } else {
     page = renderPage(events, title, nowMsg, codes, sessionUrl, readDiligence(root), readNames(root), forge, staleNote);
   }
-  fs.writeFileSync(out, page, "utf8");
+  fs.writeFileSync(out, maskStoreUrls(page, process.env), "utf8");
   process.stdout.write(`wrote ${out}\n`);
   return 0;
 }

@@ -1,0 +1,17 @@
+{
+  "status": "active",
+  "stop_hook_active": true,
+  "summary_written_at": "2026-07-30T14:32:00.000Z",
+  "exit": 2,
+  "check": "response-hygiene",
+  "sealed": false,
+  "reason": [
+    "The turn is not complete until the response follows the reference style: linked shortcode refs (XXX#n tickets, XXX!n PRs), threads named in prose. Rewrite your response and write each correction out in full — the corrected forms must appear, verbatim:",
+    "",
+    "  skills#97 — shortcode refs are markdown links → [skills#97](https://github.com/pandoscope/skills/issues/97)"
+  ],
+  "records_before": 1,
+  "cycle": 2,
+  "outcome": "blocked",
+  "session": "session_kata_guard"
+}
