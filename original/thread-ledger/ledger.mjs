@@ -99,9 +99,12 @@ export function main(argv) {
     for (const field of ["note", "title"]) {
       const labels = scanText(opts[field] ?? "", terms);
       if (labels.length) {
+        const store = labels.some((label) => !label.startsWith("PUSH_BLOCKLIST"));
         throw new LedgerError(
           `--${field} carries the value of ${labels.join(", ")}; ` +
-            "name a store-relative path such as handoffs/<file>.md instead",
+            (store
+              ? "name a store-relative path such as handoffs/<file>.md instead"
+              : "remove the blocked term"),
         );
       }
     }

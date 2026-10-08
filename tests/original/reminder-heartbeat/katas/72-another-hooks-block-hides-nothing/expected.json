@@ -10,8 +10,8 @@
     "",
     "  . ~/.claude/session.env && node {{ledger}} declare <your declaration> --no-update \"<owner/repo#n> <why>\""
   ],
-  "records_before": 1,
-  "cycle": 2,
+  "records_before": 0,
+  "cycle": 1,
   "outcome": "blocked",
   "session": "session_kata_guard"
 }

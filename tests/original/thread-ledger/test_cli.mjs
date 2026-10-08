@@ -536,4 +536,15 @@ describe("StoreUrls", () => {
     assert.match(result.stderr, /--note carries the value of SESSION_MEMORY_URL/);
     assert.ok(!result.stderr.includes(STORE));
   });
+
+  it("refuses a PUSH_BLOCKLIST term without asking for a store path", () => {
+    const root = tempStore();
+    const result = spawnSync(
+      process.execPath,
+      [path.join(SKILL, "ledger.mjs"), "--root", root, "append", "--ev", "note", "--thread", "t", "--note", "see secret-host"],
+      { encoding: "utf8", env: { ...env(), PUSH_BLOCKLIST: "secret-host" } },
+    );
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /PUSH_BLOCKLIST term 1; remove the blocked term/);
+  });
 });

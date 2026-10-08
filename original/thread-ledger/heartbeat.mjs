@@ -176,10 +176,13 @@ export function run(input) {
     // Every failing check is a candidate, not only the first: a check
     // that keeps failing in first place otherwise hides every later
     // one, which then fails silently on each re-fire (skills#242).
+    // An empty delivered set still counts: another Stop hook may have
+    // blocked first, and then none of this hook's reasons were heard.
+    // cycleOf bounds the loop either way.
     const delivered = deliveredThisTurn(file, ctx);
-    const unheard =
-      delivered.size > 0 &&
-      verdicts.find((verdict) => verdict.verdict === "fail" && !delivered.has(verdict.check));
+    const unheard = verdicts.find(
+      (verdict) => verdict.verdict === "fail" && !delivered.has(verdict.check),
+    );
     if (unheard && cycleOf(file, ctx) <= MAX_BLOCKS) {
       logCompliance(ctx, reported, "blocked", unheard.check);
       process.stderr.write(`${unheard.reason}\n`);

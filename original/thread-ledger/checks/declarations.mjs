@@ -190,7 +190,7 @@ export function checkTicketsUpdated(ctx) {
         "it explicitly — redeclare with a waiver per ticket, which is " +
         "logged as a claim:",
       "",
-      `  node ${LEDGER} declare <your declaration> --no-update "<owner/repo#n> <why>"`,
+      `  . ~/.claude/session.env && node ${LEDGER} declare <your declaration> --no-update "<owner/repo#n> <why>"`,
     ].join("\n"),
   };
 }
