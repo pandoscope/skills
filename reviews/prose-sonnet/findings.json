@@ -1,0 +1,80 @@
+{
+  "pr": "pandoscope/skills#243",
+  "head": "c9134b3fec174aa7f996fd0cecfa4572422c8c95",
+  "pass": "prose",
+  "model_tier": "sonnet",
+  "findings": [
+    {
+      "file": "original/thread-ledger/SKILL.md",
+      "line": 185,
+      "rule": "`sembr` [H] Break new or rewritten prose at sentence or clause boundaries, one per line.",
+      "input": "matches rather than printing them. The log is append-only, so the\nrenderer masks store URLs as `«store»` and `ledger append` refuses a\n`--note` or `--title` that carries one (skills#242).",
+      "finding_basis": "decided",
+      "confidence": 90,
+      "finding": "The added sentence starts on the same line as the end of the previous sentence and breaks mid-clause at a fixed width, so the paragraph needs redrawing with one sentence or clause per line."
+    },
+    {
+      "file": "tests/original/reminder-heartbeat/katas/71-a-repeated-first-check-hides-no-later-one/kata.md",
+      "line": 3,
+      "rule": "`sembr` [H] Break new or rewritten prose at sentence or clause boundaries, one per line.",
+      "input": "**Rule (skills#242):** on a guarded fire the hook blocks on the first\nfailing check whose reason was not delivered this turn. It releases\nunsealed only when every failing check's reason was delivered.",
+      "finding_basis": "decided",
+      "confidence": 90,
+      "finding": "The rule paragraph, the fixture paragraph (line 9) and the expected paragraph (line 16) are wrapped at a fixed width, break mid-clause and put two sentences on one line."
+    },
+    {
+      "file": "tests/original/reminder-heartbeat/katas/72-another-hooks-block-hides-nothing/kata.md",
+      "line": 3,
+      "rule": "`sembr` [H] Break new or rewritten prose at sentence or clause boundaries, one per line.",
+      "input": "**Rule (skills#242):** on a guarded fire the hook blocks on the first\nfailing check whose reason was not delivered this turn. An empty\ndelivered set counts too.",
+      "finding_basis": "decided",
+      "confidence": 90,
+      "finding": "The rule paragraph, the fixture paragraph (line 9) and the expected paragraph (line 16) are wrapped at a fixed width, break mid-clause and put two sentences on one line."
+    },
+    {
+      "file": "tests/original/reminder-heartbeat/katas/08-loop-guard/kata.md",
+      "line": 26,
+      "rule": "`sembr` [H] Break new or rewritten prose at sentence or clause boundaries, one per line.",
+      "input": "the ledger still untouched — the model did not comply. The compliance\nlog records this hook's first block on `tickets-updated`, so the reason\nstill failing is one the model has already heard (skills#242).",
+      "finding_basis": "decided",
+      "confidence": 88,
+      "finding": "The added sentences share a line with the previous sentence and break mid-clause, so the paragraph needs redrawing with one sentence or clause per line."
+    },
+    {
+      "file": "original/thread-ledger/heartbeat.mjs",
+      "line": 176,
+      "rule": "`sembr` [H] Break new or rewritten prose at sentence or clause boundaries, one per line.",
+      "input": "// Every failing check is a candidate, not only the first: a check\n// that keeps failing in first place otherwise hides every later\n// one, which then fails silently on each re-fire (skills#242).",
+      "finding_basis": "decided",
+      "confidence": 85,
+      "finding": "The new comment block breaks mid-clause at a fixed width in both of its paragraphs, so it needs redrawing at clause boundaries."
+    },
+    {
+      "file": "original/thread-ledger/ledger.mjs",
+      "line": 97,
+      "rule": "`sembr` [H] Break new or rewritten prose at sentence or clause boundaries, one per line.",
+      "input": "// (skills#242). Refused here, before anything is written.",
+      "finding_basis": "decided",
+      "confidence": 85,
+      "finding": "The comment carries the end of one sentence and a second sentence on one line, so the comment needs redrawing with one sentence per line."
+    },
+    {
+      "file": "original/thread-ledger/scan.mjs",
+      "line": 67,
+      "rule": "`sembr` [H] Break new or rewritten prose at sentence or clause boundaries, one per line.",
+      "input": "* The log is append-only, so an old event that links a store file by\n * its full URL would make every render fail check 7 forever. Masking\n * at render time keeps the page clean; check 7 still scans the page\n * and catches a value this misses.",
+      "finding_basis": "decided",
+      "confidence": 85,
+      "finding": "The doc comment breaks mid-clause at a fixed width and puts the end of one sentence and the start of the next on one line."
+    },
+    {
+      "file": "tests/original/thread-ledger/test_cli.mjs",
+      "line": 520,
+      "rule": "`sembr` [H] Break new or rewritten prose at sentence or clause boundaries, one per line.",
+      "input": "// The log is append-only: an event that already links a store file\n// by URL must still render clean, or check 7 fails every turn.",
+      "finding_basis": "decided",
+      "confidence": 80,
+      "finding": "The test comment breaks mid-clause at a fixed width, so it needs redrawing at the clause boundary."
+    }
+  ]
+}
