@@ -1,0 +1,35 @@
+{
+  "pr": "pandoscope/skills#243",
+  "head": "506b8a514a5660a8df2ab899ff5b82bba340295c",
+  "pass": "spec-fidelity",
+  "model_tier": "opus",
+  "findings": [
+    {
+      "file": "original/thread-ledger/checks/declarations.mjs",
+      "line": 193,
+      "rule": "The declarations reminder gives the command with `. ~/.claude/session.env &&` before it, and `declare` prints the path it wrote, so a writer and reader that disagree show it.",
+      "input": "A turn whose declared ticket has no observed write: check 4 (tickets-updated) fails and its reason tells the model to redeclare with `node …/ledger.mjs declare <your declaration> --no-update \"<owner/repo#n> <why>\"`.",
+      "finding_basis": "judged",
+      "confidence": 65,
+      "finding": "The tickets-updated reminder in the same declarations module still gives the bare `node … declare` command without `. ~/.claude/session.env &&`, so a waiver redeclaration written from it lands in the legacy `~/.claude/turn-summary.txt` that the hook ignores when the v2 file exists, which is the writer/reader split the ticket fixes for the turn-summary reminder."
+    },
+    {
+      "file": "original/thread-ledger/heartbeat.mjs",
+      "line": 181,
+      "rule": "On a guarded fire, the hook blocks on the first failing check whose reason was not delivered this turn, up to MAX_BLOCKS, and releases unsealed only when every failing check's reason was delivered.",
+      "input": "A guarded fire (`stop_hook_active: true`) whose compliance log holds no `blocked` record for the current turnKey, with response-hygiene failing.",
+      "finding_basis": "decided",
+      "confidence": 55,
+      "finding": "The `delivered.size > 0 &&` guard makes the hook release the turn unsealed whenever no reason is on record as delivered this turn, even though every failing check's reason is then undelivered and the cycle is below MAX_BLOCKS."
+    },
+    {
+      "file": "original/thread-ledger/ledger.mjs",
+      "line": 98,
+      "rule": "`ledger append` scans `--note` and `--title` with the blocklist scanner and refuses a store URL, naming a store-relative path such as `handoffs/….md` instead.",
+      "input": "`PUSH_BLOCKLIST=acme-internal` and `ledger append --ev note --thread t --note \"acme-internal outage\"`.",
+      "finding_basis": "judged",
+      "confidence": 35,
+      "finding": "The append refusal fires on every blocklist term, not only store URLs, and tells the writer to name a store-relative path even for a `PUSH_BLOCKLIST` term that has no store path."
+    }
+  ]
+}
