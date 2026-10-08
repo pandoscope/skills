@@ -1,7 +1,7 @@
 # Rewrites prose paragraphs one sentence per line, the `sembr` rule.
 # check.sh --fix runs this file and writes its output over the file.
-# With --before, a paragraph whose lines all stand in the old text is printed as it was,
-# because the `reflow` rule forbids touching it.
+# With --before, lines that stand in the old text ahead of a paragraph's first change are printed as they were,
+# because the `reflow` rule forbids touching them.
 # A sentence longer than `LIMIT` visible characters is broken after the comma, semicolon or colon nearest its middle.
 # A sentence with no such break stays on one line:
 # where to split it is a wording decision the `long-line` rule leaves to the writer.
@@ -79,21 +79,17 @@ function emit(p, s,    i, c, code, link, mid, best, dist, d) {
     emit(p, substr(s, best + 2))
 }
 
-function flush(    i, joined, touched, n, parts) {
+function flush(    i, first, joined, n, parts) {
     if (!np) return
-    touched = (before == "")
-    for (i = 1; i <= np; i++) if (!(ptext[i] in bline)) touched = 1
-    if (!touched) {
-        for (i = 1; i <= np; i++) print plines[i]
-    } else {
-        joined = ""
-        for (i = 1; i <= np; i++) {
-            sub(/^[ \t]+/, "", ptext[i]); sub(/[ \t]+$/, "", ptext[i])
-            joined = joined (i > 1 ? " " : "") ptext[i]
-        }
-        n = sentences(joined, parts)
-        for (i = 1; i <= n; i++) emit(pfx, parts[i])
+    first = 1
+    if (before != "") while (first <= np && ptext[first] in bline) print plines[first++]
+    joined = ""
+    for (i = first; i <= np; i++) {
+        sub(/^[ \t]+/, "", ptext[i]); sub(/[ \t]+$/, "", ptext[i])
+        joined = joined (i > first ? " " : "") ptext[i]
     }
+    n = first <= np ? sentences(joined, parts) : 0
+    for (i = 1; i <= n; i++) emit(pfx, parts[i])
     np = 0
 }
 

@@ -454,3 +454,11 @@ rules_ids() {
   run "$CHECK" commit "$f" --fix
   [ "$status" -eq 2 ]
 }
+
+@test "--fix with --before keeps the unchanged lines ahead of the first change" {
+  old=$(printf '%s\n' 'The hook reads the guard' 'after the checks.' | text old.md)
+  f=$(printf '%s\n' 'The hook reads the guard' 'after the checks. It blocks once' 'more for an unheard reason.' | text a.md)
+  run "$CHECK" markdown "$f" --fix --before "$old"
+  run cat "$f"
+  [ "$output" = $'The hook reads the guard\nafter the checks.\nIt blocks once more for an unheard reason.' ]
+}
