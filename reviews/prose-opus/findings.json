@@ -1,0 +1,125 @@
+{
+  "pr": "pandoscope/skills#243",
+  "head": "c9134b3fec174aa7f996fd0cecfa4572422c8c95",
+  "pass": "prose",
+  "model_tier": "opus",
+  "findings": [
+    {
+      "file": "tests/original/reminder-heartbeat/katas/71-a-repeated-first-check-hides-no-later-one/kata.md",
+      "line": 16,
+      "rule": "`present-tense` [H] State the present, and leave history to commit messages.",
+      "input": "Before\nskills#242 the hook looked only at `tickets-updated`, found it\ndelivered, and released the turn unsealed, so the unlinked ref never\nreached the model.",
+      "finding_basis": "decided",
+      "confidence": 85,
+      "finding": "The Expected paragraph tells how the hook behaved before the fix, which is history that belongs in the commit message rather than in the kata."
+    },
+    {
+      "file": "tests/original/reminder-heartbeat/katas/72-another-hooks-block-hides-nothing/kata.md",
+      "line": 16,
+      "rule": "`present-tense` [H] State the present, and leave history to commit messages.",
+      "input": "Before the\nfix the hook required at least one delivered reason before it would\nblock again, so this turn was released unsealed with both failures\nunheard.",
+      "finding_basis": "decided",
+      "confidence": 85,
+      "finding": "The Expected paragraph tells how the hook behaved before the fix, which is history that belongs in the commit message rather than in the kata."
+    },
+    {
+      "file": "original/thread-ledger/SKILL.md",
+      "line": 185,
+      "rule": "`sembr` [H] Break new or rewritten prose at sentence or clause boundaries, one per line.",
+      "input": "matches rather than printing them. The log is append-only, so the\nrenderer masks store URLs as `«store»` and `ledger append` refuses a\n`--note` or `--title` that carries one (skills#242).",
+      "finding_basis": "decided",
+      "confidence": 90,
+      "finding": "The added sentence starts on the line of the previous sentence and is wrapped at a fixed width, breaking mid-clause at \"the / renderer\" and \"refuses a / `--note`\"."
+    },
+    {
+      "file": "original/thread-ledger/heartbeat.mjs",
+      "line": 176,
+      "rule": "`sembr` [H] Break new or rewritten prose at sentence or clause boundaries, one per line.",
+      "input": "// Every failing check is a candidate, not only the first: a check\n// that keeps failing in first place otherwise hides every later\n// one, which then fails silently on each re-fire (skills#242).",
+      "finding_basis": "decided",
+      "confidence": 85,
+      "finding": "The new comment is wrapped at a fixed width and breaks mid-clause at \"a check / that keeps\", \"every later / one\" and \"another Stop hook may have / blocked\"."
+    },
+    {
+      "file": "original/thread-ledger/ledger.mjs",
+      "line": 96,
+      "rule": "`sembr` [H] Break new or rewritten prose at sentence or clause boundaries, one per line.",
+      "input": "// A blocked term in an event is permanent: the log is append-only\n// (skills#242). Refused here, before anything is written.",
+      "finding_basis": "decided",
+      "confidence": 85,
+      "finding": "The new comment puts the ticket reference of one sentence and the whole next sentence on one line instead of one sentence per line."
+    },
+    {
+      "file": "original/thread-ledger/scan.mjs",
+      "line": 69,
+      "rule": "`sembr` [H] Break new or rewritten prose at sentence or clause boundaries, one per line.",
+      "input": " * The log is append-only, so an old event that links a store file by\n * its full URL would make every render fail check 7 forever. Masking\n * at render time keeps the page clean; check 7 still scans the page",
+      "finding_basis": "decided",
+      "confidence": 85,
+      "finding": "The new doc-comment paragraph is wrapped at a fixed width, breaking mid-clause at \"store file by / its full URL\" and starting the next sentence at the end of a line."
+    },
+    {
+      "file": "tests/original/thread-ledger/test_cli.mjs",
+      "line": 520,
+      "rule": "`sembr` [H] Break new or rewritten prose at sentence or clause boundaries, one per line.",
+      "input": "// The log is append-only: an event that already links a store file\n// by URL must still render clean, or check 7 fails every turn.",
+      "finding_basis": "decided",
+      "confidence": 80,
+      "finding": "The new test comment breaks mid-clause, between \"a store file\" and \"by URL\"."
+    },
+    {
+      "file": "tests/original/reminder-heartbeat/katas/08-loop-guard/kata.md",
+      "line": 25,
+      "rule": "`sembr` [H] Break new or rewritten prose at sentence or clause boundaries, one per line.",
+      "input": "the ledger still untouched — the model did not comply. The compliance\nlog records this hook's first block on `tickets-updated`, so the reason\nstill failing is one the model has already heard (skills#242).",
+      "finding_basis": "decided",
+      "confidence": 85,
+      "finding": "The added sentence starts at the end of the previous sentence's line and is wrapped mid-clause at \"The compliance / log\" and \"the reason / still failing\"."
+    },
+    {
+      "file": "tests/original/reminder-heartbeat/katas/71-a-repeated-first-check-hides-no-later-one/kata.md",
+      "line": 3,
+      "rule": "`sembr` [H] Break new or rewritten prose at sentence or clause boundaries, one per line.",
+      "input": "**Rule (skills#242):** on a guarded fire the hook blocks on the first\nfailing check whose reason was not delivered this turn. It releases\nunsealed only when every failing check's reason was delivered.",
+      "finding_basis": "decided",
+      "confidence": 85,
+      "finding": "Every paragraph of this new kata (the Rule, the fixture paragraph at line 9 and the Expected paragraph at line 16) is wrapped at a fixed width, breaking mid-clause and starting sentences at line ends."
+    },
+    {
+      "file": "tests/original/reminder-heartbeat/katas/72-another-hooks-block-hides-nothing/kata.md",
+      "line": 3,
+      "rule": "`sembr` [H] Break new or rewritten prose at sentence or clause boundaries, one per line.",
+      "input": "**Rule (skills#242):** on a guarded fire the hook blocks on the first\nfailing check whose reason was not delivered this turn. An empty\ndelivered set counts too.",
+      "finding_basis": "decided",
+      "confidence": 85,
+      "finding": "Every paragraph of this new kata (the Rule, the fixture paragraph at line 9 and the Expected paragraph at line 16) is wrapped at a fixed width, breaking mid-clause and starting sentences at line ends."
+    },
+    {
+      "file": "tests/original/reminder-heartbeat/katas/08-loop-guard/kata.md",
+      "line": 25,
+      "rule": "`consistent-term` [M] Give one thing one name throughout a text, and never use that name for a second thing.",
+      "input": "The compliance\nlog records this hook's first block on `tickets-updated` … a compliance record naming\ncheck 3 as what fired",
+      "finding_basis": "judged",
+      "confidence": 55,
+      "finding": "The fixture paragraph names the check `tickets-updated` while the Expected paragraph of the same kata calls it \"check 3\", so the reader has to work out that the two names mean one check."
+    },
+    {
+      "file": "original/thread-ledger/SKILL.md",
+      "line": 185,
+      "rule": "`audience` [M] Address only the agent running the skill, and move rationale meant for reviewers into code or records.",
+      "input": "The log is append-only, so the\nrenderer masks store URLs as `«store»` and `ledger append` refuses a\n`--note` or `--title` that carries one (skills#242).",
+      "finding_basis": "judged",
+      "confidence": 50,
+      "finding": "The added sentence describes how the renderer and the append command are built, which is rationale for reviewers, and never tells the agent to name a store-relative path in a note instead."
+    },
+    {
+      "file": "original/thread-ledger/scan.mjs",
+      "line": 69,
+      "rule": "`one-home` [M] Keep each fact in one place and reference it from everywhere else, and let a declared copy name its source and update path.",
+      "input": "The log is append-only, so an old event that links a store file by\n its full URL would make every render fail check 7 forever.",
+      "finding_basis": "judged",
+      "confidence": 40,
+      "finding": "Four new blocks restate the same reasoning (the log is append-only, so a store URL stays forever): this doc comment, the ledger.mjs append comment, the SKILL.md sentence and the test_cli.mjs comment, and none of them points to the others as its source."
+    }
+  ]
+}
