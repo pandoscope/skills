@@ -1,0 +1,80 @@
+{
+  "pr": "pandoscope/skills#243",
+  "head": "12e037ae150e213cd1f1cff35ec92a3d5fa7c248",
+  "pass": "prose",
+  "model_tier": "opus-r2",
+  "findings": [
+    {
+      "file": "original/thread-ledger/heartbeat.mjs",
+      "line": 19,
+      "rule": "Erase every mention of a removed feature, and put migration notes in the commit's BREAKING CHANGE footer.",
+      "input": "// Discipline: checks run in priority order and the FIRST failure wins.",
+      "finding_basis": "judged",
+      "confidence": 60,
+      "finding": "The header's discipline paragraph, and its copy in the checks/index.mjs header (\"First failure wins and the rest wait for the next turn\"), still describe first-failure-wins, but the guarded fire this PR changes now blocks on a later failing check that has not been heard, in the same turn."
+    },
+    {
+      "file": "original/thread-ledger/SKILL.md",
+      "line": 186,
+      "rule": "Make every \"the X\" and \"its\" point to something named in the current or previous sentence.",
+      "input": "The log is append-only,\nso the renderer masks store URLs as `«store»` and `ledger append` refuses a `--note` or `--title` that carries one (skills#242).",
+      "finding_basis": "judged",
+      "confidence": 65,
+      "finding": "The appended sentence in the \"Nothing outgoing carries a blocked term\" paragraph opens with \"The log\", which nothing in that paragraph names (the previous sentence is about reports and confirm commands), so the reader cannot tell it means the ledger event log."
+    },
+    {
+      "file": "original/thread-ledger/ledger.mjs",
+      "line": 89,
+      "rule": "Make every \"the X\" and \"its\" point to something named in the current or previous sentence.",
+      "input": "// Identity is resolved for WRITES only. ... if (cmd === \"append\") {\n    // A blocked term in an event is permanent: the log is append-only (skills#242).",
+      "finding_basis": "judged",
+      "confidence": 50,
+      "finding": "The blocklist refusal goes in between the \"Identity is resolved for WRITES only\" comment and the identity resolution it describes, so that comment now introduces a scan block and its subject sits twenty lines away from the code it explains."
+    },
+    {
+      "file": "original/thread-ledger/scan.mjs",
+      "line": 65,
+      "rule": "Keep each fact in one place and reference it from everywhere else, and let a declared copy name its source and update path.",
+      "input": "The log is append-only,\n * so an old event that links a store file by its full URL would make every render fail check 7 forever.",
+      "finding_basis": "judged",
+      "confidence": 50,
+      "finding": "The maskStoreUrls doc comment repeats the append-only rationale that the PR also writes out in SKILL.md, in the ledger.mjs append comment and in the test_cli.mjs StoreUrls test comment, so four copies of one fact can drift and none names the others."
+    },
+    {
+      "file": "original/thread-ledger/scan.mjs",
+      "line": 13,
+      "rule": "Make every \"the X\" and \"its\" point to something named in the current or previous sentence.",
+      "input": "/**\n * The terms to scan for, labeled by source.\n ... */\nconst STORE_VARS = [...]",
+      "finding_basis": "judged",
+      "confidence": 45,
+      "finding": "Inserting STORE_VARS and storeBase directly below the \"The terms to scan for\" JSDoc moves that doc onto the constant, away from blocklistTerms, which it describes, and its \"Built-ins are the store URL values\" no longer matches the bare bases with `.git` stripped that the function now returns."
+    },
+    {
+      "file": "tests/original/reminder-heartbeat/katas/08-loop-guard/kata.md",
+      "line": 27,
+      "rule": "Give one thing one name throughout a text, and never use that name for a second thing.",
+      "input": "The compliance log records this hook's first block on `tickets-updated`, ... a compliance record naming\ncheck 3 as what fired",
+      "finding_basis": "judged",
+      "confidence": 45,
+      "finding": "The added fixture sentence calls the check `tickets-updated`, while the Expected section of the same kata calls the check that fired \"check 3\", so one short text gives one check two names."
+    },
+    {
+      "file": "tests/original/reminder-heartbeat/katas/71-a-repeated-first-check-hides-no-later-one/kata.md",
+      "line": 8,
+      "rule": "Make every \"the X\" and \"its\" point to something named in the current or previous sentence.",
+      "input": "because the response names `skills#97` without its link.\nThat reason was never delivered this turn.",
+      "finding_basis": "judged",
+      "confidence": 40,
+      "finding": "In the fixture paragraph, \"That reason\" refers back to response-hygiene's block reason, but the previous sentence names only a cause (\"because the response names…\"), so the demonstrative attaches to the wrong noun."
+    },
+    {
+      "file": "tests/original/reminder-heartbeat/katas/72-another-hooks-block-hides-nothing/kata.md",
+      "line": 3,
+      "rule": "State a contract several things share once, then give each instance only its deltas.",
+      "input": "**Rule (skills#242):** on a guarded fire the hook blocks on the first failing check whose reason was not delivered this turn.",
+      "finding_basis": "judged",
+      "confidence": 35,
+      "finding": "Katas 71 and 72 each open their Rule line with the same contract sentence word for word, and the heartbeat.mjs guard comment restates it again, when each kata could state only its own delta."
+    }
+  ]
+}
