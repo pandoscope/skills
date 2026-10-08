@@ -383,6 +383,35 @@ describe("declare", () => {
     }
   });
 
+  it("writes to the path session.env names when the variable is unset", () => {
+    // A plain command line lacks what the hook wrapper exports;
+    // the declaration must still land where the heartbeat reads (skills#242).
+    for (const line of ["export TURN_SUMMARY_PATH=%s", 'TURN_SUMMARY_PATH="%s"']) {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "declare-env-"));
+      try {
+        const target = path.join(dir, "turn", "summary.txt");
+        fs.mkdirSync(path.join(dir, ".claude"));
+        fs.writeFileSync(
+          path.join(dir, ".claude", "session.env"),
+          `SESSION_ROOT=${dir}\n${line.replace("%s", target)}\n`,
+        );
+        const result = spawnSync(
+          process.execPath,
+          [path.join(SKILL, "ledger.mjs"), "declare", "--reviews", "none"],
+          {
+            encoding: "utf8",
+            env: { ...process.env, HOME: dir, TURN_SUMMARY_PATH: undefined },
+          },
+        );
+        assert.equal(result.status, 0, result.stderr);
+        assert.match(fs.readFileSync(target, "utf8"), /^reviews: none$/m, line);
+        assert.ok(!fs.existsSync(path.join(dir, ".claude", "turn-summary.txt")), line);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    }
+  });
+
   it("writes the two core lines even when empty", () => {
     const text = declareText({ reviews: "none" });
     assert.equal(text, "tickets: \nreviews: none\n");

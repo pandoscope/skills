@@ -8,6 +8,6 @@
   "reason": [
     "The turn is not complete until every ticket it declared heard about it. Declared and never written to this turn: o/r#93. Update each one on the forge, or waive it explicitly — redeclare with a waiver per ticket, which is logged as a claim:",
     "",
-    "  . ~/.claude/session.env && node {{ledger}} declare <your declaration> --no-update \"<owner/repo#n> <why>\""
+    "  node {{ledger}} declare <your declaration> --no-update \"<owner/repo#n> <why>\""
   ]
 }

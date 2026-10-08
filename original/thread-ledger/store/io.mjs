@@ -73,23 +73,33 @@ function verifyOrigin(root, url) {
 
 
 /**
- * The harness clone of `url` in the session root, or null.
+ * The value `name` has in the session.env the hooks read, or null.
  *
- * SESSION_MEMORY_ROOT is exported by the Stop-hook wrapper, so it is
- * absent from an ordinary command line in the same session. Reading
- * the session.env the hooks read — and deriving the directory exactly
- * as ensure-stores.sh does — is what makes a bare `append` and the
- * heartbeat agree without anyone remembering to export a variable.
+ * The Stop-hook wrapper exports these variables, so they are absent from an ordinary command line in the same session.
+ * Reading the file the hooks read is what makes a bare command and the heartbeat agree without anyone remembering to source it.
  */
-function harnessClone(url) {
+export function sessionEnv(name) {
   const envFile = path.join(process.env.HOME ?? os.homedir(), ".claude", "session.env");
-  let sessionRoot = null;
+  let text;
   try {
-    const match = fs.readFileSync(envFile, "utf8").match(/^SESSION_ROOT=(.*)$/m);
-    sessionRoot = match ? match[1].trim() : null;
+    text = fs.readFileSync(envFile, "utf8");
   } catch {
     return null;
   }
+  const match = text.match(new RegExp(`^(?:export )?${name}=(.*)$`, "m"));
+  const value = match ? match[1].trim().replace(/^"(.*)"$/, "$1") : "";
+  return value || null;
+}
+
+
+/**
+ * The harness clone of `url` in the session root, or null.
+ *
+ * SESSION_MEMORY_ROOT is exported by the Stop-hook wrapper only;
+ * the directory is derived exactly as ensure-stores.sh derives it.
+ */
+function harnessClone(url) {
+  const sessionRoot = sessionEnv("SESSION_ROOT");
   if (!sessionRoot) return null;
   const dir = path.join(sessionRoot, path.basename(url.replace(/\/+$/, ""), ".git"));
   return fs.existsSync(path.join(dir, ".git")) ? dir : null;

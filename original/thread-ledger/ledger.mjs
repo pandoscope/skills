@@ -34,6 +34,7 @@ import {
   readForge,
   readNames,
   resolveRoot,
+  sessionEnv,
 } from "./store/io.mjs";
 import { countUserMessages, findTranscript, resolveSession, storeUrl } from "./store/identity.mjs";
 import { append, pullForRender, push } from "./store/writes.mjs";
@@ -66,13 +67,14 @@ export function main(argv) {
   if (cmd === "declare") {
     const text = declareText(opts);
     // The same single env var the hook wrapper exports (skills#153):
-    // writer and checker resolve the location through one name, so
-    // neither can drift to a private path. The legacy home fallback
-    // keeps unmigrated environments declaring while the wrapper rolls
-    // out; the heartbeat reads it with a deprecation note.
+    // writer and checker resolve the location through one name, so neither can drift to a private path.
+    // Unset on a plain command line, it comes from the session.env the wrapper sources,
+    // so the declaration lands where the heartbeat looks (skills#242).
+    // The legacy home fallback keeps environments without either declaring; the heartbeat reads it with a deprecation note.
     const file =
       opts["summary-path"] ??
       process.env.TURN_SUMMARY_PATH ??
+      sessionEnv("TURN_SUMMARY_PATH") ??
       path.join(os.homedir(), ".claude", "turn-summary.txt");
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, text, "utf8");

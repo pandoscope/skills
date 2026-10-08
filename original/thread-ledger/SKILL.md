@@ -122,7 +122,7 @@ declaration lives is the writer's business, and a malformed one fails
 here with the correction in the error instead of as a Stop-hook block:
 
 ```bash
-. ~/.claude/session.env && node ledger.mjs declare --reviews none --tickets my-org/skills#56
+node ledger.mjs declare --reviews none --tickets my-org/skills#56
 ```
 
 `--rulings slug-a` adds a rulings declaration; each

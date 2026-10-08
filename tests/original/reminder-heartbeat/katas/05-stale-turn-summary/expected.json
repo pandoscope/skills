@@ -8,6 +8,6 @@
   "reason": [
     "The turn is not complete until it declares itself. Declare the tickets this turn touched and its reviews state; the threads are observed from the ledger, not declared (skills#153).",
     "",
-    "  . ~/.claude/session.env && node {{ledger}} declare --reviews <none|read|persisted|nothing-to-persist> [--tickets owner/repo#n] [--no-update \"<target> <reason>\"]"
+    "  node {{ledger}} declare --reviews <none|read|persisted|nothing-to-persist> [--tickets owner/repo#n] [--no-update \"<target> <reason>\"]"
   ]
 }

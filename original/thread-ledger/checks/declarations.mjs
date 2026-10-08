@@ -32,7 +32,7 @@ export function checkTurnSummary(ctx) {
   // The block teaches the validated writer, never the raw file: hand
   // edits are what let a malformed declaration reach this hook at all
   // (skills#157), and naming the path invites them.
-  const write = `  . ~/.claude/session.env && node ${LEDGER} declare --reviews <none|read|persisted|nothing-to-persist> [--tickets owner/repo#n] [--no-update "<target> <reason>"]`;
+  const write = `  node ${LEDGER} declare --reviews <none|read|persisted|nothing-to-persist> [--tickets owner/repo#n] [--no-update "<target> <reason>"]`;
 
   // Without a boundary nothing downstream means what it says: freshness
   // has nothing to compare against and check 3's window widens to all
@@ -190,7 +190,7 @@ export function checkTicketsUpdated(ctx) {
         "it explicitly — redeclare with a waiver per ticket, which is " +
         "logged as a claim:",
       "",
-      `  . ~/.claude/session.env && node ${LEDGER} declare <your declaration> --no-update "<owner/repo#n> <why>"`,
+      `  node ${LEDGER} declare <your declaration> --no-update "<owner/repo#n> <why>"`,
     ].join("\n"),
   };
 }
