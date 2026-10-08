@@ -1,0 +1,17 @@
+{
+  "status": "active",
+  "stop_hook_active": true,
+  "summary_written_at": "2026-07-30T14:32:00.000Z",
+  "exit": 2,
+  "check": "tickets-updated",
+  "sealed": false,
+  "reason": [
+    "The turn is not complete until every ticket it declared heard about it. Declared and never written to this turn: o/r#43. Update each one on the forge, or waive it explicitly — redeclare with a waiver per ticket, which is logged as a claim:",
+    "",
+    "  node {{ledger}} declare <your declaration> --no-update \"<owner/repo#n> <why>\""
+  ],
+  "records_before": 0,
+  "cycle": 1,
+  "outcome": "blocked",
+  "session": "session_kata_guard"
+}

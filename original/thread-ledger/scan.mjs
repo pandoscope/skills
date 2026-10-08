@@ -10,19 +10,27 @@
 // came from — because echoing the value would put the secret in the
 // very channel this scanner guards.
 
+const STORE_VARS = ["SESSION_MEMORY_URL", "DECISION_MEMORY_URL", "EVIDENCE_MEMORY_URL"];
+
+// A clone URL ends in `.git`; a link to a file in the store does not.
+// Scanning the bare base catches both.
+function storeBase(url) {
+  return url?.replace(/\.git$/, "").replace(/\/+$/, "");
+}
+
 /**
  * The terms to scan for, labeled by source.
  *
- * Built-ins are the store URL values, taken from the environment
- * automatically. User terms come from `PUSH_BLOCKLIST`, |-separated
- * (newlines get truncated by some layers and `=` confuses parsers; a
- * literal `|` in a term is not expressible — documented as reserved).
+ * Built-ins are the store URLs, taken from the environment automatically, each without a trailing `.git` or slash.
+ * User terms come from `PUSH_BLOCKLIST`, |-separated (newlines get truncated by some layers and `=` confuses parsers;
+ * a literal `|` in a term is not expressible — documented as reserved).
  * Unset means built-in scan only: the variable is optional by design.
  */
 export function blocklistTerms(env) {
   const terms = [];
-  for (const name of ["SESSION_MEMORY_URL", "DECISION_MEMORY_URL", "EVIDENCE_MEMORY_URL"]) {
-    if (env[name]) terms.push({ label: name, value: env[name] });
+  for (const name of STORE_VARS) {
+    const value = storeBase(env[name]);
+    if (value) terms.push({ label: name, value });
   }
   (env.PUSH_BLOCKLIST ?? "")
     .split("|")
@@ -51,4 +59,20 @@ export function shellRef(label) {
   const match = /^PUSH_BLOCKLIST term (\d+)$/.exec(label);
   if (match) return `"$(printf %s "$PUSH_BLOCKLIST" | cut -d'|' -f${match[1]})"`;
   return `"$${label}"`;
+}
+
+/**
+ * `text` with every store URL value replaced by `«store»` (skills#242).
+ *
+ * The log is append-only,
+ * so an old event that links a store file by its full URL would make every render fail check 7 forever.
+ * Masking at render time keeps the page clean; check 7 still scans the page and catches a value this misses.
+ */
+export function maskStoreUrls(text, env) {
+  let out = text;
+  for (const name of STORE_VARS) {
+    const value = storeBase(env[name]);
+    if (value) out = out.split(value).join("«store»");
+  }
+  return out;
 }

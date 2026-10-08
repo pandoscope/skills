@@ -25,6 +25,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 import { LedgerError, fold } from "./core.mjs";
+import { blocklistTerms, maskStoreUrls, scanText } from "./scan.mjs";
 import { renderBody, renderMarkdown } from "./views.mjs";
 import {
   readAll,
@@ -33,6 +34,7 @@ import {
   readForge,
   readNames,
   resolveRoot,
+  sessionEnv,
 } from "./store/io.mjs";
 import { countUserMessages, findTranscript, resolveSession, storeUrl } from "./store/identity.mjs";
 import { append, pullForRender, push } from "./store/writes.mjs";
@@ -65,13 +67,14 @@ export function main(argv) {
   if (cmd === "declare") {
     const text = declareText(opts);
     // The same single env var the hook wrapper exports (skills#153):
-    // writer and checker resolve the location through one name, so
-    // neither can drift to a private path. The legacy home fallback
-    // keeps unmigrated environments declaring while the wrapper rolls
-    // out; the heartbeat reads it with a deprecation note.
+    // writer and checker resolve the location through one name, so neither can drift to a private path.
+    // Unset on a plain command line, it comes from the session.env the wrapper sources,
+    // so the declaration lands where the heartbeat looks (skills#242).
+    // The legacy home fallback keeps environments without either declaring; the heartbeat reads it with a deprecation note.
     const file =
       opts["summary-path"] ??
       process.env.TURN_SUMMARY_PATH ??
+      sessionEnv("TURN_SUMMARY_PATH") ??
       path.join(os.homedir(), ".claude", "turn-summary.txt");
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, text, "utf8");
@@ -85,13 +88,28 @@ export function main(argv) {
   // that session's message count onto the workflow's events.
   const transcript = opts.by ? null : findTranscript(opts.transcript);
 
-  // Identity is resolved for WRITES only. A write has to know which
-  // conversation it belongs to; a read folds every log in the store and
-  // never asks. Resolving it up front for all three commands is what
-  // stopped the store rendering the moment it held a second
-  // conversation — the requirement was real, it was just in the wrong
-  // place.
   if (cmd === "append") {
+    // Refused before anything is written, for the reason maskStoreUrls in scan.mjs gives.
+    const terms = blocklistTerms(process.env);
+    for (const field of ["note", "title"]) {
+      const labels = scanText(opts[field] ?? "", terms);
+      if (labels.length) {
+        const store = labels.some((label) => !label.startsWith("PUSH_BLOCKLIST"));
+        throw new LedgerError(
+          `--${field} carries the value of ${labels.join(", ")}; ` +
+            (store
+              ? "name a store-relative path such as handoffs/<file>.md instead"
+              : "remove the blocked term"),
+        );
+      }
+    }
+    // Identity is resolved for writes only. A write has to know which
+    // conversation it belongs to; a read folds every log in the store and
+    // never asks. Resolving it up front for all three commands is what
+    // stopped the store rendering the moment it held a second
+    // conversation — the requirement was real, it was in the wrong
+    // place.
+    //
     // A writer that is not a conversation names itself and skips session
     // resolution, which exists to answer "which conversation is this".
     // Routed through it, the workflow would inherit a session's name and
@@ -173,7 +191,7 @@ export function main(argv) {
   } else {
     page = renderPage(events, title, nowMsg, codes, sessionUrl, readDiligence(root), readNames(root), forge, staleNote);
   }
-  fs.writeFileSync(out, page, "utf8");
+  fs.writeFileSync(out, maskStoreUrls(page, process.env), "utf8");
   process.stdout.write(`wrote ${out}\n`);
   return 0;
 }
