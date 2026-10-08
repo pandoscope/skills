@@ -1,0 +1,26 @@
+{
+  "pr": "pandoscope/skills#243",
+  "head": "506b8a514a5660a8df2ab899ff5b82bba340295c",
+  "pass": "spec-fidelity",
+  "model_tier": "sonnet",
+  "findings": [
+    {
+      "file": "original/thread-ledger/heartbeat.mjs",
+      "line": 181,
+      "rule": "releases unsealed only when every failing check's reason was delivered.",
+      "input": "Guarded fire (stop_hook_active) where the compliance log holds no blocked record for this turnKey (delivered.size === 0, e.g. the first block's record was not written) and two checks fail: `delivered.size > 0 &&` short-circuits, `unheard` is false, and the hook releases unsealed although no failing check's reason was ever delivered.",
+      "finding_basis": "judged",
+      "confidence": 55,
+      "finding": "The release path is still gated on `delivered.size > 0`, so a guarded fire with an empty delivered set releases unsealed without every failing check's reason having been delivered."
+    },
+    {
+      "file": "original/thread-ledger/checks/declarations.mjs",
+      "line": 193,
+      "rule": "The declarations reminder gives the command with `. ~/.claude/session.env &&` before it",
+      "input": "A turn whose declaration fails the no-update check receives the reminder at declarations.mjs:193, which still says `node ${LEDGER} declare <your declaration> --no-update ...` with no `. ~/.claude/session.env &&`; the model runs it, declare writes the legacy turn-summary.txt, and the hook keeps preferring the v2 file.",
+      "finding_basis": "judged",
+      "confidence": 45,
+      "finding": "Only one of the declarations reminder's two declare commands gained the session.env prefix; the second still teaches the form that writes the wrong file."
+    }
+  ]
+}
