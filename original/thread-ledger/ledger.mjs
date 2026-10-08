@@ -93,8 +93,8 @@ export function main(argv) {
   // conversation — the requirement was real, it was just in the wrong
   // place.
   if (cmd === "append") {
-    // A blocked term in an event is permanent: the log is append-only
-    // (skills#242). Refused here, before anything is written.
+    // A blocked term in an event is permanent: the log is append-only (skills#242).
+    // Refused here, before anything is written.
     const terms = blocklistTerms(process.env);
     for (const field of ["note", "title"]) {
       const labels = scanText(opts[field] ?? "", terms);

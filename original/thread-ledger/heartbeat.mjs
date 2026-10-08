@@ -173,11 +173,11 @@ export function run(input) {
   // was given can be observed at all.
   if (ctx.guarded) {
     const file = localFile("reminder-compliance.jsonl");
-    // Every failing check is a candidate, not only the first: a check
-    // that keeps failing in first place otherwise hides every later
-    // one, which then fails silently on each re-fire (skills#242).
-    // An empty delivered set still counts: another Stop hook may have
-    // blocked first, and then none of this hook's reasons were heard.
+    // Every failing check is a candidate, not only the first:
+    // a check that keeps failing in first place otherwise hides every later one,
+    // which then fails silently on each re-fire (skills#242).
+    // An empty delivered set still counts: another Stop hook may have blocked first,
+    // and then none of this hook's reasons were heard.
     // cycleOf bounds the loop either way.
     const delivered = deliveredThisTurn(file, ctx);
     const unheard = verdicts.find(

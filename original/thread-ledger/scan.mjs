@@ -65,10 +65,9 @@ export function shellRef(label) {
 /**
  * `text` with every store URL value replaced by `«store»` (skills#242).
  *
- * The log is append-only, so an old event that links a store file by
- * its full URL would make every render fail check 7 forever. Masking
- * at render time keeps the page clean; check 7 still scans the page
- * and catches a value this misses.
+ * The log is append-only,
+ * so an old event that links a store file by its full URL would make every render fail check 7 forever.
+ * Masking at render time keeps the page clean; check 7 still scans the page and catches a value this misses.
  */
 export function maskStoreUrls(text, env) {
   let out = text;
