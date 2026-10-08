@@ -413,3 +413,44 @@ rules_ids() {
 @test "H sembr still flags a break inside a clause" {
   candidate markdown sembr 2 'The hook reads the\norder file.\n'
 }
+
+@test "--fix puts one sentence per line in a comment and keeps code lines" {
+  f=$(printf '%s\n' 'x = 1  // trailing stays' '// The hook runs first. It reads the guard after' '// the checks, so cycleOf bounds it. cycleOf counts.' 'y = 2' | text a.mjs)
+  run "$CHECK" comment "$f" --fix
+  run cat "$f"
+  [ "${lines[0]}" = 'x = 1  // trailing stays' ]
+  [ "${lines[1]}" = '// The hook runs first.' ]
+  [ "${lines[2]}" = '// It reads the guard after the checks, so cycleOf bounds it.' ]
+  [ "${lines[3]}" = '// cycleOf counts.' ]
+  [ "${lines[4]}" = 'y = 2' ]
+}
+
+@test "--fix breaks a long sentence at the clause boundary nearest its middle" {
+  long='The renderer replaces every store URL on the page with a placeholder before it writes, so an old event renders clean, and check 7 still scans the page for a miss.'
+  f=$(printf '%s\n' "$long" | text a.md)
+  run "$CHECK" markdown "$f" --fix
+  run cat "$f"
+  [ "$output" = $'The renderer replaces every store URL on the page with a placeholder before it writes,\nso an old event renders clean, and check 7 still scans the page for a miss.' ]
+}
+
+@test "--fix leaves lists, code blocks and e.g. alone" {
+  f=$(printf '%s\n' '- One item. Two sentences.' '' '```' 'Code here. Stays.' '```' '' 'Use a tool, e.g. Foo. Then stop.' | text a.md)
+  run "$CHECK" markdown "$f" --fix
+  run cat "$f"
+  [ "$output" = $'- One item. Two sentences.\n\n```\nCode here. Stays.\n```\n\nUse a tool, e.g. Foo.\nThen stop.' ]
+}
+
+@test "--fix with --before rewrites only paragraphs the change touched" {
+  old=$(printf '%s\n' 'First para wraps' 'mid clause here.' '' 'Second para wraps' 'mid clause too.' | text old.md)
+  f=$(printf '%s\n' 'First para wraps' 'mid clause here.' '' 'Second para now wraps' 'mid clause too.' | text a.md)
+  run "$CHECK" markdown "$f" --fix --before "$old"
+  [[ "$output" != *"F reflow"* ]]
+  run cat "$f"
+  [ "$output" = $'First para wraps\nmid clause here.\n\nSecond para now wraps mid clause too.' ]
+}
+
+@test "--fix refuses a surface without layout rules" {
+  f=$(printf 'One. Two.\n' | text a.txt)
+  run "$CHECK" commit "$f" --fix
+  [ "$status" -eq 2 ]
+}

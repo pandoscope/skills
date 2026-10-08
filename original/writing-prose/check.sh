@@ -4,7 +4,8 @@
 # of the surface, which only the agent can judge. The code-checkable
 # rules live in patterns.awk; the rules files under rules/ are the
 # authority for every rule's wording and tier.
-# Usage: check.sh <surface> <file|-> [--before <file>] [--style]
+# Usage: check.sh <surface> <file|-> [--before <file>] [--style] [--fix]
+#        --fix rewrites the file one sentence per line first (sembr.awk)
 #        check.sh --rules <surface>   rules files the surface reads
 #        check.sh --list              F and H rules patterns.awk implements
 set -euo pipefail
@@ -12,7 +13,7 @@ here="$(cd "$(dirname "$0")" && pwd)"
 surfaces="chat ticket tracker markdown skill primed comment commit"
 
 usage() {
-    echo "usage: check.sh <surface> <file|-> [--before <file>] [--style]" >&2
+    echo "usage: check.sh <surface> <file|-> [--before <file>] [--style] [--fix]" >&2
     echo "       check.sh --rules <surface> | --list" >&2
     echo "surface is one of: $surfaces" >&2
     exit 2
@@ -53,11 +54,12 @@ surface=$1 file=$2
 shift 2
 valid_surface "$surface" || usage
 
-before="" style=0
+before="" style=0 fix=0
 while [ $# -gt 0 ]; do
     case $1 in
         --before) before=${2:?--before needs a file}; shift 2 ;;
         --style) style=1; shift ;;
+        --fix) fix=1; shift ;;
         *) usage ;;
     esac
 done
@@ -70,6 +72,18 @@ if [ "$file" = - ]; then
     name=stdin
 fi
 [ -f "$file" ] || { echo "check.sh: no such file: $file" >&2; exit 2; }
+
+if [ "$fix" = 1 ]; then
+    case $surface in
+        markdown | skill | primed | comment) ;;
+        *) echo "check.sh: --fix applies to markdown, skill, primed and comment" >&2; exit 2 ;;
+    esac
+    [ "$name" != stdin ] || { echo "check.sh: --fix needs a file, not stdin" >&2; exit 2; }
+    fixed=$(mktemp)
+    awk -v surface="$surface" -v before="$before" -f "$here/sembr.awk" "$file" > "$fixed"
+    cat "$fixed" > "$file"
+    rm -f "$fixed"
+fi
 
 status=0
 awk -v surface="$surface" -v name="$name" -v style="$style" \
