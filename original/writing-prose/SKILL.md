@@ -42,7 +42,7 @@ and `commit.md` for `commit`.
 5. Repeat steps 3 and 4.
    From the second round on, fix findings in place.
 6. Layout comes last on the surfaces that read the layout rules.
-   Once the content passes, place the semantic line breaks and run step 3 once more.
+   Once the content passes, run step 3 with `--fix`: it puts one sentence per line in the paragraphs you touched, then checks.
    A rewrap of lines the content work left alone is a reflow and goes in a style commit of its own, checked with `--style`.
    When a request puts layout before a content review, tell the principal that the order breaks this step and ask before you start.
 
