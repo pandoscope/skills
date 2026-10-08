@@ -1,0 +1,80 @@
+{
+  "pr": "pandoscope/skills#243",
+  "head": "12e037ae150e213cd1f1cff35ec92a3d5fa7c248",
+  "pass": "prose",
+  "model_tier": "fable",
+  "findings": [
+    {
+      "file": "original/thread-ledger/SKILL.md",
+      "line": 124,
+      "rule": "Keep each fact in one place and reference it from everywhere else, and let a declared copy name its source and update path.",
+      "input": "node ledger.mjs declare --reviews none --tickets my-org/skills#56",
+      "finding_basis": "judged",
+      "confidence": 75,
+      "finding": "The skill's own declare command still omits the `. ~/.claude/session.env &&` prefix that the two reminders in checks/declarations.mjs now give, so the command the agent reads first and the command the hook repeats disagree, and the skill keeps the writer-reader split the ticket describes."
+    },
+    {
+      "file": "original/thread-ledger/SKILL.md",
+      "line": 186,
+      "rule": "Phrase an instruction positively, and keep a prohibition only as a guardrail paired with what to do instead.",
+      "input": "`ledger append` refuses a `--note` or `--title` that carries one (skills#242).",
+      "finding_basis": "judged",
+      "confidence": 65,
+      "finding": "The sentence tells the agent what append refuses and never what to write in a note instead, while the error text in ledger.mjs does name the store-relative path; the skill carries the prohibition without its paired instruction."
+    },
+    {
+      "file": "tests/original/reminder-heartbeat/katas/72-another-hooks-block-hides-nothing/kata.md",
+      "line": 3,
+      "rule": "Make every \"the X\" and \"its\" point to something named in the current or previous sentence.",
+      "input": "An empty delivered set counts too.",
+      "finding_basis": "judged",
+      "confidence": 65,
+      "finding": "\"Delivered set\" names the `delivered` Set inside heartbeat.mjs, which neither this sentence nor the one before it introduces, so the kata reader cannot tell what is empty or what it counts as."
+    },
+    {
+      "file": "original/thread-ledger/ledger.mjs",
+      "line": 96,
+      "rule": "Keep each fact in one place and reference it from everywhere else, and let a declared copy name its source and update path.",
+      "input": "// A blocked term in an event is permanent: the log is append-only (skills#242).",
+      "finding_basis": "judged",
+      "confidence": 55,
+      "finding": "The append-only rationale for masking and refusing is stated in full four times, in this comment, the maskStoreUrls docblock in scan.mjs, the test comment in test_cli.mjs and SKILL.md, with no copy pointing at the one that owns it."
+    },
+    {
+      "file": "original/thread-ledger/SKILL.md",
+      "line": 186,
+      "rule": "Make every \"the X\" and \"its\" point to something named in the current or previous sentence.",
+      "input": "The log is append-only,",
+      "finding_basis": "judged",
+      "confidence": 55,
+      "finding": "The paragraph is about the scanner, commits and the rendered page and never names the ledger log, so \"the log\" has no referent in the current or previous sentence."
+    },
+    {
+      "file": "tests/original/reminder-heartbeat/katas/72-another-hooks-block-hides-nothing/kata.md",
+      "line": 3,
+      "rule": "State a contract several things share once, then give each instance only its deltas.",
+      "input": "**Rule (skills#242):** on a guarded fire the hook blocks on the first failing check whose reason was not delivered this turn.",
+      "finding_basis": "judged",
+      "confidence": 50,
+      "finding": "Kata 72 restates kata 71's rule sentence word for word instead of pointing at it and giving only its delta, the empty delivered set, as kata 66 does for kata 62."
+    },
+    {
+      "file": "tests/original/reminder-heartbeat/katas/72-another-hooks-block-hides-nothing/kata.md",
+      "line": 14,
+      "rule": "Compress by cutting words, never by nesting clauses.",
+      "input": "A hook that blocks again only after one of its own reasons was delivered releases this turn unsealed,",
+      "finding_basis": "judged",
+      "confidence": 50,
+      "finding": "The sentence nests a temporal clause inside a relative clause between the subject \"A hook\" and its verb \"releases\", so the old behaviour and its consequence have to be unpacked rather than read."
+    },
+    {
+      "file": "original/thread-ledger/scan.mjs",
+      "line": 13,
+      "rule": "Make every \"the X\" and \"its\" point to something named in the current or previous sentence.",
+      "input": "/**\n * The terms to scan for, labeled by source.",
+      "finding_basis": "judged",
+      "confidence": 45,
+      "finding": "The docblock describes blocklistTerms, but the new STORE_VARS constant now sits directly under it, so \"the terms to scan for\" heads a list of three variable names rather than the function that builds the terms."
+    }
+  ]
+}
