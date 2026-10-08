@@ -1,0 +1,26 @@
+{
+  "pr": "pandoscope/skills#243",
+  "head": "12e037ae150e213cd1f1cff35ec92a3d5fa7c248",
+  "pass": "prose",
+  "model_tier": "sonnet-r2",
+  "findings": [
+    {
+      "file": "original/thread-ledger/scan.mjs",
+      "line": 13,
+      "rule": "Keep terms, code and quoted errors exact, so a rewrite leaves every code block byte-identical.",
+      "input": "Built-ins are the store URL values, taken from the environment automatically.",
+      "finding_basis": "judged",
+      "confidence": 45,
+      "finding": "The blocklistTerms doc comment still calls the built-ins the store URL values and now sits above STORE_VARS and storeBase instead of the function, although the built-ins are the bare base with `.git` and trailing slashes stripped."
+    },
+    {
+      "file": "original/thread-ledger/SKILL.md",
+      "line": 186,
+      "rule": "Address only the agent running the skill, and move rationale meant for reviewers into code or records.",
+      "input": "The log is append-only,\nso the renderer masks store URLs as `«store»` and `ledger append` refuses a `--note` or `--title` that carries one (skills#242).",
+      "finding_basis": "judged",
+      "confidence": 35,
+      "finding": "The added sentence narrates renderer and append internals with a ticket pointer, and gives the agent no instruction, in a paragraph whose other sentences tell it what to do."
+    }
+  ]
+}
