@@ -7,8 +7,16 @@
 # where to split it is a wording decision the `long-line` rule leaves to the writer.
 
 # The text a line contributes to a paragraph, as in patterns.awk.
-function para_text(line) {
+# Only a docstring's body lines are prose here:
+# its quote lines and its indented section entries stay as written.
+function para_text(line, s,    t) {
+    dkind = ""
     if (surface != "comment") return line
+    if (py) {
+        t = doc_line(line, s)
+        if (dkind == "body") return t
+        if (dkind != "") return "\001"
+    }
     if (line !~ /^[ \t]*(#|\/\/|\/\*|\*|--|;)/ || line ~ /^#!/) return "\001"
     sub(/^[ \t]*(#+|\/\/+|\/\*+|\*+|--|;+)[ \t]*/, "", line)
     return line
@@ -16,7 +24,7 @@ function para_text(line) {
 
 # The marker and indentation a comment line opens with.
 function prefix_of(line) {
-    if (surface != "comment") { match(line, /^[ \t]*/); return substr(line, 1, RLENGTH) }
+    if (surface != "comment" || dkind == "body") { match(line, /^[ \t]*/); return substr(line, 1, RLENGTH) }
     match(line, /^[ \t]*(#+|\/\/+|\*+|--|;+)[ \t]?/)
     return substr(line, 1, RLENGTH)
 }
@@ -29,7 +37,7 @@ function prose(t) {
 }
 
 function read_before(    line) {
-    while ((getline line < before) > 0) bline[para_text(line)] = 1
+    while ((getline line < before) > 0) bline[para_text(line, "before")] = 1
     close(before)
 }
 
@@ -94,6 +102,7 @@ function flush(    i, first, joined, n, parts) {
 }
 
 BEGIN {
+    py = name ~ /\.py$/
     if (LIMIT == "") LIMIT = 120
     if (before != "") read_before()
 }
@@ -102,7 +111,7 @@ BEGIN {
     line = $0
     if (line ~ /^[ \t]*(```|~~~)/) { flush(); fence = !fence; print line; next }
     if (fence) { print line; next }
-    t = para_text(line)
+    t = para_text(line, "main")
     # A list item and its indented continuation lines stay as written.
     if (t ~ /^[ \t]*([-+*][ \t]|[0-9]+[.)][ \t])/) { flush(); inlist = 1; print line; next }
     if (inlist && t ~ /^[ \t]+[^ \t]/) { print line; next }

@@ -23,10 +23,15 @@ function words(s,    n, w, i, out) {
 }
 
 # The text a line contributes to a paragraph.
-# On the comment surface, that is the comment without its marker.
+# On the comment surface, that is the comment without its marker, or a Python docstring's text.
 # A code line returns "\001" and ends the paragraph like a blank line.
-function para_text(line) {
+function para_text(line, s,    t) {
+    dkind = ""
     if (!on("comment")) return line
+    if (py) {
+        t = doc_line(line, s)
+        if (dkind != "") return t == "" ? "\001" : t
+    }
     if (line !~ /^[ \t]*(#|\/\/|\/\*|\*|--|;)/ || line ~ /^#!/) return "\001"
     sub(/^[ \t]*(#+|\/\/+|\/\*+|\*+|--|;+)[ \t]*/, "", line)
     return line
@@ -45,7 +50,7 @@ function read_before(    line, fence, code, para, n, t) {
             continue
         }
         if (fence) { code = code line "\n"; continue }
-        t = para_text(line)
+        t = para_text(line, "before")
         if (para_break(t)) {
             if (para != "") { bwords[words(para)] = 1; braw[para] = 1 }
             para = ""
@@ -66,6 +71,7 @@ function end_para() {
 }
 
 BEGIN {
+    py = name ~ /\.py$/
     if (before != "") read_before()
     DOCS = "ticket tracker markdown skill primed comment commit"
     MD = "markdown skill primed"
@@ -251,13 +257,16 @@ in_front { if (/^---[ \t]*$/) in_front = 0; next }
         next
     }
     if (in_fence) { code = code $0 "\n"; next }
-    t = para_text($0)
+    t = para_text($0, "main")
     if (para_break(t)) { prev_prose = 0; end_para() }
     else { if (para == "") para_start = FNR; para = para t "\n" }
     raw = $0
     if (on("comment") && raw ~ /«[^«» ]+»/)
         f("code-placeholder", "code takes <angle> placeholders, never guillemets")
-    if (on("comment")) {
+    if (on("comment") && dkind != "") {
+        if (t == "\001") next
+        raw = t
+    } else if (on("comment")) {
         if (raw !~ /^[ \t]*(#|\/\/|\/\*|\*|--|;)/ || raw ~ /^#!/) next
         sub(/^[ \t]*(#+|\/\/+|\/\*+|\*+|--|;+)[ \t]*/, "", raw)
     }
