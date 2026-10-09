@@ -80,14 +80,14 @@ if [ "$fix" = 1 ]; then
     esac
     [ "$name" != stdin ] || { echo "check.sh: --fix needs a file, not stdin" >&2; exit 2; }
     fixed=$(mktemp)
-    awk -v surface="$surface" -v before="$before" -f "$here/sembr.awk" "$file" > "$fixed"
+    awk -v surface="$surface" -v name="$name" -v before="$before" -f "$here/docstring.awk" -f "$here/sembr.awk" "$file" > "$fixed"
     cat "$fixed" > "$file"
     rm -f "$fixed"
 fi
 
 status=0
 awk -v surface="$surface" -v name="$name" -v style="$style" \
-    -v before="$before" -f "$here/patterns.awk" "$file" || status=$?
+    -v before="$before" -f "$here/docstring.awk" -f "$here/patterns.awk" "$file" || status=$?
 
 echo "Judge by reading, M rules for $surface:"
 rules_for "$surface" | while read -r r; do

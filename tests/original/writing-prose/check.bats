@@ -462,3 +462,29 @@ rules_ids() {
   run cat "$f"
   [ "$output" = $'The hook reads the guard\nafter the checks.\nIt blocks once more for an unheard reason.' ]
 }
+
+@test "H sembr flags two sentences on one docstring line" {
+  f=$(printf '%s\n' 'def run():' '    """' '    The hook runs. It exits.' '    """' '    return 1' | text a.py)
+  run "$CHECK" comment "$f"
+  [[ "$output" == *"a.py:3: H sembr"* ]]
+}
+
+@test "F filler fails on a filler word in a one-line docstring" {
+  f=$(printf '%s\n' '"""The hook just runs."""' '' 'import os' | text a.py)
+  run "$CHECK" comment "$f"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"a.py:1: F filler"* ]]
+}
+
+@test "F filler passes a triple-quoted string that is no docstring" {
+  f=$(printf '%s\n' 'import os' 'QUERY = """' 'SELECT just 1' '"""' 'x = f(' '    """' '    just a string' '    """' ')' | text a.py)
+  run "$CHECK" comment "$f"
+  [ "$status" -eq 0 ]
+}
+
+@test "--fix puts one sentence per line in a docstring and keeps its sections" {
+  f=$(printf '%s\n' 'class A:' '    """' '    What one call changed. It counts' '    lines.' '' '    Attributes:' '        stored: Lines stored. Kept as' '            written.' '' '    """' | text a.py)
+  run "$CHECK" comment "$f" --fix
+  run cat "$f"
+  [ "$output" = $'class A:\n    """\n    What one call changed.\n    It counts lines.\n\n    Attributes:\n        stored: Lines stored. Kept as\n            written.\n\n    """' ]
+}
