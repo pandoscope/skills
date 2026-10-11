@@ -23,6 +23,7 @@ function stamp(msg, cycle, opts = {}) {
   return {
     session: opts.session ?? "s1",
     msg,
+    turnKey: opts.turnKey,
     cycle,
     model: "model" in opts ? opts.model : "model-a",
     tokens: { input: 0, output: opts.output ?? 0, cacheRead: 0, cacheCreation: 0 },
@@ -67,6 +68,27 @@ describe("Diligence", () => {
   it("turns are keyed by session as well as index", () => {
     const turns = turnsOf([stamp(3, 1), stamp(3, 1, { session: "s2" })]);
     assert.equal(turns.length, 2);
+  });
+
+  // The heartbeat's block feedback counts as a user turn,
+  // so the message index advances between two cycles of one turn.
+  it("groups a turn's cycles by turn key while the message index advances", () => {
+    const records = [
+      stamp(4, 1, { turnKey: "t4", outcome: "blocked", fired: "ledger-event", verdicts: failedLedger }),
+      stamp(5, 2, { turnKey: "t4" }),
+    ];
+    const turns = turnsOf(records);
+    assert.equal(turns.length, 1);
+    assert.equal(turns[0].cycles, 2);
+  });
+
+  it("counts a check as cleared when it passes after the block's feedback", () => {
+    const records = [
+      stamp(4, 1, { turnKey: "t4", outcome: "blocked", fired: "ledger-event", verdicts: failedLedger }),
+      stamp(5, 2, { turnKey: "t4" }),
+    ];
+    const row = perCheck(records, turnsOf(records)).find((r) => r.check === "ledger-event");
+    assert.equal(row.cleared, 1);
   });
 
   it("cycle 1 is the unprompted baseline, later cycles are not", () => {
