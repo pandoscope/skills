@@ -22,7 +22,7 @@ import { validateDiligence } from "./validate.mjs";
 export function turnsOf(records) {
   const byTurn = new Map();
   for (const record of records) {
-    const key = `${record.session}\u0000${record.msg}`;
+    const key = `${record.session}\u0000${record.turnKey ?? record.msg}`;
     if (!byTurn.has(key)) byTurn.set(key, []);
     byTurn.get(key).push(record);
   }
@@ -136,7 +136,7 @@ export function perCheck(records, turns, disputes = []) {
   // different work.
   const byTurn = new Map();
   for (const record of records) {
-    const key = `${record.session}\u0000${record.msg}`;
+    const key = `${record.session}\u0000${record.turnKey ?? record.msg}`;
     if (!byTurn.has(key)) byTurn.set(key, []);
     byTurn.get(key).push(record);
   }
