@@ -1,33 +1,38 @@
-// What the compliance log measures — turns, costs, checks, stretches.
-//
-// The digest on a seal is a projection of these, computed from the
-// records rather than typed, so a flattering summary would have to be a
-// flattering log first. Pure and browser-safe.
+// Measures computed from the compliance log, which holds one record per Stop attempt:
+// turns, their token cost, counts per check, and stretches between seals.
+// A seal is the store event written when a turn ends with every check passing,
+// and the digest it carries is computed here from the records, never written by the model.
+// The functions do no I/O, so the rendered page runs the same code in the browser.
 
 import { counter, stamp } from "./schema.mjs";
 import { validateDiligence } from "./validate.mjs";
 
 // ------------------------------------------------- compliance records
-// Pure analysis of the heartbeat's per-Stop records. It lives here,
-// beside the event schema, so the rendered page can run the SAME
-// projection in the browser that the hook runs at seal time.
 
 /**
  * Group records into turns.
  *
- * A turn is one message from the principal, identified by session and
- * `msg` together — `msg` alone collides across conversations sharing a
- * log directory.
+ * A turn runs from one principal message to the agent's last Stop attempt,
+ * and each attempt, called a cycle, writes one record.
+ * Records group by session and `turnKey`, the turn's start time.
+ * `msg` cannot key a turn: it advances when the heartbeat's block feedback arrives,
+ * so it would split one turn into one group per cycle.
+ * Records written before `turnKey` existed fall back to `msg`.
  */
-export function turnsOf(records) {
+function groupTurns(records) {
   const byTurn = new Map();
   for (const record of records) {
     const key = `${record.session}\u0000${record.turnKey ?? record.msg}`;
     if (!byTurn.has(key)) byTurn.set(key, []);
     byTurn.get(key).push(record);
   }
-  return [...byTurn.values()].map((cycles) => {
-    const ordered = [...cycles].sort((a, b) => (a.cycle ?? 1) - (b.cycle ?? 1));
+  return [...byTurn.values()].map((cycles) => [...cycles].sort((a, b) => (a.cycle ?? 1) - (b.cycle ?? 1)));
+}
+
+
+/** Summarise each turn: its cycles, their token cost, and the verdicts before and after the reminders. */
+export function turnsOf(records) {
+  return groupTurns(records).map((ordered) => {
     const first = ordered[0];
     const last = ordered[ordered.length - 1];
     return {
@@ -36,12 +41,11 @@ export function turnsOf(records) {
       at: first.at ?? null,
       model: last.model ?? first.model ?? null,
       cycles: ordered.length,
-      // The reminder's price in round-trips. Cycles above the first
-      // exist only because this hook blocked.
+      // Every cycle after the first exists because the heartbeat blocked,
+      // so `extra` is the reminders' cost in round trips.
       extra: ordered.length - 1,
-      // Attributable by TIME, not by intent: whatever else the model
-      // did between the two Stops is counted here too. An upper bound,
-      // and reported as one.
+      // All tokens between the first and last Stop count, including work unrelated to the reminder,
+      // so `cost` is an upper bound.
       cost: costBetween(first, last),
       unprompted: verdictMap(first),
       final: verdictMap(last),
@@ -52,10 +56,10 @@ export function turnsOf(records) {
 }
 
 
-/** Tokens generated between two stamps of the same turn. */
+/** Tokens spent between a turn's first and last record, or null for a turn of one record. */
 function costBetween(first, last) {
   const zero = { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 };
-  if (first === last) return null; // No second stamp: nothing to difference.
+  if (first === last) return null;
   const a = first.tokens ?? zero;
   const b = last.tokens ?? zero;
   const cost = {
@@ -64,15 +68,14 @@ function costBetween(first, last) {
     cacheRead: (b.cacheRead ?? 0) - (a.cacheRead ?? 0),
     cacheCreation: (b.cacheCreation ?? 0) - (a.cacheCreation ?? 0),
   };
-  // Compaction rewrites the transcript, so the cumulative counters can
-  // move backwards between two stamps of one turn. That is a reset
-  // observed mid-turn, not a discount — reporting it as data would
-  // quietly subtract from every aggregate it lands in.
+  // Compaction rewrites the transcript, so the running token counters can drop within a turn.
+  // A negative cost would lower every sum it enters, so the turn reports no cost instead.
   if (Object.values(cost).some((value) => value < 0)) return null;
   return cost;
 }
 
 
+/** A record's verdicts, keyed by check name. */
 function verdictMap(record) {
   const map = {};
   for (const verdict of record.verdicts ?? []) map[verdict.check] = verdict.verdict;
@@ -81,16 +84,12 @@ function verdictMap(record) {
 
 
 /**
- * Per check: how often it fails unprompted, and whether firing helps.
+ * Per check: how often it fails before any reminder, and whether its reminder works.
  *
- * `cleared` is the benefit side and it is a PROXY — it says the check
- * passed on the next cycle, which is compliance, not value. Whether the
- * event that got written was worth writing is not observable here and
- * is not claimed.
- *
- * `unconfigured` counts separately from both. A check that never looked
- * at anything must not dilute a pass rate; that is the whole reason the
- * hook records the third value.
+ * `cleared` counts a check that passes at the Stop after its reminder.
+ * That shows the agent complied, not that the work it then did was worth doing.
+ * `unconfigured` counts a check that had nothing to look at,
+ * and stays apart from passes and failures so it moves no rate.
  */
 export function perCheck(records, turns, disputes = []) {
   const checks = new Map();
@@ -100,8 +99,8 @@ export function perCheck(records, turns, disputes = []) {
         check: name,
         turns: 0,
         unpromptedFail: 0,
-        // A shadowed check's would-be failure (skills#192): what the
-        // check would have refused had it been armed, billed to no one.
+        // A shadowed check runs without blocking (skills#192).
+        // `shadow` counts what it would have refused, charged to no one.
         shadow: 0,
         unconfigured: 0,
         fired: 0,
@@ -115,12 +114,10 @@ export function perCheck(records, turns, disputes = []) {
   for (const turn of turns) {
     for (const [name, verdict] of Object.entries(turn.unprompted)) {
       const row = of(name);
-      // A failure inside a disputed window may be the CHECK's defect
-      // rather than the model's conduct, so it is counted apart and
-      // billed to neither side — including its turn, so the rate's
-      // denominator is not quietly diluted. Passes stay: the disputed
-      // classes are false POSITIVES, and a defective check's pass says
-      // nothing was flagged, wrongly or otherwise.
+      // A dispute marks a window in which this check is known to fail wrongly.
+      // A failure inside it goes to `disputed` and skips `turns` too,
+      // so it enters neither the failures nor the turns they are divided by.
+      // A pass still counts, because a dispute covers false failures only.
       if (verdict === "fail" && disputed(name, turn.at, disputes)) {
         row.disputed += 1;
         continue;
@@ -131,17 +128,7 @@ export function perCheck(records, turns, disputes = []) {
       if (verdict === "unconfigured") row.unconfigured += 1;
     }
   }
-  // Clearing is measured cycle to cycle within a turn, not turn to
-  // turn: a check that fails again on the next TURN failed about
-  // different work.
-  const byTurn = new Map();
-  for (const record of records) {
-    const key = `${record.session}\u0000${record.turnKey ?? record.msg}`;
-    if (!byTurn.has(key)) byTurn.set(key, []);
-    byTurn.get(key).push(record);
-  }
-  for (const cycles of byTurn.values()) {
-    const ordered = [...cycles].sort((a, b) => (a.cycle ?? 1) - (b.cycle ?? 1));
+  for (const ordered of groupTurns(records)) {
     for (let index = 0; index < ordered.length; index += 1) {
       const fired = ordered[index].fired;
       if (!fired) continue;
@@ -151,13 +138,14 @@ export function perCheck(records, turns, disputes = []) {
         continue;
       }
       row.fired += 1;
-      // The complement of cleared is split, because it mixes two very
-      // different things. IGNORED means the reminder was delivered and
-      // the same check still failed at the next Stop — the model
-      // passing over known work, which is the propensity signal this
-      // measure exists for. No next stamp at all means the turn simply
-      // ended; nothing was ignored, and counting it as such would
-      // manufacture negligence out of an interruption.
+      // Did the agent act on the reminder?
+      // When the heartbeat blocks a Stop, it shows the agent the `fired` check's reminder
+      // and the agent keeps working, so `next` is the Stop after the reminder:
+      // - `next` passes the `fired` check: the agent fixed it, and `cleared` counts it.
+      // - `next` fails it: the agent got the reminder and still did not fix it.
+      //   `ignored` counts this, and it is the signal this measure exists for.
+      // - No `next`: the heartbeat let the turn end here, so the agent never got the chance.
+      //   Counting that as `ignored` would blame the agent for something the heartbeat did.
       const next = ordered[index + 1];
       if (!next) continue;
       if (verdictMap(next)[fired] === "pass") row.cleared += 1;
@@ -171,16 +159,14 @@ export function perCheck(records, turns, disputes = []) {
 // ------------------------------------------------------------ disputes
 
 /**
- * A dispute names a window in which one CHECK's verdicts are known
- * defective — a filed false-positive class — so the diligence measure
- * stops billing them to the model (skills#66). Written at diagnosis
- * time into the store (`diligence/disputes.jsonl`), BESIDE the corpus
- * it corrects, never into it: compliance records are immutable, and a
- * flag the recorder could reach would be a flag worth reaching for.
+ * Keep the valid disputes and count the invalid ones.
  *
- * A dispute requires the ticket that names the defect. A dispute
- * without a filed cause is a self-serving eraser, and validation
- * rejects it.
+ * A dispute names a check, a time window and the ticket that files the check's false failures (skills#66).
+ * Inside the window, the diligence measure stops charging that check's failures to the agent.
+ * Disputes live in the store's `diligence/disputes.jsonl`, beside the compliance records and never inside them,
+ * because a record is never edited once written.
+ * Validation rejects a dispute without a ticket,
+ * so no failure is erased without a filed cause.
  */
 export function validDisputes(items) {
   const disputes = [];
@@ -204,7 +190,7 @@ export function validDisputes(items) {
 }
 
 
-/** Whether a verdict of `check` stamped `at` falls in a disputed window. */
+/** Whether a verdict of `check` at time `at` falls inside one of its dispute windows. */
 export function disputed(check, at, disputes) {
   if (!at || !disputes.length) return false;
   const when = Date.parse(at);
@@ -218,7 +204,7 @@ export function disputed(check, at, disputes) {
 }
 
 
-/** Per model: unprompted pass rate, and what correcting it cost. */
+/** Per model: how many turns needed no reminder, and what the reminders cost. */
 export function perModel(turns) {
   const models = new Map();
   for (const turn of turns) {
@@ -228,8 +214,8 @@ export function perModel(turns) {
     }
     const row = models.get(name);
     row.turns += 1;
-    // Clean = nothing failed before being told. The unprompted
-    // diligence number, and the one a model is actually compared on.
+    // A turn is clean when no check failed at its first Stop, before any reminder.
+    // Models are compared on this number.
     if (!Object.values(turn.unprompted).includes("fail")) row.clean += 1;
     row.extra += turn.extra;
     row.output += turn.cost?.output ?? 0;
@@ -241,18 +227,15 @@ export function perModel(turns) {
 // ------------------------------------------------------------ stretches
 
 /**
- * The stretch of a session's log that ends at its final record.
+ * The stretch of a session's records that ends at its last record.
  *
- * A stretch is everything since the previous seal in the SAME session's
- * records — the window skills#69 fixes as non-selectable, because a
- * window the model could choose is a window it could choose
- * flatteringly. The caller guarantees the final record is the sealing
- * execution's own.
+ * A stretch runs from the record after the session's previous seal to the sealing record.
+ * The code fixes this window (skills#69), so the agent cannot pick a flattering one.
+ * The caller makes sure the last record belongs to the heartbeat run that seals.
  *
- * @returns {{window: object[], baseline: object|null}} the stretch's
- *   records, and the previous seal's record — the token counters the
- *   stretch's cost is differenced against. Null baseline means first
- *   stretch: the difference is taken from zero.
+ * @returns {{window: object[], baseline: object|null}} the stretch's records,
+ *   and the previous seal's record, whose token counters the stretch's cost is measured from.
+ *   `baseline` is null for a session's first stretch, which is measured from zero.
  */
 export function stretchOf(records, session) {
   const mine = records.filter((record) => record.session === session);
@@ -267,20 +250,15 @@ export function stretchOf(records, session) {
 /**
  * The diligence digest a seal carries, computed from its stretch.
  *
- * Counted, never composed: every number is a projection of compliance
- * records the hook already wrote, so no model-authored text can reach
- * the payload (skills#46's observed-state principle, applied to the
- * seal itself).
+ * Every number counts compliance records the heartbeat already wrote,
+ * so no text the model writes reaches the payload (skills#46).
  *
- * @param window records of the stretch, oldest first, ending with the
- *   sealing execution's own record
- * @param baseline the previous seal's record, or null for the first
- *   stretch
- * @returns a payload `validateDiligence` accepts: turns, executions by
- *   outcome, per-fired-check counters, the token difference against the
- *   baseline's cumulative counters (null plus `reset: true` when any
- *   component ran backwards — a compaction gap is a gap, never zero),
- *   and the distinct models seen.
+ * @param window the stretch's records, oldest first, ending with the sealing heartbeat run's record
+ * @param baseline the previous seal's record, or null for the first stretch
+ * @returns a payload `validateDiligence` accepts: `turns`, `executions` per outcome,
+ *   counters per fired check, `tokens` spent since the baseline, and the `models` seen.
+ *   When a token counter dropped, `tokens` is null and `reset` is true,
+ *   because a compaction gap is unknown, not zero.
  */
 export function digestOf(window, baseline) {
   const turns = turnsOf(window);
@@ -306,7 +284,7 @@ export function digestOf(window, baseline) {
 }
 
 
-/** The stretch's token cost: last cumulative counter minus the baseline's. */
+/** The stretch's token cost: the last record's counters minus the baseline's. */
 function stretchTokens(window, baseline) {
   const zero = { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 };
   const last = window[window.length - 1]?.tokens ?? zero;
@@ -317,30 +295,28 @@ function stretchTokens(window, baseline) {
     cacheRead: (last.cacheRead ?? 0) - (base.cacheRead ?? 0),
     cacheCreation: (last.cacheCreation ?? 0) - (base.cacheCreation ?? 0),
   };
-  // A counter that ran backwards is a compaction reset observed inside
-  // the window, not a discount — same rule as `costBetween`.
+  // A counter that dropped means a compaction inside the window, handled as in `costBetween`.
   if (Object.values(cost).some((value) => value < 0)) return null;
   return cost;
 }
 
 
 /**
- * Fold the seal sequence into per-session stretches.
+ * Split each session's ledger events into stretches, one per seal.
  *
- * A stretch is a session's events since its previous seal, ended by a
- * seal — the same window the heartbeat digests, read here off the
- * ledger's own events so the page needs nothing the store does not
- * already publish. Events without an anchor cannot be attributed to a
- * session and take part in no stretch.
+ * A stretch here is the same window the heartbeat digests,
+ * read from the ledger's own events, so the page needs nothing the store does not publish.
+ * An event without an anchor names no session and joins no stretch.
  *
- * @returns one entry per session, newest-last-event first (the chip
- *   order): `{session, stretches, tail}`. Each stretch carries its
- *   `seal` event, `at`, `digest` (the seal's diligence payload, or null
- *   for a seal from before the field existed), `threads` touched in its
- *   span, and `spanMs` — wall-clock from the previous seal (the
- *   session's first event, for the first stretch), or null when a stamp
- *   is missing. `tail` is the span after the last seal — a turn that
- *   did not finish its bookkeeping — as `{count, threads}`, or null.
+ * @returns one entry per session as `{session, stretches, tail}`,
+ *   the session with the newest event first, in the order of the page's chips.
+ *   Each stretch carries its `seal` event, `at`, `digest`, `threads` and `spanMs`:
+ *   - `digest` is the seal's diligence payload, or null for a seal older than the field;
+ *   - `threads` lists the threads its events touched;
+ *   - `spanMs` is the time since the previous seal, and null when a timestamp is missing;
+ *     a session's first stretch counts from its first event.
+ *   `tail` holds the events after the last seal, from a turn whose bookkeeping did not finish,
+ *   as `{count, threads}`, or null.
  */
 export function stretchesOf(events, records = []) {
   const bySession = new Map();
@@ -389,14 +365,13 @@ export function stretchesOf(events, records = []) {
 
 
 /**
- * Fill digest-less stretches from the store's raw records.
+ * Fill each stretch that lacks a digest from the store's raw records.
  *
- * A seal from before the digest existed carries none — but the digest
- * is a projection of retained data, and when the raw per-Stop records
- * reached the store, the same projection runs here at render time.
- * Joined by the `msg` both sides already carry (the seal's anchor and
- * every record), which survives clock skew between the seal's stamp and
- * the record written just after it. Recordless stretches stay legacy.
+ * Seals written before the digest existed carry none,
+ * but where their per-Stop records reached the store, `digestOf` computes the digest at render time.
+ * Records join a seal by `msg`, which both carry.
+ * Unlike a timestamp, `msg` survives clock skew between a seal and the record written after it.
+ * A stretch without records keeps a null digest.
  */
 function projectDigests(stretches, records) {
   let prevMsg = -Infinity;
@@ -410,8 +385,8 @@ function projectDigests(stretches, records) {
       if (window.length) {
         const before = records.filter((record) => Number.isInteger(record.msg) && record.msg <= prevMsg);
         stretch.digest = digestOf(window, before[before.length - 1] ?? null);
-        // Projected, not carried: rendered the same, but a reader of the
-        // data can tell a seal-borne digest from a render-time one.
+        // `projected` tells a reader of the data that the digest was computed at render time,
+        // not carried by the seal.
         stretch.projected = true;
       }
     }
