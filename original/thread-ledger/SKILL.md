@@ -183,6 +183,8 @@ may live there, it must only never leave. It runs before the pushed
 check so a hit blocks before any push instruction, and every report
 names the term's SOURCE, never its value — the confirm commands count
 matches rather than printing them.
+The render masks each term in the store data it embeds with the term's label in square brackets,
+so a published event that carries a term stays in the log and never reaches the page.
 
 **What a review decided is persisted, not just read.** The truth
 source is the attribution-footer contract (skills#46, check 14): a

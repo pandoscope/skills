@@ -42,6 +42,36 @@ export function scanText(text, terms) {
 }
 
 /**
+ * `value` with every term replaced by its label in square brackets.
+ *
+ * It walks strings, arrays and plain objects, keys included.
+ * It returns a copy, and anything else passes through.
+ * A longer term goes first,
+ * so a shorter term inside it cannot leave the longer one's tail behind.
+ *
+ * @param {unknown} value  JSON-shaped data, e.g. ledger events
+ * @param {{label: string, value: string}[]} terms  from `blocklistTerms`
+ * @returns {unknown} the masked copy; `value` itself when `terms` is empty
+ */
+export function maskTerms(value, terms) {
+  if (!terms.length) return value;
+  const ordered = [...terms].sort((a, b) => b.value.length - a.value.length);
+  const maskString = (text) =>
+    ordered.reduce((out, term) => out.replaceAll(term.value, `[${term.label}]`), text);
+  const walk = (node) => {
+    if (typeof node === "string") return maskString(node);
+    if (Array.isArray(node)) return node.map(walk);
+    if (node && typeof node === "object") {
+      return Object.fromEntries(
+        Object.entries(node).map(([key, inner]) => [maskString(key), walk(inner)]),
+      );
+    }
+    return node;
+  };
+  return walk(value);
+}
+
+/**
  * The shell fragment that expands a labeled term WITHOUT printing it.
  *
  * Handed out in reasons so the model can locate a hit with grep while
