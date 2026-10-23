@@ -20,9 +20,17 @@ Rules live in `rules/`, one sentence each, with an id and a tier:
 Name the surface first: `chat`, `ticket`, `tracker` (pull request bodies and comments), `markdown`, `skill`, `primed` (files loaded into every session), `comment` (code comments and help text) or `commit`.
 `check.sh --rules <surface>` names the rules files the surface reads.
 
+## Examples
+
+`examples/` holds before-and-after passages from real prose, one file per register.
+Read the file for your surface before you draft:
+`argued.md` for `markdown`, `ticket` and `tracker`,
+`comment.md` for `comment`,
+and `commit.md` for `commit`.
+
 ## Loop
 
-1. Read the surface's rules files.
+1. Read the surface's rules files and its examples file.
 2. Draft.
    To rewrite, read the old block, draft it fresh from the rules, then cut.
    Never patch the old sentences.
@@ -34,12 +42,16 @@ Name the surface first: `chat`, `ticket`, `tracker` (pull request bodies and com
 5. Repeat steps 3 and 4.
    From the second round on, fix findings in place.
 6. Layout comes last on the surfaces that read the layout rules.
-   Once the content passes, place the semantic line breaks and run step 3 once more.
+   Once the content passes, run step 3 with `--fix`: it puts one sentence per line in the paragraphs you touched, then checks.
    A rewrap of lines the content work left alone is a reflow and goes in a style commit of its own, checked with `--style`.
    When a request puts layout before a content review, tell the principal that the order breaks this step and ask before you start.
 
 A text passes when `check.sh` exits 0, every H candidate is settled and no M rule is broken.
 M findings still open after round two go to the principal as a report, not into a third round.
+
+## Rewriting prose about code
+
+To rewrite existing prose that describes code, follow [rewrite.md](rewrite.md).
 
 ## Who reviews
 

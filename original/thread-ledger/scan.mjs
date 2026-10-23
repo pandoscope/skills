@@ -42,6 +42,41 @@ export function scanText(text, terms) {
 }
 
 /**
+ * Replace every term in `value` with its label in square brackets.
+ *
+ * Strings, arrays and plain objects are walked, keys included,
+ * and any other value passes through.
+ * One pass over each string matches the longest term first,
+ * so a label once written is never rewritten.
+ *
+ * @param {unknown} value  JSON-shaped data, e.g. ledger events
+ * @param {{label: string, value: string}[]} terms  from `blocklistTerms`
+ * @returns {unknown} a masked copy, or `value` itself when `terms` is empty
+ */
+export function maskTerms(value, terms) {
+  if (!terms.length) return value;
+  const ordered = [...terms].sort((a, b) => b.value.length - a.value.length);
+  const labels = new Map(ordered.map((term) => [term.value, term.label]));
+  const pattern = new RegExp(ordered.map((term) => escapeRegExp(term.value)).join("|"), "g");
+  const maskString = (text) => text.replace(pattern, (match) => `[${labels.get(match)}]`);
+  const walk = (node) => {
+    if (typeof node === "string") return maskString(node);
+    if (Array.isArray(node)) return node.map(walk);
+    if (node && typeof node === "object") {
+      return Object.fromEntries(
+        Object.entries(node).map(([key, inner]) => [maskString(key), walk(inner)]),
+      );
+    }
+    return node;
+  };
+  return walk(value);
+}
+
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
  * The shell fragment that expands a labeled term WITHOUT printing it.
  *
  * Handed out in reasons so the model can locate a hit with grep while

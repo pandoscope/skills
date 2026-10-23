@@ -15,6 +15,7 @@ import {
 } from "../../../original/thread-ledger/core.mjs";
 import {
   blocklistTerms,
+  maskTerms,
   scanText,
   shellRef,
 } from "../../../original/thread-ledger/scan.mjs";
@@ -159,6 +160,34 @@ describe("OutgoingScan", () => {
     assert.deepEqual(hits, ["PUSH_BLOCKLIST term 1"]);
     assert.ok(!JSON.stringify(hits).includes("hunter2"));
     assert.deepEqual(scanText("a clean diff", terms), []);
+  });
+
+  // The render's mask (#256) reads the same term list as the scan.
+  it("masks terms in nested strings and keys, and passes the rest through", () => {
+    const terms = blocklistTerms({ PUSH_BLOCKLIST: "hunter2" });
+    const masked = maskTerms(
+      { note: "say hunter2", list: ["hunter2!", 3, null, true], hunter2: { pct: 50 } },
+      terms,
+    );
+    assert.deepEqual(masked, {
+      note: "say [PUSH_BLOCKLIST term 1]",
+      list: ["[PUSH_BLOCKLIST term 1]!", 3, null, true],
+      "[PUSH_BLOCKLIST term 1]": { pct: 50 },
+    });
+    assert.deepEqual(scanText(JSON.stringify(masked), terms), []);
+  });
+
+  it("never rewrites inside a label it wrote", () => {
+    const terms = [
+      { label: "A", value: "x" },
+      { label: "B", value: "A" },
+    ];
+    assert.equal(maskTerms("x and A", terms), "[A] and [B]");
+  });
+
+  it("returns the value itself when there are no terms", () => {
+    const events = [{ note: "hunter2" }];
+    assert.equal(maskTerms(events, []), events);
   });
 
   it("shell references expand without printing", () => {
