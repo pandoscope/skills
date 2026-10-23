@@ -1,0 +1,26 @@
+{
+  "pr": "pandoscope/skills#257",
+  "head": "ca8a79ead27b1e2c207335efea35e65962dcbaa8",
+  "pass": "spec-fidelity",
+  "model_tier": "opus",
+  "findings": [
+    {
+      "file": "original/thread-ledger/ledger.mjs",
+      "line": 170,
+      "rule": "The renderer replaces each blocked term in the store data it embeds with the term's label in square brackets, such as `[SESSION_MEMORY_URL]`.",
+      "input": "A store with a single ledger/s1.url whose URL contains a PUSH_BLOCKLIST term (e.g. PUSH_BLOCKLIST=\"x.test\" and s1.url = \"https://x.test/code/s1\"), rendered with --format html or md and no --session-url",
+      "finding_basis": "decided",
+      "confidence": 70,
+      "finding": "The session URL that storeUrl reads from the store's ledger/*.url file is passed unmasked to renderPage (embedded as session_url) and to renderMarkdown (used as the fallback link of every thread), so a blocked term in it reaches the page and the scan still fails."
+    },
+    {
+      "file": "original/thread-ledger/scan.mjs",
+      "line": 59,
+      "rule": "A page rendered from a store whose events carry a blocked term passes the scan.",
+      "input": "PUSH_BLOCKLIST=\"term\" (or any term that is a substring of a label, such as \"BLOCK\" or \"MEMORY\") with an event note \"term\"",
+      "finding_basis": "judged",
+      "confidence": 35,
+      "finding": "maskTerms writes labels that can themselves contain a blocked term, and later replacements in the reduce rewrite inside earlier labels, so the masked page still contains the term (\"[PUSH_BLOCKLIST term 1]\" contains \"term\") and the label no longer stands intact where the term stood."
+    }
+  ]
+}
