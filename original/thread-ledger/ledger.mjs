@@ -160,14 +160,12 @@ export function main(argv) {
     throw new LedgerError("render needs --out (or LEDGER_RENDER_PATH set)");
   }
 
-  // The page leaves the container, and the log never does.
-  // A published event that carries a blocked term stays in the append-only log.
-  // So the render masks every term in the store data it embeds,
-  // with the scanner's own term list (#256).
+  // The append-only log keeps an event that carries a blocked term,
+  // so only the render can keep that term off the page (#256).
   const terms = blocklistTerms(process.env);
   const shown = maskTerms(events, terms);
   const folded = fold(shown);
-  const sessionUrl = storeUrl(root, opts["session-url"]);
+  const sessionUrl = maskTerms(storeUrl(root, opts["session-url"]), terms);
   const nowMsg = countUserMessages(transcript);
   const codes = maskTerms(readCodes(root), terms);
   const forge = maskTerms(readForge(root), terms);
