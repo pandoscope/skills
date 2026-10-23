@@ -1,0 +1,62 @@
+{
+  "pr": "pandoscope/skills#257",
+  "head": "f3b69ff0c657660e94da121837de1763e0d0f62b",
+  "pass": "prose",
+  "model_tier": "opus-r2",
+  "findings": [
+    {
+      "file": "original/thread-ledger/SKILL.md",
+      "line": 186,
+      "rule": "When a sentence gives the cause, consequence or exception of the one before, say so with a connective.",
+      "input": "The render masks each term in the store data it embeds with the term's label in square brackets,\nso a published event that carries a term stays in the log and never reaches the page.",
+      "finding_basis": "judged",
+      "confidence": 75,
+      "finding": "The added sentence joins its clauses with \"so\", but masking does not cause the event to stay in the log, so the connective misstates the cause and the consequence."
+    },
+    {
+      "file": "original/thread-ledger/SKILL.md",
+      "line": 186,
+      "rule": "Bring the verb within four words of its subject, with no clause between verb and complement.",
+      "input": "The render masks each term in the store data it embeds with the term's label in square brackets,",
+      "finding_basis": "decided",
+      "confidence": 70,
+      "finding": "The relative clause \"it embeds\" sits between \"masks each term\" and its complement \"with the term's label\", so \"with\" reads as attached to \"embeds\"."
+    },
+    {
+      "file": "original/thread-ledger/ledger.mjs",
+      "line": 163,
+      "rule": "Keep a code comment to one or two sentences that give the reason rather than the mechanism.",
+      "input": "// The page leaves the container, and the log never does.\n// A published event that carries a blocked term stays in the append-only log.\n// So the render masks every term in the store data it embeds,\n// with the scanner's own term list (#256).",
+      "finding_basis": "decided",
+      "confidence": 80,
+      "finding": "The comment runs to three sentences, and its last one describes the mechanism that the following code lines already show."
+    },
+    {
+      "file": "tests/original/thread-ledger/test_cli.mjs",
+      "line": 341,
+      "rule": "Break new or rewritten prose at sentence or clause boundaries, one per line.",
+      "input": "// The log is append-only, so a published event that carries a blocked\n// term stays in every later render. Masking at render keeps the page,\n// the one thing that leaves, clean.",
+      "finding_basis": "decided",
+      "confidence": 90,
+      "finding": "The new comment is wrapped at a fixed width, so line 342 ends one sentence and starts the next, and both sentences break mid-clause."
+    },
+    {
+      "file": "tests/original/thread-ledger/test_cli.mjs",
+      "line": 341,
+      "rule": "Keep each fact in one place and reference it from everywhere else, and let a declared copy name its source and update path.",
+      "input": "The log is append-only, so a published event that carries a blocked term stays in every later render. Masking at render keeps the page, the one thing that leaves, clean.",
+      "finding_basis": "judged",
+      "confidence": 60,
+      "finding": "The test comment restates the reason that the render comment in ledger.mjs and the added lines in SKILL.md already give, instead of pointing to one home for it."
+    },
+    {
+      "file": "original/thread-ledger/scan.mjs",
+      "line": 44,
+      "rule": "State each fact once within a text, and pair an effect with its cause instead of listing effects and causes apart.",
+      "input": "It returns a copy, and anything else passes through.\n...\n@returns {unknown} the masked copy; `value` itself when `terms` is empty",
+      "finding_basis": "judged",
+      "confidence": 50,
+      "finding": "The docstring states the return value twice, and the body's \"returns a copy\" leaves out the empty-terms case that only the @returns tag gives."
+    }
+  ]
+}
