@@ -42,22 +42,23 @@ export function scanText(text, terms) {
 }
 
 /**
- * `value` with every term replaced by its label in square brackets.
+ * Replace every term in `value` with its label in square brackets.
  *
- * It walks strings, arrays and plain objects, keys included.
- * It returns a copy, and anything else passes through.
- * A longer term goes first,
- * so a shorter term inside it cannot leave the longer one's tail behind.
+ * Strings, arrays and plain objects are walked, keys included,
+ * and any other value passes through.
+ * One pass over each string matches the longest term first,
+ * so a label once written is never rewritten.
  *
  * @param {unknown} value  JSON-shaped data, e.g. ledger events
  * @param {{label: string, value: string}[]} terms  from `blocklistTerms`
- * @returns {unknown} the masked copy; `value` itself when `terms` is empty
+ * @returns {unknown} a masked copy, or `value` itself when `terms` is empty
  */
 export function maskTerms(value, terms) {
   if (!terms.length) return value;
   const ordered = [...terms].sort((a, b) => b.value.length - a.value.length);
-  const maskString = (text) =>
-    ordered.reduce((out, term) => out.replaceAll(term.value, `[${term.label}]`), text);
+  const labels = new Map(ordered.map((term) => [term.value, term.label]));
+  const pattern = new RegExp(ordered.map((term) => escapeRegExp(term.value)).join("|"), "g");
+  const maskString = (text) => text.replace(pattern, (match) => `[${labels.get(match)}]`);
   const walk = (node) => {
     if (typeof node === "string") return maskString(node);
     if (Array.isArray(node)) return node.map(walk);
@@ -69,6 +70,10 @@ export function maskTerms(value, terms) {
     return node;
   };
   return walk(value);
+}
+
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /**
