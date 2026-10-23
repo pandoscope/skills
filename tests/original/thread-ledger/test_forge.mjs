@@ -177,6 +177,14 @@ describe("OutgoingScan", () => {
     assert.deepEqual(scanText(JSON.stringify(masked), terms), []);
   });
 
+  it("never rewrites inside a label it wrote", () => {
+    const terms = [
+      { label: "A", value: "x" },
+      { label: "B", value: "A" },
+    ];
+    assert.equal(maskTerms("x and A", terms), "[A] and [B]");
+  });
+
   it("returns the value itself when there are no terms", () => {
     const events = [{ note: "hunter2" }];
     assert.equal(maskTerms(events, []), events);

@@ -338,13 +338,10 @@ describe("RenderPullsTheStoreFirst", () => {
 
 // ------------------------------------ render masks blocked terms (#256)
 
-// The log is append-only, so a published event that carries a blocked
-// term stays in every later render. Masking at render keeps the page,
-// the one thing that leaves, clean.
 describe("RenderMasksBlockedTerms", () => {
   const ENV = {
     SESSION_MEMORY_URL: "https://x@example.test/sm.git",
-    PUSH_BLOCKLIST: "the-codename|the-codename-two",
+    PUSH_BLOCKLIST: "the-codename|the-codename-two|x.test",
   };
 
   function cli(root, ...args) {
@@ -387,6 +384,11 @@ describe("RenderMasksBlockedTerms", () => {
   it("puts the term's label where the term stood", () => {
     const text = render("html");
     assert.match(text, /handoff at \[SESSION_MEMORY_URL\]\/blob\/main\/h\.md/);
+  });
+
+  it("masks the session URL the store records", () => {
+    const text = render("md");
+    assert.match(text, /https:\/\/\[PUSH_BLOCKLIST term 3\]\/code\/s1/);
   });
 
   it("masks a longer term before a shorter term inside it", () => {
