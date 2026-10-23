@@ -1,0 +1,53 @@
+{
+  "pr": "pandoscope/skills#257",
+  "head": "ca8a79ead27b1e2c207335efea35e65962dcbaa8",
+  "pass": "prose",
+  "model_tier": "opus",
+  "findings": [
+    {
+      "file": "tests/original/thread-ledger/test_cli.mjs",
+      "line": 341,
+      "rule": "Break new or rewritten prose at sentence or clause boundaries, one per line.",
+      "input": "// term stays in every later render. Masking at render keeps the page,\n// the one thing that leaves, clean.",
+      "finding_basis": "decided",
+      "confidence": 90,
+      "finding": "The new comment above `RenderMasksBlockedTerms` is wrapped at a fixed width, so the second sentence starts mid-line after \"render.\" and the line breaks fall mid-clause."
+    },
+    {
+      "file": "original/thread-ledger/SKILL.md",
+      "line": 186,
+      "rule": "Put one fact in each clause, since more sentences are fine and denser ones are not.",
+      "input": "The render masks each term in the store data it embeds with the term's label in square brackets,\nso a published event that carries a term stays in the log and never reaches the page.",
+      "finding_basis": "judged",
+      "confidence": 70,
+      "finding": "The added sentence packs the mask, its replacement, the log staying unchanged and the page staying clean into two clauses joined by \"so\", which reads as if the mask caused the event to stay in the log."
+    },
+    {
+      "file": "original/thread-ledger/SKILL.md",
+      "line": 186,
+      "rule": "Bring the verb within four words of its subject, with no clause between verb and complement.",
+      "input": "masks each term in the store data it embeds with the term's label",
+      "finding_basis": "decided",
+      "confidence": 65,
+      "finding": "The clause \"in the store data it embeds\" sits between \"masks each term\" and its complement \"with the term's label\", so \"it embeds with the term's label\" misparses."
+    },
+    {
+      "file": "original/thread-ledger/ledger.mjs",
+      "line": 163,
+      "rule": "Keep each fact in one place and reference it from everywhere else, and let a declared copy name its source and update path.",
+      "input": "// The page leaves the container, and the log never does.\n// A published event that carries a blocked term stays in the append-only log.",
+      "finding_basis": "judged",
+      "confidence": 50,
+      "finding": "The rationale that the append-only log keeps a leaked event while only the page leaves is restated in the render comment here, in the test comment at test_cli.mjs and in the SKILL.md sentence, with no copy naming the others as its source."
+    },
+    {
+      "file": "original/thread-ledger/scan.mjs",
+      "line": 47,
+      "rule": "Give one thing one name throughout a text, and never use that name for a second thing.",
+      "input": " * It returns a copy, and anything else passes through.\n ...\n * @returns {unknown} the masked copy; `value` itself when `terms` is empty",
+      "finding_basis": "judged",
+      "confidence": 40,
+      "finding": "The `maskTerms` doc block says the function returns a copy, then its `@returns` line says it returns `value` itself for an empty term list, so the block contradicts itself on what comes back."
+    }
+  ]
+}
