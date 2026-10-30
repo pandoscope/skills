@@ -185,6 +185,12 @@ describe("OutgoingScan", () => {
     assert.equal(maskTerms("x and A", terms), "[A] and [B]");
   });
 
+  it("a label the mask wrote is no hit, even when a term is part of it", () => {
+    const terms = blocklistTerms({ PUSH_BLOCKLIST: "PUSH" });
+    assert.deepEqual(scanText("[PUSH_BLOCKLIST term 1] sheet", terms), []);
+    assert.deepEqual(scanText("PUSH it", terms), ["PUSH_BLOCKLIST term 1"]);
+  });
+
   it("returns the value itself when there are no terms", () => {
     const events = [{ note: "hunter2" }];
     assert.equal(maskTerms(events, []), events);

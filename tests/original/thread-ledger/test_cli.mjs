@@ -341,7 +341,7 @@ describe("RenderPullsTheStoreFirst", () => {
 describe("RenderMasksBlockedTerms", () => {
   const ENV = {
     SESSION_MEMORY_URL: "https://x@example.test/sm.git",
-    PUSH_BLOCKLIST: "the-codename|the-codename-two|x.test",
+    PUSH_BLOCKLIST: "the-codename|the-codename-two|x.test|MEMORY",
   };
 
   function cli(root, ...args) {
