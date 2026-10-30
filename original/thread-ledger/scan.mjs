@@ -36,18 +36,17 @@ export function blocklistTerms(env) {
  * Labels of the terms `text` contains. Labels only, never values —
  * and never positions, because "line 41" beside a label invites
  * printing line 41.
+ * A label the mask wrote names a variable, never a value, so it is no hit.
  */
 export function scanText(text, terms) {
-  return terms.filter((term) => text.includes(term.value)).map((term) => term.label);
+  // No environment value holds NUL, so the text around a removed label never joins into a term.
+  const unmasked = terms.reduce((out, term) => out.replaceAll(`[${term.label}]`, "\0"), text);
+  return terms.filter((term) => unmasked.includes(term.value)).map((term) => term.label);
 }
 
 /**
- * Replace every term in `value` with its label in square brackets.
- *
- * Strings, arrays and plain objects are walked, keys included,
- * and any other value passes through.
- * One pass over each string matches the longest term first,
- * so a label once written is never rewritten.
+ * Replace every term in `value`, keys included, with its label in square brackets.
+ * A label once written is never rewritten.
  *
  * @param {unknown} value  JSON-shaped data, e.g. ledger events
  * @param {{label: string, value: string}[]} terms  from `blocklistTerms`

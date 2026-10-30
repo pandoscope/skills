@@ -189,6 +189,7 @@ describe("OutgoingScan", () => {
     const terms = blocklistTerms({ PUSH_BLOCKLIST: "PUSH" });
     assert.deepEqual(scanText("[PUSH_BLOCKLIST term 1] sheet", terms), []);
     assert.deepEqual(scanText("PUSH it", terms), ["PUSH_BLOCKLIST term 1"]);
+    assert.deepEqual(scanText("PU[PUSH_BLOCKLIST term 1]SH", terms), []);
   });
 
   it("returns the value itself when there are no terms", () => {
