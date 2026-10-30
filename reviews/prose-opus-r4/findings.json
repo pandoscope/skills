@@ -1,0 +1,26 @@
+{
+  "pr": "pandoscope/skills#257",
+  "head": "76d0472a205c83324ddfa543dceea67be6c990ec",
+  "pass": "prose",
+  "model_tier": "opus-r4",
+  "findings": [
+    {
+      "file": "original/thread-ledger/scan.mjs",
+      "line": 35,
+      "rule": "Make every \"the X\" and \"its\" point to something named in the current or previous sentence.",
+      "input": "A label the mask wrote names a variable, never a value, so it is no hit.",
+      "finding_basis": "judged",
+      "confidence": 55,
+      "finding": "The scanText doc comment says \"the mask\", but neither this sentence nor the one before names a mask or `maskTerms`, so a reader of the scanner's contract has no referent for it."
+    },
+    {
+      "file": "original/thread-ledger/scan.mjs",
+      "line": 42,
+      "rule": "Use the shortest word that loses no meaning and the established term over an explanation, never a vaguer word to save tokens.",
+      "input": "so the text around a removed label never joins into a term.",
+      "finding_basis": "judged",
+      "confidence": 40,
+      "finding": "The inline comment calls the label \"removed\", but the next line replaces each label with NUL and does not delete it, and the reason the comment gives depends on that replacement."
+    }
+  ]
+}
