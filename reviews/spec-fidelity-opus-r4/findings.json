@@ -1,0 +1,17 @@
+{
+  "pr": "pandoscope/skills#257",
+  "head": "76d0472a205c83324ddfa543dceea67be6c990ec",
+  "pass": "spec-fidelity",
+  "model_tier": "opus-r4",
+  "findings": [
+    {
+      "file": "original/thread-ledger/scan.mjs",
+      "line": 59,
+      "rule": "A longer term is replaced before a shorter term inside it.",
+      "input": "PUSH_BLOCKLIST=\"nana|an\" and an event note \"anana\": the longer term \"nana\" stands at offset 1, the shorter term \"an\" inside it also stands at offset 0, overlapping the longer term's first letter.",
+      "finding_basis": "judged",
+      "confidence": 55,
+      "finding": "The single alternation regex matches leftmost-first, so the shorter term at offset 0 is replaced before the longer term that overlaps it, and the page shows \"[PUSH_BLOCKLIST term 2][PUSH_BLOCKLIST term 2]a\" with no \"[PUSH_BLOCKLIST term 1]\" label standing where \"nana\" stood (the scan still passes, but the longest-first order holds only per start position)."
+    }
+  ]
+}
