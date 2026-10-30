@@ -183,6 +183,9 @@ may live there, it must only never leave. It runs before the pushed
 check so a hit blocks before any push instruction, and every report
 names the term's SOURCE, never its value — the confirm commands count
 matches rather than printing them.
+The render masks every term in the store data it embeds.
+Each term becomes the name of its source in square brackets, such as `[SESSION_MEMORY_URL]`,
+and the scan reads such a name as no hit.
 
 **What a review decided is persisted, not just read.** The truth
 source is the attribution-footer contract (skills#46, check 14): a

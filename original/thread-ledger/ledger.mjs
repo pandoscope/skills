@@ -39,6 +39,7 @@ import { append, pullForRender, push } from "./store/writes.mjs";
 import { mergedReport, reconcile } from "./store/reconcile.mjs";
 import { guardRange } from "./store/guard.mjs";
 import { renderPage } from "./store/pages.mjs";
+import { blocklistTerms, maskTerms } from "./scan.mjs";
 import { USAGE, declareText, eventFrom, parseArgs } from "./store/cli.mjs";
 
 // The surface the heartbeat and the tests import from the entry point,
@@ -159,11 +160,15 @@ export function main(argv) {
     throw new LedgerError("render needs --out (or LEDGER_RENDER_PATH set)");
   }
 
-  const folded = fold(events);
-  const sessionUrl = storeUrl(root, opts["session-url"]);
+  // The append-only log keeps an event that carries a blocked term,
+  // so only the render can keep that term off the page (#256).
+  const terms = blocklistTerms(process.env);
+  const shown = maskTerms(events, terms);
+  const folded = fold(shown);
+  const sessionUrl = maskTerms(storeUrl(root, opts["session-url"]), terms);
   const nowMsg = countUserMessages(transcript);
-  const codes = readCodes(root);
-  const forge = readForge(root);
+  const codes = maskTerms(readCodes(root), terms);
+  const forge = maskTerms(readForge(root), terms);
   const title = opts.title ?? "Thread ledger";
   let page;
   if (opts.format === "md") {
@@ -171,7 +176,9 @@ export function main(argv) {
     page = renderMarkdown(folded, title, nowMsg, codes, generated, sessionUrl, forge);
     if (staleNote) page = `> ⚠ ${staleNote}\n\n${page}`;
   } else {
-    page = renderPage(events, title, nowMsg, codes, sessionUrl, readDiligence(root), readNames(root), forge, staleNote);
+    const diligence = maskTerms(readDiligence(root), terms);
+    const names = maskTerms(readNames(root), terms);
+    page = renderPage(shown, title, nowMsg, codes, sessionUrl, diligence, names, forge, staleNote);
   }
   fs.writeFileSync(out, page, "utf8");
   process.stdout.write(`wrote ${out}\n`);

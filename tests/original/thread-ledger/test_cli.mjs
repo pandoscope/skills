@@ -17,6 +17,7 @@ import {
   readTurnSummary,
   resolveSummaryFile,
 } from "../../../original/thread-ledger/heartbeat.mjs";
+import { blocklistTerms, scanText } from "../../../original/thread-ledger/scan.mjs";
 import {
   opened,
   throws,
@@ -332,6 +333,68 @@ describe("RenderPullsTheStoreFirst", () => {
     assert.match(text, /bare/);
     assert.doesNotMatch(text, /Possibly outdated/);
     fs.rmSync(root, { recursive: true, force: true });
+  });
+});
+
+// ------------------------------------ render masks blocked terms (#256)
+
+describe("RenderMasksBlockedTerms", () => {
+  const ENV = {
+    SESSION_MEMORY_URL: "https://x@example.test/sm.git",
+    PUSH_BLOCKLIST: "the-codename|the-codename-two|x.test|MEMORY",
+  };
+
+  function cli(root, ...args) {
+    return spawnSync(process.execPath, [path.join(SKILL, "ledger.mjs"), "--root", root, ...args], {
+      encoding: "utf8",
+      env: { PATH: process.env.PATH, HOME: fs.mkdtempSync(path.join(os.tmpdir(), "nohome-")), ...ENV },
+    });
+  }
+
+  function render(format) {
+    const root = tempStore();
+    writeLog(root, "s1", [
+      {
+        ...opened("leaky", { note: `handoff at ${ENV.SESSION_MEMORY_URL}/blob/main/h.md` }),
+        at: "2026-01-01T00:00:00+00:00",
+      },
+      {
+        ev: "progress",
+        thread: "leaky",
+        pct: 50,
+        note: "the-codename-two ships",
+        at: "2026-01-01T00:01:00+00:00",
+      },
+    ]);
+    fs.writeFileSync(path.join(root, "ledger", "s1.url"), "https://x.test/code/s1\n");
+    const out = path.join(root, `ledger.${format}`);
+    const result = cli(root, "render", "--format", format, "--no-pull", "--out", out);
+    assert.equal(result.status, 0, `render failed: ${result.stderr}`);
+    const text = fs.readFileSync(out, "utf8");
+    fs.rmSync(root, { recursive: true, force: true });
+    return text;
+  }
+
+  for (const format of ["html", "md"]) {
+    it(`a ${format} page carries no blocked term`, () => {
+      assert.deepEqual(scanText(render(format), blocklistTerms(ENV)), []);
+    });
+  }
+
+  it("puts the term's label where the term stood", () => {
+    const text = render("html");
+    assert.match(text, /handoff at \[SESSION_MEMORY_URL\]\/blob\/main\/h\.md/);
+  });
+
+  it("masks the session URL the store records", () => {
+    const text = render("md");
+    assert.match(text, /https:\/\/\[PUSH_BLOCKLIST term 3\]\/code\/s1/);
+  });
+
+  it("masks a longer term before a shorter term inside it", () => {
+    const text = render("html");
+    assert.match(text, /\[PUSH_BLOCKLIST term 2\] ships/);
+    assert.doesNotMatch(text, /\[PUSH_BLOCKLIST term 1\]-two/);
   });
 });
 

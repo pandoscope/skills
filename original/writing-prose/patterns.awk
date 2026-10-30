@@ -23,10 +23,15 @@ function words(s,    n, w, i, out) {
 }
 
 # The text a line contributes to a paragraph.
-# On the comment surface, that is the comment without its marker.
+# On the comment surface, that is the comment without its marker, or a Python docstring's text.
 # A code line returns "\001" and ends the paragraph like a blank line.
-function para_text(line) {
+function para_text(line, s,    t) {
+    dkind = ""
     if (!on("comment")) return line
+    if (py) {
+        t = doc_line(line, s)
+        if (dkind != "") return t == "" ? "\001" : t
+    }
     if (line !~ /^[ \t]*(#|\/\/|\/\*|\*|--|;)/ || line ~ /^#!/) return "\001"
     sub(/^[ \t]*(#+|\/\/+|\/\*+|\*+|--|;+)[ \t]*/, "", line)
     return line
@@ -45,7 +50,7 @@ function read_before(    line, fence, code, para, n, t) {
             continue
         }
         if (fence) { code = code line "\n"; continue }
-        t = para_text(line)
+        t = para_text(line, "before")
         if (para_break(t)) {
             if (para != "") { bwords[words(para)] = 1; braw[para] = 1 }
             para = ""
@@ -66,6 +71,7 @@ function end_para() {
 }
 
 BEGIN {
+    py = name ~ /\.py$/
     if (before != "") read_before()
     DOCS = "ticket tracker markdown skill primed comment commit"
     MD = "markdown skill primed"
@@ -94,9 +100,19 @@ function candidates(    t, tok, lab, plain, rest, n, i, parts, comma) {
         h("abbreviation", "spell out " tok " unless it is an established term")
     }
     if (on(DOCS)) {
-        t = prose; comma = gsub(/,/, ",", t)
-        if (comma >= 3 || (comma >= 1 && index(prose, ";")))
-            h("one-fact", "one fact per clause: split the sentence")
+        # A subordinator after the first word opens a trailing clause.
+        # A tracker line holds a whole paragraph, so count per sentence.
+        trailing = 0; ns = split(low, sent, /[.?!] +/)
+        for (si = 1; si <= ns; si++) {
+            t = " " sent[si] " "
+            c = gsub(/[ ,](which|because|since|so that|while|although|unless|whereas|when) /, "", t)
+            if (c > trailing) trailing = c
+        }
+        if (trailing >= 2)
+            h("end-weight", "main clause first, at most one clause trailing it")
+        if (low ~ /(^|[^a-z-])only ([a-z]+(s|ed)|ran|made|took|got|went|saw|did|kept|left|sent|found|gave|held|put|set|let|told|brought|caught|ate|wrote|built|ran)([^a-z]|$)/ \
+            && low !~ /(^|[^a-z])only (its|this|those|these|as|us|yes|ones|was|is|has|does)([^a-z]|$)/)
+            h("only-place", "put \"only\" directly before the word it limits")
         if (low ~ /^[ \t>*-]*(the |each |a |an )?(config|configuration|field|file|setting|key|option|value|flag|frontmatter|entry)s? (is|are|holds|contains|defines|sets|says|decides|controls|tells|lists)[ .,]/)
             h("actor-subject", "make the actor the subject")
         if (low ~ /^[ \t>*-]*(the|a|an|this|each|every) ([a-z0-9_-]+ ){0,3}[a-z0-9_-]+, [^.]*, /)
@@ -155,7 +171,10 @@ function candidates(    t, tok, lab, plain, rest, n, i, parts, comma) {
         wrap_run = 1
     }
     if (!prose_line(raw) || !prev_prose) wrap_run = 0
-    if (on("ticket") && raw ~ /[a-z0-9_.-]+\/[a-z0-9_.\/-]+\.(md|py|mjs|js|ts|sh|json|ya?ml|toml|awk)/)
+    t = raw
+    gsub(/\]\([^)]*\)/, "]", t)
+    gsub(/https?:\/\/[^ )>]*/, " ", t)
+    if (on("ticket") && t ~ /[a-z0-9_.-]+\/[a-z0-9_.\/-]+\.(md|py|mjs|js|ts|sh|json|ya?ml|toml|awk)/)
         h("ticket-code", "no file paths in ticket prose; they go stale")
 }
 
@@ -187,6 +206,43 @@ function bare_hash(s,    tok) {
     return 0
 }
 
+# Markdown link targets outside code, separated by spaces.
+function link_targets(s,    out) {
+    gsub(/`[^`]*`/, " ", s)
+    while (match(s, /\]\([^) ]+/)) {
+        out = out " " substr(s, RSTART + 2, RLENGTH - 2)
+        s = substr(s, RSTART + RLENGTH)
+    }
+    return out
+}
+
+# A link target that is neither a URL nor an anchor on the same page.
+function relative_link(s,    n, t, i) {
+    n = split(link_targets(s), t)
+    for (i = 1; i <= n; i++)
+        if (t[i] !~ /^([a-z][a-z0-9+.-]*:|#)/) return 1
+    return 0
+}
+
+# A line anchor on a repository file at a branch rather than a full commit.
+function branch_anchor(s,    n, t, i, ref) {
+    gsub(/`[^`]*`/, " ", s)
+    n = split(s, t, /[ ()<>]/)
+    for (i = 1; i <= n; i++) {
+        if (t[i] !~ /^https:\/\/github\.com\/[^\/]+\/[^\/]+\/blob\/[^\/]+\/.*#L[0-9]/) continue
+        split(t[i], ref, "/")
+        if (length(ref[7]) != 40 || ref[7] ~ /[^0-9a-f]/) return 1
+    }
+    return 0
+}
+
+function repo_url(s,    n, t, i) {
+    n = split(link_targets(s), t)
+    for (i = 1; i <= n; i++)
+        if (t[i] ~ /^https:\/\/github\.com\/[^\/]+\/[^\/]+\/(blob|tree)\//) return 1
+    return 0
+}
+
 FNR == 1 && /^---[ \t]*$/ { in_front = 1; next }
 in_front { if (/^---[ \t]*$/) in_front = 0; next }
 
@@ -201,13 +257,16 @@ in_front { if (/^---[ \t]*$/) in_front = 0; next }
         next
     }
     if (in_fence) { code = code $0 "\n"; next }
-    t = para_text($0)
+    t = para_text($0, "main")
     if (para_break(t)) { prev_prose = 0; end_para() }
     else { if (para == "") para_start = FNR; para = para t "\n" }
     raw = $0
     if (on("comment") && raw ~ /«[^«» ]+»/)
         f("code-placeholder", "code takes <angle> placeholders, never guillemets")
-    if (on("comment")) {
+    if (on("comment") && dkind != "") {
+        if (t == "\001") next
+        raw = t
+    } else if (on("comment")) {
         if (raw !~ /^[ \t]*(#|\/\/|\/\*|\*|--|;)/ || raw ~ /^#!/) next
         sub(/^[ \t]*(#+|\/\/+|\/\*+|\*+|--|;+)[ \t]*/, "", raw)
     }
@@ -230,6 +289,12 @@ in_front { if (/^---[ \t]*$/) in_front = 0; next }
         f("tracker-placeholder", "tracker text takes guillemet placeholders")
     if (on("ticket tracker") && bare_hash(raw))
         f("commit-link", "link the commit: [short](repo-url/commit/full) or owner/repo@sha")
+    if (on("ticket tracker") && relative_link(raw))
+        f("relative-link", "the tracker resolves a relative link against the page: link the absolute URL")
+    if (on("ticket tracker") && branch_anchor(raw))
+        f("pinned-anchor", "pin a line anchor to a commit: blob/<full sha>/path#L1")
+    if (on("markdown skill primed") && repo_url(raw))
+        h("repo-link", "a file in this repository takes a relative link")
     candidates()
     prev = raw; prev_prose = prose_line(raw)
 }

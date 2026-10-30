@@ -36,9 +36,43 @@ export function blocklistTerms(env) {
  * Labels of the terms `text` contains. Labels only, never values —
  * and never positions, because "line 41" beside a label invites
  * printing line 41.
+ * A label the mask wrote names a variable, never a value, so it is no hit.
  */
 export function scanText(text, terms) {
-  return terms.filter((term) => text.includes(term.value)).map((term) => term.label);
+  // No environment value holds NUL, so the text around a removed label never joins into a term.
+  const unmasked = terms.reduce((out, term) => out.replaceAll(`[${term.label}]`, "\0"), text);
+  return terms.filter((term) => unmasked.includes(term.value)).map((term) => term.label);
+}
+
+/**
+ * Replace every term in `value`, keys included, with its label in square brackets.
+ * A label once written is never rewritten.
+ *
+ * @param {unknown} value  JSON-shaped data, e.g. ledger events
+ * @param {{label: string, value: string}[]} terms  from `blocklistTerms`
+ * @returns {unknown} a masked copy, or `value` itself when `terms` is empty
+ */
+export function maskTerms(value, terms) {
+  if (!terms.length) return value;
+  const ordered = [...terms].sort((a, b) => b.value.length - a.value.length);
+  const labels = new Map(ordered.map((term) => [term.value, term.label]));
+  const pattern = new RegExp(ordered.map((term) => escapeRegExp(term.value)).join("|"), "g");
+  const maskString = (text) => text.replace(pattern, (match) => `[${labels.get(match)}]`);
+  const walk = (node) => {
+    if (typeof node === "string") return maskString(node);
+    if (Array.isArray(node)) return node.map(walk);
+    if (node && typeof node === "object") {
+      return Object.fromEntries(
+        Object.entries(node).map(([key, inner]) => [maskString(key), walk(inner)]),
+      );
+    }
+    return node;
+  };
+  return walk(value);
+}
+
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /**
