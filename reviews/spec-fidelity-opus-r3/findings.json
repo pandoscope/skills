@@ -1,0 +1,17 @@
+{
+  "pr": "pandoscope/skills#257",
+  "head": "6dd57f538e65261676baf5ab9d7481bf51a7c7bb",
+  "pass": "spec-fidelity",
+  "model_tier": "opus-r3",
+  "findings": [
+    {
+      "file": "original/thread-ledger/scan.mjs",
+      "line": 61,
+      "rule": "A page rendered from a store whose events carry a blocked term passes the scan.",
+      "input": "PUSH_BLOCKLIST=\"term\" (or \"BLOCKLIST\", \"PUSH\") and an event note \"term sheet\": the mask writes \"[PUSH_BLOCKLIST term 1] sheet\", and scanText finds the term \"term\" inside the label it wrote.",
+      "finding_basis": "judged",
+      "confidence": 45,
+      "finding": "The mask writes labels that can themselves contain a blocked term's value, so a page masked from an event carrying such a term still fails the scan."
+    }
+  ]
+}
