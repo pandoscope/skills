@@ -1,0 +1,35 @@
+{
+  "pr": "pandoscope/skills#257",
+  "head": "6dd57f538e65261676baf5ab9d7481bf51a7c7bb",
+  "pass": "prose",
+  "model_tier": "opus-r3",
+  "findings": [
+    {
+      "file": "original/thread-ledger/SKILL.md",
+      "line": 186,
+      "rule": "Address only the agent running the skill, and move rationale meant for reviewers into code or records.",
+      "input": "The append-only log keeps an event that carries a term,\nso only the render can keep that term off the page.",
+      "finding_basis": "judged",
+      "confidence": 65,
+      "finding": "The added block's last sentence justifies the design to a reviewer, changes nothing the agent does, and repeats the call-site comment that ledger.mjs already carries above `blocklistTerms(process.env)`."
+    },
+    {
+      "file": "original/thread-ledger/SKILL.md",
+      "line": 186,
+      "rule": "Give one thing one name throughout a text, and never use that name for a second thing.",
+      "input": "names the term's SOURCE, never its value [...]\nEach term becomes its label in square brackets, such as `[SESSION_MEMORY_URL]`.",
+      "finding_basis": "judged",
+      "confidence": 55,
+      "finding": "The added sentences name the variable a term comes from its \"label\", while the paragraph they extend calls the same thing the term's SOURCE two lines earlier."
+    },
+    {
+      "file": "original/thread-ledger/scan.mjs",
+      "line": 44,
+      "rule": "Keep a code comment to one or two sentences that give the reason rather than the mechanism.",
+      "input": "Strings, arrays and plain objects are walked, keys included,\nand any other value passes through.\nOne pass over each string matches the longest term first,\nso a label once written is never rewritten.",
+      "finding_basis": "judged",
+      "confidence": 40,
+      "finding": "The `maskTerms` docstring spends three sentences on prose and describes how the walk and the regex pass work, where the contract needs only what gets masked and the guarantee that labels are never rewritten."
+    }
+  ]
+}
