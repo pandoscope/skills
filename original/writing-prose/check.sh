@@ -36,9 +36,9 @@ rules_for() {
     for r in "$@"; do echo "$here/rules/$r.md"; done
 }
 
-# Tier and id of every f(...)/h(...) call in patterns.awk.
+# Tier and id of every f(...)/h(...) call in patterns.awk and codenames.py.
 list_rules() {
-    grep -oE '(^|[^a-z_])(f|h)(_at)?\([^"]*"[a-z-]+"' "$here/patterns.awk" \
+    grep -ohE '(^|[^a-z_])(f|h)(_at)?\([^"]*"[a-z-]+"' "$here/patterns.awk" "$here/codenames.py" \
         | sed -E 's/^[^a-z]*(f|h)(_at)?\([^"]*"([a-z-]+)"$/\1 \3/' \
         | sed -e 's/^f /F /' -e 's/^h /H /' | sort -u
 }
@@ -88,6 +88,15 @@ fi
 status=0
 awk -v surface="$surface" -v name="$name" -v style="$style" \
     -v before="$before" -f "$here/docstring.awk" -f "$here/patterns.awk" "$file" || status=$?
+
+# The comment checks that read the code around a comment need more than awk.
+if [ "$surface" = comment ]; then
+    if command -v python3 > /dev/null; then
+        python3 "$here/codenames.py" "$file" "$name" "$before"
+    else
+        echo "skipped code-mark, call-site: no python3"
+    fi
+fi
 
 echo "Judge by reading, M rules for $surface:"
 rules_for "$surface" | while read -r r; do
