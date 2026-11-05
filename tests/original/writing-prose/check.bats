@@ -296,6 +296,29 @@ candidate() {
   [[ "$output" != *"H call-site"* ]]
 }
 
+# --parse runs the syntactic rules through a dependency parser (spaCy via uvx).
+@test "--parse flags a relative clause between subject and verb" {
+  f=$(printf '// A turn that ends at this cycle ignored nothing.\nconst x = 1;\n' | text a.mjs)
+  run "$CHECK" comment "$f" --parse
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"a.mjs:1: H verb-distance:"* ]]
+}
+
+@test "--parse passes a short prepositional phrase between subject and verb" {
+  f=$(printf '// A failure inside a disputed window may be the check\x27s defect.\nconst x = 1;\n' | text a.mjs)
+  run "$CHECK" comment "$f" --parse
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"H verb-distance"* ]]
+}
+
+@test "--parse flags a reduced relative clause the awk heuristic misses" {
+  f=$(printf 'The check reads a claim recorded by the model.\n' | text a.md)
+  run "$CHECK" markdown "$f"
+  [[ "$output" != *"H relative-clause"* ]]
+  run "$CHECK" markdown "$f" --parse
+  [[ "$output" == *"a.md:1: H relative-clause:"* ]]
+}
+
 # Rule ids with their tier from the rules files: "F filler", "M referent".
 rules_ids() {
   sed -n 's/^- `\([a-z-]*\)` \[\([FHM]\)\] .*/\2 \1/p' "$REPO_ROOT"/original/writing-prose/rules/*.md | sort
