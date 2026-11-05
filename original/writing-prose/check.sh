@@ -4,8 +4,10 @@
 # of the surface, which only the agent can judge. The code-checkable
 # rules live in patterns.awk; the rules files under rules/ are the
 # authority for every rule's wording and tier.
-# Usage: check.sh <surface> <file|-> [--before <file>] [--style] [--fix]
+# Usage: check.sh <surface> <file|-> [--before <file>] [--style] [--fix] [--parse]
 #        --fix rewrites the file one sentence per line first (sembr.awk)
+#        --parse decides verb-distance and relative-clause by dependency
+#        parse (parse.py, spaCy through uvx) instead of by pattern
 #        check.sh --rules <surface>   rules files the surface reads
 #        check.sh --list              F and H rules patterns.awk implements
 set -euo pipefail
@@ -13,7 +15,7 @@ here="$(cd "$(dirname "$0")" && pwd)"
 surfaces="chat ticket tracker markdown skill primed comment commit"
 
 usage() {
-    echo "usage: check.sh <surface> <file|-> [--before <file>] [--style] [--fix]" >&2
+    echo "usage: check.sh <surface> <file|-> [--before <file>] [--style] [--fix] [--parse]" >&2
     echo "       check.sh --rules <surface> | --list" >&2
     echo "surface is one of: $surfaces" >&2
     exit 2
@@ -54,9 +56,10 @@ surface=$1 file=$2
 shift 2
 valid_surface "$surface" || usage
 
-before="" style=0 fix=0
+before="" style=0 fix=0 parse=0
 while [ $# -gt 0 ]; do
     case $1 in
+        --parse) parse=1; shift ;;
         --before) before=${2:?--before needs a file}; shift 2 ;;
         --style) style=1; shift ;;
         --fix) fix=1; shift ;;
@@ -86,8 +89,16 @@ if [ "$fix" = 1 ]; then
 fi
 
 status=0
-awk -v surface="$surface" -v name="$name" -v style="$style" \
+awk -v surface="$surface" -v name="$name" -v style="$style" -v parse="$parse" \
     -v before="$before" -f "$here/docstring.awk" -f "$here/patterns.awk" "$file" || status=$?
+
+# The parser and its model are pinned, so a run reads the same parse everywhere.
+if [ "$parse" = 1 ]; then
+    command -v uvx > /dev/null || { echo "check.sh: --parse needs uvx" >&2; exit 2; }
+    uvx --quiet --with "spacy==3.8.18" \
+        --with "en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" \
+        python "$here/parse.py" "$file" "$name" "$surface" "$before" 2> /dev/null || status=2
+fi
 
 # The comment checks that read the code around a comment need more than awk.
 if [ "$surface" = comment ]; then

@@ -115,9 +115,10 @@ function candidates(    t, tok, lab, plain, rest, n, i, parts, comma) {
             h("only-place", "put \"only\" directly before the word it limits")
         if (low ~ /^[ \t>*-]*(the |each |a |an )?(config|configuration|field|file|setting|key|option|value|flag|frontmatter|entry)s? (is|are|holds|contains|defines|sets|says|decides|controls|tells|lists)[ .,]/)
             h("actor-subject", "make the actor the subject")
-        if (low ~ /^[ \t>*-]*(the|a|an|this|each|every) ([a-z0-9_-]+ ){0,3}[a-z0-9_-]+, [^.]*, /)
+        # With --parse, parse.py decides these two rules from the dependency parse.
+        if (!parse && low ~ /^[ \t>*-]*(the|a|an|this|each|every) ([a-z0-9_-]+ ){0,3}[a-z0-9_-]+, [^.]*, /)
             h("verb-distance", "bring the verb within four words of its subject")
-        if (low ~ /(the|a|an|each|every) [a-z]+ (named|called|built|made|written|created|stored|kept|held|found|given|sent|set|run|used|listed|passed) (by|in|from|with|under|on) /)
+        if (!parse && low ~ /(the|a|an|each|every) [a-z]+ (named|called|built|made|written|created|stored|kept|held|found|given|sent|set|run|used|listed|passed) (by|in|from|with|under|on) /)
             h("relative-clause", "use that/which, or a sentence of its own")
         if (low ~ /[a-z]+(tion|m[e]nt|ance|ence|sion)s? of (the|a|an|its|each|every|this) /)
             h("event-noun", "make the event a verb")
