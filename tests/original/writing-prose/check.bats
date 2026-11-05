@@ -306,6 +306,18 @@ rules_ids() {
   [[ "$output" != *"M referent"* ]]
 }
 
+@test "a comment run leaves the commit rules out of its residue" {
+  f=$(printf '// The hook runs.\n' | text a.mjs)
+  run "$CHECK" comment "$f"
+  [[ "$output" == *"M comment-register:"* ]]
+  [[ "$output" != *"M commit-register"* ]]
+  [[ "$output" != *"M commit-snapshot"* ]]
+  [[ "$output" != *"M ignore-hint"* ]]
+  run "$CHECK" commit "$f"
+  [[ "$output" == *"M commit-register:"* ]]
+  [[ "$output" != *"M comment-register"* ]]
+}
+
 @test "--rules names the rules files a surface reads" {
   run "$CHECK" --rules skill
   [ "$status" -eq 0 ]
