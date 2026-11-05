@@ -37,7 +37,6 @@ These rules hold for every surface except chat: files, comments, commit messages
 - `one-home` [M] Keep each fact in one place and reference it from everywhere else, and let a declared copy name its source and update path.
 - `stated-once` [M] State each fact once within a text, and pair an effect with its cause instead of listing effects and causes apart.
 - `glossary-vocab` [M] Use the project's current glossary terms in titles, test names, interfaces and examples, even where the source predates them.
-- `ignore-hint` [M] Reword or link before suppressing a glossary finding, because a suppression is the last resort.
 
 ## Examples
 
