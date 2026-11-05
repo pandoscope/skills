@@ -268,6 +268,34 @@ candidate() {
   [[ "$output" != *"glossary-marking"* ]]
 }
 
+@test "H code-mark flags a code name a comment leaves unmarked" {
+  f=$(printf '// The next record decides whether the check cleared.\nconst next = ordered[index + 1];\nif (next) row.cleared += 1;\n' | text a.mjs)
+  run "$CHECK" comment "$f"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"a.mjs:1: H code-mark: mark \`next\`"* ]]
+  [[ "$output" == *"a.mjs:1: H code-mark: mark \`cleared\`"* ]]
+}
+
+@test "H code-mark passes a marked name and a word the code never uses" {
+  f=$(printf '// The \`next\` record decides the outcome.\nconst next = ordered[index + 1];\n' | text a.mjs)
+  run "$CHECK" comment "$f"
+  [[ "$output" != *"H code-mark"* ]]
+}
+
+@test "H call-site flags a name the file's own code never uses" {
+  f=$(printf '// The CLI passes --no-push and calls context() first.\nconst x = resolve(root);\n' | text a.mjs)
+  run "$CHECK" comment "$f"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"a.mjs:1: H call-site: --no-push"* ]]
+  [[ "$output" == *"a.mjs:1: H call-site: context()"* ]]
+}
+
+@test "H call-site passes a file path and a flag the file handles" {
+  f=$(printf '// See core.mjs; --no-push skips the push.\nif (opts.has("--no-push")) return;\n' | text a.mjs)
+  run "$CHECK" comment "$f"
+  [[ "$output" != *"H call-site"* ]]
+}
+
 # Rule ids with their tier from the rules files: "F filler", "M referent".
 rules_ids() {
   sed -n 's/^- `\([a-z-]*\)` \[\([FHM]\)\] .*/\2 \1/p' "$REPO_ROOT"/original/writing-prose/rules/*.md | sort
