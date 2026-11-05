@@ -81,6 +81,9 @@ jobs:
           npm ci
           echo "$PWD/node_modules/.bin" >> "$GITHUB_PATH"
 
+      # check.sh --parse runs the prose parser through uvx (skills#240).
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+
       - name: Run test suite
         run: make test
 
