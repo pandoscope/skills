@@ -30,8 +30,8 @@ rules_for() {
         markdown) set -- shared docs markdown layout argued ;;
         skill) set -- shared docs markdown layout skill ;;
         primed) set -- shared docs markdown layout primed ;;
-        comment) set -- shared docs code layout ;;
-        commit) set -- shared docs code ;;
+        comment) set -- shared docs code comment layout ;;
+        commit) set -- shared docs code commit ;;
     esac
     for r in "$@"; do echo "$here/rules/$r.md"; done
 }
