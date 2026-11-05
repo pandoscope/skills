@@ -1,7 +1,7 @@
 # Comment examples
 
-A code comment gives the reason rather than the mechanism,
-in one or two sentences.
+A code comment gives the reason behind the code,
+and the mechanism a reader of the code alone would miss.
 Each pair below starts from a real comment.
 
 ## A docstring that names its terms last
@@ -56,3 +56,32 @@ After:
 # It takes no arguments (meta#68), because a value the model retypes
 # each turn drifts; every value comes from session.env instead.
 ```
+
+## A contract that opens with its history
+
+Before:
+
+```js
+  // A WRITE proves its identity or refuses (skills#51). The fallbacks
+  // below exist for reads — CI rendering a store it cannot know the
+  // session of — but an append that guesses publishes the guess: the
+  // append, the identity choice and the push are one action, so by the
+  // time a warning prints, the store has already recorded events under
+  // an identity that exists nowhere. Measured twice: once adopting the
+  // store's recorded URL from a different conversation, once falling
+  // back to the transcript filename.
+```
+
+After:
+
+```js
+  // With `{ write: true }`, `resolveSession` requires an explicit identity and refuses without one (skills#51).
+  // Written events reach the store every session shares,
+  // so a guessed identity files them under the wrong log for everyone.
+  // Guessing has misfiled events twice in measurement:
+  // - adopting the store's recorded URL, which belonged to a different conversation;
+  // - falling back to the transcript filename.
+```
+
+The rule comes first, then the reason.
+What the ledger CLI does with the flag stays at its call site, so a change to the CLI leaves this comment true.
