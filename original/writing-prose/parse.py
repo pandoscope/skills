@@ -61,6 +61,28 @@ def masked(text):
     return re.sub(r"`[^`]*`", lambda m: "x" * len(m.group(0)), text)
 
 
+def segments(text):
+    """Spans of the text to parse on their own, split after a colon and at a single dash.
+
+    A lead-in without a verb before a colon or dash ("A closed list rather than free text: provenance is …")
+    is parsed with the clause after it as one sentence, and the parser then pairs words that are no subject and verb.
+    A dash with a second dash later in its sentence opens a parenthesis, which verb-distance must still see, so it stays.
+    """
+    cuts, closing = [], -1
+    for m in re.finditer(r":\s|\s—\s", text):
+        if m.group(0).strip() == "—":
+            if m.start() == closing:
+                continue
+            rest = re.split(r"[.!?]\s", text[m.end():], maxsplit=1)[0]
+            pair = re.search(r"\s—\s", rest)
+            if pair:
+                closing = m.end() + pair.start()
+                continue
+        cuts.append(m.end())
+    bounds = [0] + cuts + [len(text)]
+    return [(a, b) for a, b in zip(bounds, bounds[1:]) if text[a:b].strip()]
+
+
 def verb_distance(sent):
     for t in sent:
         if t.dep_ not in ("nsubj", "nsubjpass") or t.head.pos_ not in ("VERB", "AUX") or t.i > t.head.i:
@@ -98,13 +120,14 @@ def main():
         # With a `before` file, a paragraph it already holds is untouched.
         if before is not None and text in " ".join(before.split()):
             continue
-        doc = nlp(masked(text))
-        for sent in doc.sents:
-            for rule, finder in (("verb-distance", verb_distance), ("relative-clause", relative_clause)):
-                for tok, msg in finder(sent):
-                    line = nums[bisect.bisect_right(starts, tok.idx) - 1]
-                    print(f"{name}:{line}: H {rule}: {msg}")
-                    break
+        plain = masked(text)
+        for start, end in segments(plain):
+            for sent in nlp(plain[start:end]).sents:
+                for rule, finder in (("verb-distance", verb_distance), ("relative-clause", relative_clause)):
+                    for tok, msg in finder(sent):
+                        line = nums[bisect.bisect_right(starts, start + tok.idx) - 1]
+                        print(f"{name}:{line}: H {rule}: {msg}")
+                        break
 
 
 if __name__ == "__main__":
