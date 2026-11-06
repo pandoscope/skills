@@ -7,7 +7,7 @@ These rules hold for every surface except chat: files, comments, commit messages
 - `articles` [M] Omit articles only where the sentence still reads naturally and every referent resolves.
 - `end-weight` [H] Put the main clause first, and let at most one reason, consequence or example trail it.
 - `actor-subject` [H] Make the actor the subject, and keep config, fields and files as objects.
-- `verb-distance` [H] Bring the verb within four words of its subject, counting a relative clause or parenthesis between them but not a short prepositional phrase, and put no clause between verb and complement.
+- `verb-distance` [H] Keep the verb next to its subject: put no clause or parenthesis between them, however short and including a participle phrase, and no more than four other words, a short prepositional phrase aside; put no clause between verb and complement.
 - `relative-clause` [H] Open a relative clause with "that" or "which", or give it a sentence of its own.
 - `first-mention` [M] Gloss a proper name or identifier at its first mention with what kind of thing it is.
 - `referent` [M] Make every "the X" and "its" point to something named in the current or previous sentence.
