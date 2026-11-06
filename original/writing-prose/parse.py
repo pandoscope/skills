@@ -87,7 +87,13 @@ def verb_distance(sent):
     for t in sent:
         if t.dep_ not in ("nsubj", "nsubjpass") or t.head.pos_ not in ("VERB", "AUX") or t.i > t.head.i:
             continue
-        between = [w for w in sent if t.i < w.i < t.head.i]
+        # A comma list before "and" and a pronoun like "itself" come back as appositions of the
+        # subject; both belong to it, so neither is a clause nor a word between.
+        own = set()
+        for c in t.children:
+            if c.dep_ == "appos" and (c.tag_ == "PRP" or any(g.dep_ in ("cc", "conj") for g in c.children)):
+                own.update(w.i for w in c.subtree)
+        between = [w for w in sent if t.i < w.i < t.head.i and w.i not in own]
         # Auxiliaries and negation belong to the verb, not to the gap before it.
         words = [w for w in between if not w.is_punct
                  and not (w.head.i == t.head.i and w.dep_ in ("aux", "auxpass", "neg"))]
