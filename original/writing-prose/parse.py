@@ -93,6 +93,10 @@ def verb_distance(sent):
         for c in t.children:
             if c.dep_ == "appos" and (c.tag_ == "PRP" or any(g.dep_ in ("cc", "conj") for g in c.children)):
                 own.update(w.i for w in c.subtree)
+        # Or the parser hangs the later conjuncts on the verb as subjects of their own.
+        for s in t.head.children:
+            if s.dep_ == t.dep_ and t.i < s.i < t.head.i:
+                own.update(w.i for w in s.subtree)
         between = [w for w in sent if t.i < w.i < t.head.i and w.i not in own]
         # Auxiliaries and negation belong to the verb, not to the gap before it.
         words = [w for w in between if not w.is_punct
