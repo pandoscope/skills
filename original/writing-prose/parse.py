@@ -92,7 +92,7 @@ def verb_distance(sent):
         words = [w for w in between if not w.is_punct
                  and not (w.head.i == t.head.i and w.dep_ in ("aux", "auxpass", "neg"))]
         if any(w.dep_ in BETWEEN for w in between) or any(w.text in ("(", "—") for w in between):
-            yield t, f"a clause or parenthesis sits between `{t.text}` and `{t.head.text}`"
+            yield t, f"a clause or parenthesis sits between `{t.text}` and `{t.head.text}`: a condition or cause in it moves to a when or because clause before `{t.text}`"
             continue
         preps = [c for c in t.children if c.dep_ == "prep" and t.i < c.i < t.head.i]
         in_one_prep = len(preps) == 1 and all(w in set(preps[0].subtree) for w in words)
