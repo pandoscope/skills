@@ -75,13 +75,10 @@ Before:
 After:
 
 ```js
-  // With `{ write: true }`, `resolveSession` requires an explicit identity and refuses without one (skills#51).
-  // Written events reach the store every session shares,
-  // so a guessed identity files them under the wrong log for everyone.
-  // Guessing has misfiled events twice in measurement:
-  // - adopting the store's recorded URL, which belonged to a different conversation;
-  // - falling back to the transcript filename.
+  // A CLI append refuses to guess which conversation it writes under (the `--session-url` or `--session` a caller states),
+  // because it pushes to the shared store in the same run:
+  // a wrong guess would be published before the person running it could read any warning (skills#51).
 ```
 
-The rule comes first, then the reason.
+The rule comes first, then the reason, and every referent is named: which conversation, which store, whose warning.
 What the ledger CLI does with the flag stays at its call site, so a change to the CLI leaves this comment true.
