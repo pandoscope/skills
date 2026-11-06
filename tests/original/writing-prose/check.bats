@@ -332,6 +332,20 @@ candidate() {
   [[ "$output" == *"a.mjs:1: H verb-distance:"* ]]
 }
 
+@test "--parse passes a subject that lists its conjuncts" {
+  f=$(printf '// The reference style, the thread naming and the footer contract are what make a turn complete.\nconst x = 1;\n' | text a.mjs)
+  run "$CHECK" comment "$f" --parse
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"H verb-distance"* ]]
+}
+
+@test "--parse passes an intensive pronoun after the subject" {
+  f=$(printf '// The reminder itself publishes it.\nconst x = 1;\n' | text a.mjs)
+  run "$CHECK" comment "$f" --parse
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"H verb-distance"* ]]
+}
+
 @test "--parse flags a reduced relative clause the awk heuristic misses" {
   f=$(printf 'The check reads a claim recorded by the model.\n' | text a.md)
   run "$CHECK" markdown "$f"
