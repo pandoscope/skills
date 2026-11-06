@@ -339,6 +339,13 @@ candidate() {
   [[ "$output" != *"H verb-distance"* ]]
 }
 
+@test "--parse passes a listed subject whose conjuncts the parser hangs on the verb" {
+  f=$(printf '// The append, the identity choice and the push are one action, so by then a warning is late.\nconst x = 1;\n' | text a.mjs)
+  run "$CHECK" comment "$f" --parse
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"H verb-distance"* ]]
+}
+
 @test "--parse passes an intensive pronoun after the subject" {
   f=$(printf '// The reminder itself publishes it.\nconst x = 1;\n' | text a.mjs)
   run "$CHECK" comment "$f" --parse
