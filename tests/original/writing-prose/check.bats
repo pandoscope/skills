@@ -311,6 +311,27 @@ candidate() {
   [[ "$output" != *"H verb-distance"* ]]
 }
 
+@test "--parse reads a lead-in before a colon apart from the clause after it" {
+  f=$(printf '// A closed list rather than free text: provenance is only worth recording if it can be relied on to mean the same thing.\nconst x = 1;\n' | text a.mjs)
+  run "$CHECK" comment "$f" --parse
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"H verb-distance"* ]]
+}
+
+@test "--parse reads a lead-in before a single dash apart from the clause after it" {
+  f=$(printf '// Pure functions over plain text \xe2\x80\x94 the call sites own what counts as "outgoing" and what to do about it.\nconst x = 1;\n' | text a.mjs)
+  run "$CHECK" comment "$f" --parse
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"H verb-distance"* ]]
+}
+
+@test "--parse flags a parenthesis between two dashes" {
+  f=$(printf '// The check \xe2\x80\x94 the one the hook runs first \xe2\x80\x94 fails on red.\nconst x = 1;\n' | text a.mjs)
+  run "$CHECK" comment "$f" --parse
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"a.mjs:1: H verb-distance:"* ]]
+}
+
 @test "--parse flags a reduced relative clause the awk heuristic misses" {
   f=$(printf 'The check reads a claim recorded by the model.\n' | text a.md)
   run "$CHECK" markdown "$f"
