@@ -4,7 +4,10 @@
 # of the surface, which only the agent can judge. The code-checkable
 # rules live in patterns.awk; the rules files under rules/ are the
 # authority for every rule's wording and tier.
-# Usage: check.sh <surface> <file|-> [--before <file>] [--style]
+# Usage: check.sh <surface> <file|-> [--before <file>] [--style] [--fix] [--parse]
+#        --fix rewrites the file one sentence per line first (sembr.awk)
+#        --parse decides verb-distance and relative-clause by dependency
+#        parse (parse.py, spaCy through uvx) instead of by pattern
 #        check.sh --rules <surface>   rules files the surface reads
 #        check.sh --list              F and H rules patterns.awk implements
 set -euo pipefail
@@ -12,7 +15,7 @@ here="$(cd "$(dirname "$0")" && pwd)"
 surfaces="chat ticket tracker markdown skill primed comment commit"
 
 usage() {
-    echo "usage: check.sh <surface> <file|-> [--before <file>] [--style]" >&2
+    echo "usage: check.sh <surface> <file|-> [--before <file>] [--style] [--fix] [--parse]" >&2
     echo "       check.sh --rules <surface> | --list" >&2
     echo "surface is one of: $surfaces" >&2
     exit 2
@@ -25,19 +28,19 @@ valid_surface() { case " $surfaces " in *" $1 "*) return 0 ;; *) return 1 ;; esa
 rules_for() {
     case $1 in
         chat) set -- shared chat ;;
-        ticket | tracker) set -- shared docs tracker ;;
-        markdown) set -- shared docs markdown layout ;;
+        ticket | tracker) set -- shared docs tracker argued ;;
+        markdown) set -- shared docs markdown layout argued ;;
         skill) set -- shared docs markdown layout skill ;;
         primed) set -- shared docs markdown layout primed ;;
-        comment) set -- shared docs code layout ;;
-        commit) set -- shared docs code ;;
+        comment) set -- shared docs code comment layout ;;
+        commit) set -- shared docs code commit ;;
     esac
     for r in "$@"; do echo "$here/rules/$r.md"; done
 }
 
-# Tier and id of every f(...)/h(...) call in patterns.awk.
+# Tier and id of every f(...)/h(...) call in patterns.awk and codenames.py.
 list_rules() {
-    grep -oE '(^|[^a-z_])(f|h)(_at)?\([^"]*"[a-z-]+"' "$here/patterns.awk" \
+    grep -ohE '(^|[^a-z_])(f|h)(_at)?\([^"]*"[a-z-]+"' "$here/patterns.awk" "$here/codenames.py" \
         | sed -E 's/^[^a-z]*(f|h)(_at)?\([^"]*"([a-z-]+)"$/\1 \3/' \
         | sed -e 's/^f /F /' -e 's/^h /H /' | sort -u
 }
@@ -53,11 +56,13 @@ surface=$1 file=$2
 shift 2
 valid_surface "$surface" || usage
 
-before="" style=0
+before="" style=0 fix=0 parse=0
 while [ $# -gt 0 ]; do
     case $1 in
+        --parse) parse=1; shift ;;
         --before) before=${2:?--before needs a file}; shift 2 ;;
         --style) style=1; shift ;;
+        --fix) fix=1; shift ;;
         *) usage ;;
     esac
 done
@@ -71,9 +76,38 @@ if [ "$file" = - ]; then
 fi
 [ -f "$file" ] || { echo "check.sh: no such file: $file" >&2; exit 2; }
 
+if [ "$fix" = 1 ]; then
+    case $surface in
+        markdown | skill | primed | comment) ;;
+        *) echo "check.sh: --fix applies to markdown, skill, primed and comment" >&2; exit 2 ;;
+    esac
+    [ "$name" != stdin ] || { echo "check.sh: --fix needs a file, not stdin" >&2; exit 2; }
+    fixed=$(mktemp)
+    awk -v surface="$surface" -v name="$name" -v before="$before" -f "$here/docstring.awk" -f "$here/sembr.awk" "$file" > "$fixed"
+    cat "$fixed" > "$file"
+    rm -f "$fixed"
+fi
+
 status=0
-awk -v surface="$surface" -v name="$name" -v style="$style" \
-    -v before="$before" -f "$here/patterns.awk" "$file" || status=$?
+awk -v surface="$surface" -v name="$name" -v style="$style" -v parse="$parse" \
+    -v before="$before" -f "$here/docstring.awk" -f "$here/patterns.awk" "$file" || status=$?
+
+# The parser and its model are pinned, so a run reads the same parse everywhere.
+if [ "$parse" = 1 ]; then
+    command -v uvx > /dev/null || { echo "check.sh: --parse needs uvx" >&2; exit 2; }
+    uvx --quiet --with "spacy==3.8.18" \
+        --with "en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" \
+        python "$here/parse.py" "$file" "$name" "$surface" "$before" 2> /dev/null || status=2
+fi
+
+# The comment checks that read the code around a comment need more than awk.
+if [ "$surface" = comment ]; then
+    if command -v python3 > /dev/null; then
+        python3 "$here/codenames.py" "$file" "$name" "$before"
+    else
+        echo "skipped code-mark, call-site: no python3"
+    fi
+fi
 
 echo "Judge by reading, M rules for $surface:"
 rules_for "$surface" | while read -r r; do

@@ -73,6 +73,16 @@ jobs:
       - name: Install bats
         run: npm install -g bats
 
+      # The grilling template check runs `tsc` from PATH, and the runner
+      # image ships none (skills#263); `make typecheck` reuses this install.
+      - name: Install TypeScript
+        run: |
+          npm ci
+          echo "$PWD/node_modules/.bin" >> "$GITHUB_PATH"
+
+      # check.sh --parse runs the prose parser through uvx (skills#240).
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+
       - name: Run test suite
         run: make test
 
@@ -82,8 +92,5 @@ jobs:
       # Types are checked, never emitted: the skills run from source
       # (skills#195). The include list in tsconfig.json names the
       # JSDoc-annotated modules; a module joins it when it is annotated.
-      - name: Install the type checker
-        run: npm ci
-
       - name: Type-check the annotated modules
         run: make typecheck
