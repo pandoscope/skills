@@ -80,5 +80,6 @@ After:
   // a wrong guess would be published before the person running it could read any warning (skills#51).
 ```
 
-The rule comes first, then the reason, and every referent is named: which conversation, which store, whose warning.
+The rule comes first, then the reason.
+Every referent is named: which conversation, which store, whose warning.
 What the ledger CLI does with the flag stays at its call site, so a change to the CLI leaves this comment true.
