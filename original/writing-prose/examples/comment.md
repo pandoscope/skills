@@ -112,3 +112,28 @@ After:
 
 Each part has its name from the code: "nothing naming this one" is `ctx.namedItself`, "the recorder" is `resolveSession`, "check 3" is the `ledger-event` check, and "which configuration" is `SESSION_URL`.
 Each sentence states one step, in the order the failure happens.
+
+## A constant whose comment has no subject
+
+Before:
+
+```js
+// How often the hook may block one turn before it releases the turn unsealed.
+// Each check blocks a turn at most once,
+// so the cap bounds only a chain of different failing checks.
+// Without a cap, a check that accepts an unverified claim would make a false claim the cheapest way to end the turn.
+```
+
+After:
+
+```js
+// `MAX_BLOCKS` caps how often the heartbeat may block one turn before it releases the turn unsealed.
+// Each check can block a turn at most once, because a reason already given this turn releases it,
+// so only a chain of different failing checks can reach the cap.
+// This closes a loophole: some checks accept a claim the model makes without verifying it
+// (a `no-update:` waiver, the `nothing-to-persist` reviews declaration),
+// and without a cap, a false claim would be the cheapest way for the model to end the turn.
+```
+
+The first sentence names the constant it describes, so it has a subject.
+The unverified claims are listed, and the model is named as the one who makes them.
