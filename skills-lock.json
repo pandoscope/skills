@@ -5,7 +5,7 @@
       "source": "pandoscope/skills",
       "sourceType": "github",
       "skillPath": "derived/caveman/SKILL.md",
-      "computedHash": "30b52226790cba1d0ab173e16af901002d43e76bc02ca47d47ec67be76984e83"
+      "computedHash": "2d73c6735d05c88bbf8042c1528642de6cba612819d8fdab0cd7c116a67031b7"
     },
     "documenting-decisions": {
       "source": "pandoscope/skills",
@@ -17,61 +17,61 @@
       "source": "pandoscope/skills",
       "sourceType": "github",
       "skillPath": "derived/domain-modeling/SKILL.md",
-      "computedHash": "839ba2d025f594dc698730aee74066eb640ac02013b4029749d61b4262793cc7"
+      "computedHash": "13a1053e36f7aed101624ed3f5bf6c64d07265db5470e61460cb9721a556dc36"
     },
     "grill-me": {
       "source": "mattpocock/skills",
       "sourceType": "github",
       "skillPath": "skills/productivity/grill-me/SKILL.md",
-      "computedHash": "f321507f77702a54af1db66549ec1685fc625390d06c57d7949cdcda8eb1b5c7"
+      "computedHash": "9cdbb4b8f7a3aeaef82e6230c9e823500d4a8a1214c726cf342cf9829d34fc7d"
     },
     "grill-with-docs": {
       "source": "mattpocock/skills",
       "sourceType": "github",
       "skillPath": "skills/engineering/grill-with-docs/SKILL.md",
-      "computedHash": "e7ef25bbee50cda2eb7b3a8ef541db0a0396dad7d369f7d14fb610671dd1864b"
+      "computedHash": "35e62aa423aaeab6a414bcac273f56dfb17802ef2334b41b6a3b00f28196c8cf"
     },
     "grilling": {
       "source": "pandoscope/skills",
       "sourceType": "github",
       "skillPath": "derived/grilling/SKILL.md",
-      "computedHash": "82c8da67d4ec62ded3a4b3823b0e4678d93a0acfc22ac41180cb1b4a5f336872"
+      "computedHash": "d2859bf88c058495f13ccb4e3a41abc6211e3466b31d21cb0d7a2eaa10a922fb"
     },
     "requesting-code-review": {
       "source": "obra/superpowers",
       "sourceType": "github",
       "skillPath": "skills/requesting-code-review/SKILL.md",
-      "computedHash": "cde520e9118d7e6b74b5ab0123cff2f68d9c07bddb3f82c997753b6126600aed"
+      "computedHash": "b095ac8c980339436b41de9989328f3f288f2e2a70452df28452bbeb6531d604"
     },
     "tdd": {
       "source": "pandoscope/skills",
       "sourceType": "github",
       "skillPath": "derived/tdd/SKILL.md",
-      "computedHash": "b663ec89bd4d0babc7572eb39ce21fe56a95c6da9d74149a17ce93b7c4906253"
+      "computedHash": "d77f0ecda1ec673c16f342a2e16b6ac3388d1004908e4352b4f57cffe701aa97"
     },
     "to-spec": {
       "source": "pandoscope/skills",
       "sourceType": "github",
       "skillPath": "derived/to-spec/SKILL.md",
-      "computedHash": "11bace9728fd91873b01ea743694226544907a8983a90b6e327324a41e062b0f"
+      "computedHash": "766f9d1d8cf9d5e9093795e1d5902fcd64d2672381108ce2dca3d4f07107aeb3"
     },
     "to-tickets": {
       "source": "pandoscope/skills",
       "sourceType": "github",
       "skillPath": "derived/to-tickets/SKILL.md",
-      "computedHash": "9c58978e2d01e2eacd7616722158b1d1dc409521b1ee1f443420cecb6b2d6cc0"
+      "computedHash": "cd3a0894b30502a37e691ec02d780eaab5cd5f6d5e6fe7cc22fba384b29e52a3"
     },
     "writing-adrs": {
       "source": "pandoscope/skills",
       "sourceType": "github",
       "skillPath": "original/writing-adrs/SKILL.md",
-      "computedHash": "5a4fd656b3b7b0badcbb7d6ea8dfccfd1f5d510b123938e7ab8d19bbb682a3b4"
+      "computedHash": "5eb0d86edb66a6999eb448d3c178aa03a162d55e02708ac886eabf249eb0955e"
     },
     "writing-prose": {
       "source": "pandoscope/skills",
       "sourceType": "github",
       "skillPath": "original/writing-prose/SKILL.md",
-      "computedHash": "2bc6746672d9afd849a5aa6dd4531209c3e3937a0c82b7fc61415386f43e2182"
+      "computedHash": "f106b35d2d3a4d64151bbb36abac9f7d623df867e80e65e174035512a2cf3433"
     }
   }
 }
