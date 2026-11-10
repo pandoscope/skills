@@ -194,6 +194,28 @@ describe("PushRefusesWhatTheMergeInvalidates", () => {
     fs.rmSync(bot, { recursive: true, force: true });
   });
 
+  // A scrub rewrites the store's history (session-memory#24). A clone
+  // that still holds the old one would rebase it onto the new main:
+  // unchanged commits drop out as duplicates, the scrubbed ones replay
+  // with the values, and the push lands fast-forward. The writer must
+  // see that the remote it knew is gone, and refuse.
+  it("a rewritten remote history is refused, never rebased onto", () => {
+    const { root, origin, bot } = contendedStore();
+    fs.writeFileSync(path.join(bot, "notes.md"), "scrubbed\n");
+    sh(bot, "add", "notes.md");
+    sh(bot, "commit", "-q", "--amend", "-m", "seed, rewritten");
+    sh(bot, "push", "-q", "--force", "origin", "main");
+    const rewritten = sh(bot, "rev-parse", "HEAD").trim();
+    const result = cliAppend(root, "--ev", "progress", "--thread", "t", "--pct", "60", "--note", "stale write");
+    assert.equal(result.status, 1, "a stale clone must not push onto a rewritten history");
+    assert.match(result.stderr, /rewritten/);
+    assert.match(result.stderr, /re-clone|reset/);
+    assert.equal(sh(root, "ls-remote", "origin", "main").split("\t")[0], rewritten);
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(origin, { recursive: true, force: true });
+    fs.rmSync(bot, { recursive: true, force: true });
+  });
+
   // Concurrency itself stays ordinary: another writer touching a
   // DIFFERENT thread must not turn into a refusal, or every busy hour
   // strands every session.
