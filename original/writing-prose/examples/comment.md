@@ -83,3 +83,32 @@ After:
 The rule comes first, then the reason.
 Every referent is named: which conversation, which store, whose warning.
 What the ledger CLI does with the flag stays at its call site, so a change to the CLI leaves this comment true.
+
+## A gate that leaves its parts unnamed
+
+Before:
+
+```js
+  // Identity before anything that depends on it. A store with several
+  // conversations and nothing naming this one leaves the recorder
+  // falling back to a platform-local id that matches no log, so check 3
+  // compares against events nothing ever writes and can never pass —
+  // block, release, repeat. Saying which configuration is missing costs
+  // one turn; failing as though the ledger were behind costs every one
+  // after it.
+```
+
+After:
+
+```js
+  // This gate runs before anything that depends on the session's identity.
+  // When the store holds several conversations and this session has not stated its URL (`ctx.namedItself` is false),
+  // `resolveSession` falls back to the hook's `session_id`, which matches no log (skills#62).
+  // The `ledger-event` check would then look for events under that id, and no writer files events under it.
+  // It would fail every turn: the heartbeat blocks, releases the turn unsealed, and the next turn fails the same way.
+  // Failing here tells the model to set `SESSION_URL`, which costs one turn.
+  // A store with a single conversation needs no stated URL, because `resolveSession` takes that conversation's recorded URL.
+```
+
+Each part has its name from the code: "nothing naming this one" is `ctx.namedItself`, "the recorder" is `resolveSession`, "check 3" is the `ledger-event` check, and "which configuration" is `SESSION_URL`.
+Each sentence states one step, in the order the failure happens.
