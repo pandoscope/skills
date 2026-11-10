@@ -100,6 +100,46 @@ text() {
   [[ "$output" == *"t.md:2: F commit-link"* ]]
 }
 
+@test "H ticket-code skips a path inside a link" {
+  f=$(printf 'The [check](https://github.com/o/r/blob/main/review/policy.mjs#L3) denies it.\n' | text t.md)
+  run "$CHECK" ticket "$f"
+  [[ "$output" != *"ticket-code"* ]]
+}
+
+@test "F relative-link fails on a relative link in tracker text" {
+  f=$(printf 'See [the check](original/review/policy.mjs).\nAnd [root](/docs/a.md).\n' | text t.md)
+  run "$CHECK" tracker "$f"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"t.md:1: F relative-link"* ]]
+  [[ "$output" == *"t.md:2: F relative-link"* ]]
+}
+
+@test "F relative-link passes absolute, anchor and code links in tracker text" {
+  f=$(printf 'See [it](https://github.com/o/r/blob/main/a.md), [below](#spec) and `[x](y.md)`.\n' | text t.md)
+  run "$CHECK" tracker "$f"
+  [ "$status" -eq 0 ]
+}
+
+@test "F pinned-anchor fails on a line anchor on a branch link in tracker text" {
+  f=$(printf 'See [check](https://github.com/o/r/blob/main/a.mjs#L319-L331).\n' | text t.md)
+  run "$CHECK" tracker "$f"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"t.md:1: F pinned-anchor"* ]]
+}
+
+@test "F pinned-anchor passes a line anchor on a commit link in tracker text" {
+  f=$(printf 'See [check](https://github.com/o/r/blob/bad438c5ac69e01eebef31f27bd0c0552e0dc524/a.mjs#L319-L331) and [file](https://github.com/o/r/blob/main/a.mjs).\n' | text t.md)
+  run "$CHECK" tracker "$f"
+  [ "$status" -eq 0 ]
+}
+
+@test "H repo-link flags an absolute repository link in markdown" {
+  f=$(printf 'See [the check](https://github.com/o/r/blob/main/a.mjs).\n' | text a.md)
+  run "$CHECK" markdown "$f"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"a.md:1: H repo-link"* ]]
+}
+
 @test "F commit-link passes linked hashes and owner/repo@sha" {
   f=$(printf 'Fixed in [9020b19](https://github.com/o/r/commit/9020b19abc).\nAlso o/r@1ea7679.\nThe word deadbeef and 1234567 are no hashes.\n' | text t.md)
   run "$CHECK" tracker "$f"
@@ -173,7 +213,17 @@ candidate() {
 @test "H not-just flags the not-just-but escalation" { candidate markdown not-just 1 'It is not only a bug but a design flaw.\n'; }
 @test "H ai-pattern flags stock rhetorical frames" { candidate markdown ai-pattern 1 'Not because it fails, but because it drifts.\n'; }
 @test "H abbreviation flags an unknown abbreviation once" { candidate markdown abbreviation 1 'The QZX runs. The QZX stops.\n'; }
-@test "H one-fact flags a clause-dense sentence" { candidate markdown one-fact 1 'The hook reads the order, checks the clone, switches the ref, and exits.\n'; }
+@test "H end-weight flags two clauses trailing the main clause" { candidate markdown end-weight 1 'The hook exits early because the clone is dirty, which the log reports when the run ends.\n'; }
+@test "H end-weight leaves one trailing reason" {
+  f=$(printf 'The hook exits early because the clone is dirty.\n' | text x.md)
+  run "$CHECK" markdown "$f"
+  [[ "$output" != *"end-weight"* ]]
+}
+@test "H end-weight counts per sentence, not per line" {
+  f=$(printf 'The hook exits early when the clone is dirty. It logs the result because the caller reads it.\n' | text x.md)
+  run "$CHECK" tracker "$f"
+  [[ "$output" != *"end-weight"* ]]
+}
 @test "H actor-subject flags a config as subject" { candidate markdown actor-subject 1 'The config decides which clone runs.\n'; }
 @test "H verb-distance flags a subject held apart from its verb" { candidate markdown verb-distance 1 'The hook, between the two steps, runs.\n'; }
 @test "H relative-clause flags a reduced relative" { candidate markdown relative-clause 1 'Each clone named in the block switches.\n'; }
@@ -193,6 +243,16 @@ candidate() {
 @test "H glossary-marking flags a plain mention after the term's link" { candidate markdown glossary-marking 2 'The [drift](drift.md) check runs.\nIt reports drift per file.\n'; }
 @test "H sembr flags two sentences on one line" { candidate markdown sembr 1 'The hook runs. It exits.\n'; }
 @test "H hard-wrap flags a wrapped tracker paragraph" { candidate tracker hard-wrap 1 'The hook runs first and\nthen exits.\n'; }
+@test "H only-place flags only before a verb" { candidate markdown only-place 1 'The script only reports owners.\n'; }
+
+@test "H only-place flags only before an irregular past" { candidate markdown only-place 1 'They only ran in CI.\n'; }
+
+@test "H only-place passes only before what it limits" {
+  f=$(printf 'The policy allows redirects only to `/dev/null`.\nGive each instance only its deltas.\nThe behaviour-only findings are correct.\n' | text a.md)
+  run "$CHECK" markdown "$f"
+  [[ "$output" != *"only-place"* ]]
+}
+
 @test "H ticket-code flags a path in a ticket" { candidate ticket ticket-code 2 'Not grilled.\nEdit original/writing-prose/check.awk.\n'; }
 
 @test "H sembr stays quiet on lines a rewrite left unchanged" {
@@ -206,6 +266,99 @@ candidate() {
   f=$(printf 'The [drift](drift.md) check runs.\nIt reports **drift** per file.\n' | text a.md)
   run "$CHECK" markdown "$f"
   [[ "$output" != *"glossary-marking"* ]]
+}
+
+@test "H code-mark flags a code name a comment leaves unmarked" {
+  f=$(printf '// The next record decides whether the check cleared.\nconst next = ordered[index + 1];\nif (next) row.cleared += 1;\n' | text a.mjs)
+  run "$CHECK" comment "$f"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"a.mjs:1: H code-mark: mark \`next\`"* ]]
+  [[ "$output" == *"a.mjs:1: H code-mark: mark \`cleared\`"* ]]
+}
+
+@test "H code-mark passes a marked name and a word the code never uses" {
+  f=$(printf '// The \`next\` record decides the outcome.\nconst next = ordered[index + 1];\n' | text a.mjs)
+  run "$CHECK" comment "$f"
+  [[ "$output" != *"H code-mark"* ]]
+}
+
+@test "H call-site flags a name the file's own code never uses" {
+  f=$(printf '// The CLI passes --no-push and calls context() first.\nconst x = resolve(root);\n' | text a.mjs)
+  run "$CHECK" comment "$f"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"a.mjs:1: H call-site: --no-push"* ]]
+  [[ "$output" == *"a.mjs:1: H call-site: context()"* ]]
+}
+
+@test "H call-site passes a file path and a flag the file handles" {
+  f=$(printf '// See core.mjs; --no-push skips the push.\nif (opts.has("--no-push")) return;\n' | text a.mjs)
+  run "$CHECK" comment "$f"
+  [[ "$output" != *"H call-site"* ]]
+}
+
+# --parse runs the syntactic rules through a dependency parser (spaCy via uvx).
+@test "--parse flags a relative clause between subject and verb" {
+  f=$(printf '// A turn that ends at this cycle ignored nothing.\nconst x = 1;\n' | text a.mjs)
+  run "$CHECK" comment "$f" --parse
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"a.mjs:1: H verb-distance:"* ]]
+}
+
+@test "--parse passes a short prepositional phrase between subject and verb" {
+  f=$(printf '// A failure inside a disputed window may be the check\x27s defect.\nconst x = 1;\n' | text a.mjs)
+  run "$CHECK" comment "$f" --parse
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"H verb-distance"* ]]
+}
+
+@test "--parse reads a lead-in before a colon apart from the clause after it" {
+  f=$(printf '// A closed list rather than free text: provenance is only worth recording if it can be relied on to mean the same thing.\nconst x = 1;\n' | text a.mjs)
+  run "$CHECK" comment "$f" --parse
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"H verb-distance"* ]]
+}
+
+@test "--parse reads a lead-in before a single dash apart from the clause after it" {
+  f=$(printf '// Pure functions over plain text \xe2\x80\x94 the call sites own what counts as "outgoing" and what to do about it.\nconst x = 1;\n' | text a.mjs)
+  run "$CHECK" comment "$f" --parse
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"H verb-distance"* ]]
+}
+
+@test "--parse flags a parenthesis between two dashes" {
+  f=$(printf '// The check \xe2\x80\x94 the one the hook runs first \xe2\x80\x94 fails on red.\nconst x = 1;\n' | text a.mjs)
+  run "$CHECK" comment "$f" --parse
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"a.mjs:1: H verb-distance:"* ]]
+}
+
+@test "--parse passes a subject that lists its conjuncts" {
+  f=$(printf '// The reference style, the thread naming and the footer contract are what make a turn complete.\nconst x = 1;\n' | text a.mjs)
+  run "$CHECK" comment "$f" --parse
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"H verb-distance"* ]]
+}
+
+@test "--parse passes a listed subject whose conjuncts the parser hangs on the verb" {
+  f=$(printf '// The append, the identity choice and the push are one action, so by then a warning is late.\nconst x = 1;\n' | text a.mjs)
+  run "$CHECK" comment "$f" --parse
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"H verb-distance"* ]]
+}
+
+@test "--parse passes an intensive pronoun after the subject" {
+  f=$(printf '// The reminder itself publishes it.\nconst x = 1;\n' | text a.mjs)
+  run "$CHECK" comment "$f" --parse
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"H verb-distance"* ]]
+}
+
+@test "--parse flags a reduced relative clause the awk heuristic misses" {
+  f=$(printf 'The check reads a claim recorded by the model.\n' | text a.md)
+  run "$CHECK" markdown "$f"
+  [[ "$output" != *"H relative-clause"* ]]
+  run "$CHECK" markdown "$f" --parse
+  [[ "$output" == *"a.md:1: H relative-clause:"* ]]
 }
 
 # Rule ids with their tier from the rules files: "F filler", "M referent".
@@ -246,12 +399,35 @@ rules_ids() {
   [[ "$output" != *"M referent"* ]]
 }
 
+@test "a comment run leaves the commit rules out of its residue" {
+  f=$(printf '// The hook runs.\n' | text a.mjs)
+  run "$CHECK" comment "$f"
+  [[ "$output" == *"M comment-register:"* ]]
+  [[ "$output" != *"M commit-register"* ]]
+  [[ "$output" != *"M commit-snapshot"* ]]
+  [[ "$output" != *"M ignore-hint"* ]]
+  run "$CHECK" commit "$f"
+  [[ "$output" == *"M commit-register:"* ]]
+  [[ "$output" != *"M comment-register"* ]]
+}
+
 @test "--rules names the rules files a surface reads" {
   run "$CHECK" --rules skill
   [ "$status" -eq 0 ]
   [[ "$output" == *"rules/shared.md"* ]]
   [[ "$output" == *"rules/skill.md"* ]]
   [[ "$output" != *"rules/tracker.md"* ]]
+}
+
+@test "--rules gives the argued register to docs and tickets, not to instruction files" {
+  for surface in markdown ticket tracker; do
+    run "$CHECK" --rules "$surface"
+    [[ "$output" == *"rules/argued.md"* ]] || { echo "$surface lacks argued.md"; return 1; }
+  done
+  for surface in skill primed comment commit; do
+    run "$CHECK" --rules "$surface"
+    [[ "$output" != *"rules/argued.md"* ]] || { echo "$surface reads argued.md"; return 1; }
+  done
 }
 
 @test "the skill passes the writing-skills check" {
@@ -341,4 +517,79 @@ rules_ids() {
 
 @test "H sembr still flags a break inside a clause" {
   candidate markdown sembr 2 'The hook reads the\norder file.\n'
+}
+
+@test "--fix puts one sentence per line in a comment and keeps code lines" {
+  f=$(printf '%s\n' 'x = 1  // trailing stays' '// The hook runs first. It reads the guard after' '// the checks, so cycleOf bounds it. cycleOf counts.' 'y = 2' | text a.mjs)
+  run "$CHECK" comment "$f" --fix
+  run cat "$f"
+  [ "${lines[0]}" = 'x = 1  // trailing stays' ]
+  [ "${lines[1]}" = '// The hook runs first.' ]
+  [ "${lines[2]}" = '// It reads the guard after the checks, so cycleOf bounds it.' ]
+  [ "${lines[3]}" = '// cycleOf counts.' ]
+  [ "${lines[4]}" = 'y = 2' ]
+}
+
+@test "--fix breaks a long sentence at the clause boundary nearest its middle" {
+  long='The renderer replaces every store URL on the page with a placeholder before it writes, so an old event renders clean, and check 7 still scans the page for a miss.'
+  f=$(printf '%s\n' "$long" | text a.md)
+  run "$CHECK" markdown "$f" --fix
+  run cat "$f"
+  [ "$output" = $'The renderer replaces every store URL on the page with a placeholder before it writes,\nso an old event renders clean, and check 7 still scans the page for a miss.' ]
+}
+
+@test "--fix leaves lists, code blocks and e.g. alone" {
+  f=$(printf '%s\n' '- One item. Two sentences.' '' '```' 'Code here. Stays.' '```' '' 'Use a tool, e.g. Foo. Then stop.' | text a.md)
+  run "$CHECK" markdown "$f" --fix
+  run cat "$f"
+  [ "$output" = $'- One item. Two sentences.\n\n```\nCode here. Stays.\n```\n\nUse a tool, e.g. Foo.\nThen stop.' ]
+}
+
+@test "--fix with --before rewrites only paragraphs the change touched" {
+  old=$(printf '%s\n' 'First para wraps' 'mid clause here.' '' 'Second para wraps' 'mid clause too.' | text old.md)
+  f=$(printf '%s\n' 'First para wraps' 'mid clause here.' '' 'Second para now wraps' 'mid clause too.' | text a.md)
+  run "$CHECK" markdown "$f" --fix --before "$old"
+  [[ "$output" != *"F reflow"* ]]
+  run cat "$f"
+  [ "$output" = $'First para wraps\nmid clause here.\n\nSecond para now wraps mid clause too.' ]
+}
+
+@test "--fix refuses a surface without layout rules" {
+  f=$(printf 'One. Two.\n' | text a.txt)
+  run "$CHECK" commit "$f" --fix
+  [ "$status" -eq 2 ]
+}
+
+@test "--fix with --before keeps the unchanged lines ahead of the first change" {
+  old=$(printf '%s\n' 'The hook reads the guard' 'after the checks.' | text old.md)
+  f=$(printf '%s\n' 'The hook reads the guard' 'after the checks. It blocks once' 'more for an unheard reason.' | text a.md)
+  run "$CHECK" markdown "$f" --fix --before "$old"
+  run cat "$f"
+  [ "$output" = $'The hook reads the guard\nafter the checks.\nIt blocks once more for an unheard reason.' ]
+}
+
+@test "H sembr flags two sentences on one docstring line" {
+  f=$(printf '%s\n' 'def run():' '    """' '    The hook runs. It exits.' '    """' '    return 1' | text a.py)
+  run "$CHECK" comment "$f"
+  [[ "$output" == *"a.py:3: H sembr"* ]]
+}
+
+@test "F filler fails on a filler word in a one-line docstring" {
+  f=$(printf '%s\n' '"""The hook just runs."""' '' 'import os' | text a.py)
+  run "$CHECK" comment "$f"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"a.py:1: F filler"* ]]
+}
+
+@test "F filler passes a triple-quoted string that is no docstring" {
+  f=$(printf '%s\n' 'import os' 'QUERY = """' 'SELECT just 1' '"""' 'x = f(' '    """' '    just a string' '    """' ')' | text a.py)
+  run "$CHECK" comment "$f"
+  [ "$status" -eq 0 ]
+}
+
+@test "--fix puts one sentence per line in a docstring and keeps its sections" {
+  f=$(printf '%s\n' 'class A:' '    """' '    What one call changed. It counts' '    lines.' '' '    Attributes:' '        stored: Lines stored. Kept as' '            written.' '' '    """' | text a.py)
+  run "$CHECK" comment "$f" --fix
+  run cat "$f"
+  [ "$output" = $'class A:\n    """\n    What one call changed.\n    It counts lines.\n\n    Attributes:\n        stored: Lines stored. Kept as\n            written.\n\n    """' ]
 }

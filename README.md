@@ -35,6 +35,12 @@ npx skills update -p -y
 Ubiquitous language: `docs/glossary/`, one file per term, resolve via `uvx disambiguate <term>`:
 
 - [Skills](docs/glossary/skills.md)
+- [Turn](docs/glossary/turn.md)
+- [Heartbeat](docs/glossary/heartbeat.md)
+- [Cycle](docs/glossary/cycle.md)
+- [Fired check](docs/glossary/fired-check.md)
+- [Seal](docs/glossary/seal.md)
+- [Stretch](docs/glossary/stretch.md)
 - [Grilling Session](docs/glossary/grilling-session.md)
 
 ## Rules
