@@ -5,12 +5,13 @@
 // pushed under a guessed identity is published before it can be
 // corrected. Header contract: `../ledger.mjs`.
 
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
 import { LedgerError, mergeLogLines, stamp, validate } from "../core.mjs";
-import { git, ledgerDir, readAll } from "./io.mjs";
+import { git, gitOrNull, ledgerDir, readAll } from "./io.mjs";
 import { checkSessionFile, countUserMessages } from "./identity.mjs";
 
 // ------------------------------------------------------------- writes
@@ -262,7 +263,9 @@ function pushWithRebase(root, session, event = null, attempts = 3) {
             `org will not see it.`,
         );
       }
+      const known = gitOrNull(root, "rev-parse", "-q", "--verify", "refs/remotes/origin/main");
       git(root, "fetch", "-q", "origin", "main");
+      refuseIfHistoryRewritten(root, known);
       rebaseOntoRemote(root, session);
       // A lost race means the clone was stale — the one condition under
       // which the local validation may have approved an event the whole
@@ -273,6 +276,36 @@ function pushWithRebase(root, session, event = null, attempts = 3) {
       }
     }
   }
+}
+
+
+/**
+ * Refuse to rebase onto a remote whose history was rewritten.
+ *
+ * A scrub rewrites the store (session-memory#24). The remote main this
+ * clone last knew is then no ancestor of the fetched one, and a rebase
+ * would replay the old history: unchanged commits drop out as
+ * duplicates, the scrubbed ones come back with what was scrubbed, and
+ * the push lands fast-forward. The only safe move is a fresh start
+ * from the new history, which the caller has to make.
+ *
+ * `known` is the clone's remote-tracking main before the fetch, or
+ * null when it has none (then there is nothing to compare).
+ */
+function refuseIfHistoryRewritten(root, known) {
+  if (!known) return;
+  const fetched = git(root, "rev-parse", "FETCH_HEAD").trim();
+  const kept = spawnSync("git", ["-C", root, "merge-base", "--is-ancestor", known.trim(), fetched]);
+  if (kept.status === 0) return;
+  throw new LedgerError(
+    `the store's history was rewritten: the remote main this clone last knew ` +
+      `(${known.trim().slice(0, 12)}) is no longer part of it. Rebasing would ` +
+      `replay the old history, including whatever a scrub removed, so nothing ` +
+      `was pushed. The event is committed in this clone only.\n\n` +
+      `Start from the new history, then append the event again: re-clone the ` +
+      `store, or run \`git fetch origin && git reset --hard origin/main\` in ` +
+      `${root}. Never force-push this clone.`,
+  );
 }
 
 
