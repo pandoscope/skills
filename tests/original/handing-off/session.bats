@@ -117,3 +117,13 @@ pid_file() {
   grep -q '"context_tokens":200000' "$HOME/.claude/handoff-state/session-a.json"
   [ ! -e "$HOME/.claude/handoff-state/session-b.json" ]
 }
+
+@test "the pid file outranks CLAUDE_CODE_SESSION_ID while skills#268 has not compared them" {
+  transcript "$PROJECTS/session-a.jsonl" 200000
+  transcript "$PROJECTS/session-b.jsonl" 1000
+  pid_file 4242 session-a
+  run env CLAUDE_PID=4242 CLAUDE_CODE_SESSION_ID=session-b "$SKILL/mark.sh" "$TMP/handoff.md"
+  [ "$status" -eq 0 ]
+  [ -e "$HOME/.claude/handoff-state/session-a.json" ]
+  [ ! -e "$HOME/.claude/handoff-state/session-b.json" ]
+}
