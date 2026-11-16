@@ -2,33 +2,11 @@
 # phase.sh (skills#267): a run ends by recording its phase in the
 # per-session state and pushing the draft and the state to the store.
 
-setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME" && git rev-parse --show-toplevel)"
-  SKILL="$REPO_ROOT/original/handing-off"
-  TMP=$(mktemp -d)
-  unset SESSION_MEMORY_URL SESSION_MEMORY_ROOT DECISION_MEMORY_URL EVIDENCE_MEMORY_URL PUSH_BLOCKLIST
-  export HOME="$TMP/home"
-  export HANDOFF_TRANSCRIPT="$TMP/s1.jsonl"
-  echo '{"type":"user"}' > "$HANDOFF_TRANSCRIPT"
-  export HANDOFF_STATE="$TMP/state/s1.json"
-  git init -q --bare -b main "$TMP/remote.git"
-  git clone -q "$TMP/remote.git" "$TMP/store" 2> /dev/null
-  git -C "$TMP/store" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
-  git -C "$TMP/store" push -q origin main
-  export HANDOFF_STORE="$TMP/store"
-  mkdir -p "$TMP/state"
-  cat > "$TMP/state/s1.draft.md" <<'MD'
-# Handoff
+load store_helper
 
-## Finish first
-
-- [ ] model: write the tickets
-MD
-}
+setup() { store_setup; }
 
 teardown() { rm -rf "$TMP"; }
-
-remote_file() { git -C "$TMP/remote.git" show "main:$1"; }
 
 @test "run 1 leaves a draft with a finish-first list, the phase listed, and no marker" {
   run "$SKILL/phase.sh" listed
