@@ -38,21 +38,28 @@ for name in SESSION_MEMORY_URL DECISION_MEMORY_URL EVIDENCE_MEMORY_URL; do
 done
 # PUSH_BLOCKLIST is |-separated: newlines get cut by some layers, so a
 # literal | in a term cannot be expressed. Empty terms are skipped but
-# keep their position, so "term N" names the Nth field.
+# keep their position, so "term N" names the Nth field. A field holding
+# a newline matches on any of its lines.
 position=0
-IFS='|' read -r -a terms <<< "${PUSH_BLOCKLIST:-}"
-for term in "${terms[@]+"${terms[@]}"}"; do
+rest=${PUSH_BLOCKLIST:-}
+while :; do
+    field=${rest%%|*}
     position=$((position + 1))
-    if [ -n "$term" ]; then
+    if [ -n "$field" ]; then
         labels+=("PUSH_BLOCKLIST term $position")
-        values+=("$term")
+        values+=("$field")
     fi
+    [ "$rest" != "$field" ] || break
+    rest=${rest#*|}
 done
 
 hits=0
 for i in "${!values[@]}"; do
     for file in "$@"; do
-        if grep -q -F -- "${values[$i]}" "$file"; then
+        # A JSON file holds a quote or a backslash escaped.
+        escaped=$(printf '%s' "${values[$i]}" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
+        if grep -q -F -- "${values[$i]}" "$file" \
+            || grep -q -F -- "$escaped" "$file"; then
             echo "scan.sh: $file holds ${labels[$i]}"
             hits=$((hits + 1))
         fi

@@ -10,9 +10,12 @@
 #   (no phase)  run 1
 #   listed      run 2
 #   written     run 2 at step 5
-#   complete    the /compact proposal again, while the marker is fresh
-#               (marker.sh); run 1 once it is stale
-# Exits 1 when no session is found or the phase is unknown.
+#   complete    the /compact proposal again, while a marker exists and
+#               is fresh (marker.sh); run 1 otherwise
+# Run 1 sets an earlier draft at the path aside, as <draft>.previous.md.
+# Exits 1 when no session is found or the phase is unknown; 3 when a
+# store is configured but does not answer, so the restore cannot tell
+# whether it holds a run.
 set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=original/handing-off/state.sh
@@ -31,9 +34,18 @@ draft=$(handoff_draft_path "$session")
 
 # A resume into a new container leaves no local state; the pushed state
 # under the session id stands in for it. With none, run 1 starts.
-if [ ! -f "$state" ] && handoff_store_pull "$session" "$state" "$draft"; then
-    echo "restored the phase $(handoff_json_field phase "$(cat "$state")")" \
-         "and the draft from the store"
+if [ ! -f "$state" ]; then
+    pull_status=0
+    reason=$(handoff_store_pull "$session" "$state" "$draft" 2>&1) || pull_status=$?
+    case "$pull_status" in
+        0) echo "restored the phase $(handoff_json_field phase "$(cat "$state")")" \
+                "and the draft from the store" ;;
+        3) # Run 1 here would push over the interrupted run's draft.
+           echo "start.sh: the store did not answer ($reason); stopping, so" \
+                "that run 1 does not overwrite a run the store may hold." \
+                "Retry once the store answers."
+           exit 3 ;;
+    esac
 fi
 
 phase=""
@@ -43,7 +55,7 @@ case "$phase" in
     listed) starts="run 2" ;;
     written) starts="run 2 at step 5" ;;
     complete)
-        if handoff_marker_staleness "$state" \
+        if handoff_has_marker "$state" && handoff_marker_staleness "$state" \
                "$(handoff_transcript_of_session "$session")" > /dev/null; then
             starts="the /compact proposal again"
         else
@@ -52,5 +64,11 @@ case "$phase" in
     *) echo "start.sh: unknown phase $phase in $state" >&2
        exit 1 ;;
 esac
+# Run 1 starts a new draft: an earlier cycle's ticked list and Persisted
+# list would otherwise pass this cycle's checks.
+if [ "$starts" = "run 1" ] && [ -f "$draft" ]; then
+    mv -f "$draft" "${draft%.md}.previous.md"
+    echo "set the earlier draft aside as ${draft%.md}.previous.md"
+fi
 echo "starts: $starts"
 echo "draft: $draft"

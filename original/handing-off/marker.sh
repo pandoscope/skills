@@ -49,6 +49,11 @@ handoff_marker_staleness() {
     if [ -n "$tokens_then" ] && [ -n "$tokens_now" ]; then
         grown=$(( tokens_now - tokens_then ))
         slack="${HANDOFF_STALE_TOKENS:-50000}"
+        case "$slack" in
+            ''|*[!0-9]*)
+                echo "is stale — HANDOFF_STALE_TOKENS=$slack is no number, so its growth cannot be judged"
+                return 1 ;;
+        esac
         if [ "$grown" -gt "$slack" ]; then
             echo "is stale — the context grew ~$grown tokens (slack $slack) since it was written"
             return 1
@@ -57,6 +62,11 @@ handoff_marker_staleness() {
     fi
     age=$(( $(date +%s) - $(handoff_marker_epoch "$1") ))
     max="${HANDOFF_MAX_AGE:-3600}"
+    case "$max" in
+        ''|*[!0-9]*)
+            echo "is stale — HANDOFF_MAX_AGE=$max is no number, so its age cannot be judged"
+            return 1 ;;
+    esac
     if [ "$age" -gt "$max" ]; then
         echo "is ${age}s old and carries no token measure to judge growth against"
         return 1

@@ -28,16 +28,22 @@ handoff_store_dir() {
     printf 'handoffs/sessions/%s\n' "$1"
 }
 
-# Print text with the values of the store URL variables replaced by
-# their names, so a git error can be forwarded without its URL.
+# Print text with the values of the store URL variables, and the URL
+# of the clone's origin, replaced by their names, so a git error can be
+# forwarded without a store URL.
 #   $1  text
+#   $2  the store's root; optional
 handoff_store_redact() {
-    local text=$1 name
+    local text=$1 name origin=""
     for name in SESSION_MEMORY_URL DECISION_MEMORY_URL EVIDENCE_MEMORY_URL; do
         if [ -n "${!name:-}" ]; then
             text=${text//"${!name}"/\$$name}
         fi
     done
+    [ -z "${2:-}" ] || origin=$(git -C "$2" remote get-url origin 2>/dev/null || true)
+    if [ -n "$origin" ]; then
+        text=${text//"$origin"/<store origin>}
+    fi
     printf '%s\n' "$text"
 }
 
@@ -102,7 +108,7 @@ handoff_store_scan() {
 # HEAD, or a commit or push that failed after three attempts. Git's own
 # error is forwarded with the store URLs replaced by their names.
 handoff_store_push() {
-    local session=$1 state=$2 draft=${3:-} root dir branch out attempt tmp
+    local session=$1 state=$2 draft=${3:-} root dir branch out attempt tmp pulled
     root=$(handoff_store_root)
     if [ -z "$root" ]; then
         echo "handing-off: no store clone: HANDOFF_STORE names none, and no" \
@@ -124,14 +130,17 @@ handoff_store_push() {
     [ -z "$draft" ] || cp "$tmp/draft.md" "$root/$dir/draft.md"
     rm -rf "$tmp"
     if ! out=$(git -C "$root" add -- "$dir" 2>&1); then
-        echo "handing-off: git add in $root failed: $(handoff_store_redact "$out")" >&2
+        echo "handing-off: git add in $root failed: $(handoff_store_redact "$out" "$root")" >&2
         return 1
     fi
     if ! git -C "$root" diff --cached --quiet -- "$dir"; then
         if ! out=$(git -C "$root" -c user.name=handing-off -c user.email=noreply@anthropic.com \
                        commit -q -m "handoff: $session $(handoff_json_field phase "$(cat "$state")")" \
                        -- "$dir" 2>&1); then
-            echo "handing-off: commit in $root failed: $(handoff_store_redact "$out")" >&2
+            # Nothing stays staged: the ledger's next commit would sweep
+            # it in.
+            git -C "$root" reset -q -- "$dir" 2>/dev/null || true
+            echo "handing-off: commit in $root failed: $(handoff_store_redact "$out" "$root")" >&2
             return 1
         fi
     fi
@@ -143,13 +152,14 @@ handoff_store_push() {
         # it and try again. The rebase commits, so it needs the identity
         # the commit above used; a rebase that stops is aborted, so the
         # clone never stays mid-rebase.
-        if ! git -C "$root" -c user.name=handing-off -c user.email=noreply@anthropic.com \
-                 pull -q --rebase --autostash origin "$branch" > /dev/null 2>&1; then
+        if ! pulled=$(git -C "$root" -c user.name=handing-off -c user.email=noreply@anthropic.com \
+                          pull -q --rebase --autostash origin "$branch" 2>&1); then
             git -C "$root" rebase --abort > /dev/null 2>&1 || true
+            out="$out; the rebase onto origin failed: $pulled"
         fi
     done
     echo "handing-off: push from $root to $branch failed after $attempt attempts:" \
-         "$(handoff_store_redact "$out")" >&2
+         "$(handoff_store_redact "$out" "$root")" >&2
     return 1
 }
 
@@ -159,7 +169,9 @@ handoff_store_push() {
 #   $3  the local draft to write
 # Returns 0 once the state is restored, with draft_path naming the
 # local draft when the store held one; 1 when the store holds no state
-# for the session; 2, with the reason on stderr, when no store answers.
+# for the session; 2, with the reason on stderr, when no store is
+# configured; 3, with the reason on stderr, when the store's clone is
+# off its default branch or its remote does not answer.
 # The restored marker keeps its token count: the transcript keeps its
 # file name across a resume, so the guard's growth rule still measures
 # against it.
@@ -172,9 +184,10 @@ handoff_store_pull() {
     fi
     handoff_valid_session "$session" || return 1
     branch=$(handoff_store_branch "$root")
+    [ -n "$branch" ] || return 3
     if ! out=$(git -C "$root" fetch -q origin "$branch" 2>&1); then
-        echo "handing-off: fetch in $root failed: $(handoff_store_redact "$out")" >&2
-        return 2
+        echo "handing-off: fetch in $root failed: $(handoff_store_redact "$out" "$root")" >&2
+        return 3
     fi
     dir=$(handoff_store_dir "$session")
     text=$(git -C "$root" show "FETCH_HEAD:$dir/state.json" 2>/dev/null) || return 1
