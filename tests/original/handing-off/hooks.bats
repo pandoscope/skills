@@ -166,3 +166,11 @@ MD
   [ "$status" -eq 2 ]
   [[ "$output" == *"marker is stale"* ]]
 }
+
+@test "verify run by hand in a terminal does not wait for hook input" {
+  script -qec true /dev/null > /dev/null 2>&1 || skip "needs util-linux script for a terminal"
+  # A pipe that stays open stands in for a person who types nothing.
+  run bash -c "sleep 15 | timeout 5 script -qec '$SKILL/verify.sh' /dev/null"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"no handoff marker"* ]]
+}
