@@ -27,10 +27,13 @@
 set -u
 [ "${PRECOMPACT_GUARD:-on}" = "off" ] && exit 0
 input=$(cat)
-state="${HANDOFF_STATE:-$HOME/.claude/handoff-state.json}"
+# shellcheck source=original/handing-off/state.sh
+. "$(dirname "${BASH_SOURCE[0]}")/state.sh"
+state=$(handoff_marker_path "$(handoff_session_of_hook_input "$input")")
 block() { echo "$1" >&2; exit 2; }
-[ -f "$state" ] || block "COMPACTION BLOCKED: no handoff marker at \
-$state. Have the session run the handing-off skill, then /compact \
+[ -n "$state" ] && [ -f "$state" ] || block "COMPACTION BLOCKED: no \
+handoff marker for this session at ${state:-(the hook input names no \
+session)}. Have the session run the handing-off skill, then /compact \
 again (PRECOMPACT_GUARD=off overrides)."
 tokens_then=$(sed -n 's/.*"context_tokens":\([0-9]\{1,\}\).*/\1/p' "$state")
 transcript=$(printf '%s' "$input" | jq -r '.transcript_path // empty' 2>/dev/null)

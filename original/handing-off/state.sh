@@ -30,3 +30,12 @@ handoff_marker_path() {
         printf '%s\n' "$HOME/.claude/handoff-state/$1.json"
     fi
 }
+
+# Print the session id a hook input names.
+#   $1  the hook input, the JSON object Claude Code sends on stdin
+# Prints the value of its session_id; nothing when the input has none.
+# sed, not a JSON tool, as in mark.sh: the consumer may lack one.
+handoff_session_of_hook_input() {
+    printf '%s\n' "$1" \
+        | sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p'
+}
