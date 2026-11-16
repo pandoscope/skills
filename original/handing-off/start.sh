@@ -31,6 +31,8 @@ if [ -z "$state" ]; then
     exit 1
 fi
 draft=$(handoff_draft_path "$session")
+# The draft is written to this path next; its directory must exist.
+mkdir -p "$(dirname "$draft")"
 
 # A resume into a new container leaves no local state; the pushed state
 # under the session id stands in for it. With none, run 1 starts.
