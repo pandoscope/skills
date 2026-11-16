@@ -51,17 +51,38 @@ handoff_marker_path() {
 # Print the marker path a session reads.
 #   $1  session id
 # Prints the session's own marker path (handoff_marker_path), or the
-# one shared marker of earlier versions, ~/.claude/handoff-state.json,
-# when HANDOFF_STATE is unset and the session has no own marker yet.
+# session's old shared marker (handoff_legacy_marker) while the session
+# has no own marker yet and HANDOFF_STATE is unset.
 handoff_marker_to_read() {
     local own legacy
     own=$(handoff_marker_path "$1")
-    legacy="$HOME/.claude/handoff-state.json"
-    if [ -z "${HANDOFF_STATE:-}" ] && [ ! -f "$own" ] && [ -f "$legacy" ]; then
-        printf '%s\n' "$legacy"
+    if [ -n "${HANDOFF_STATE:-}" ] || [ -f "$own" ]; then
+        printf '%s\n' "$own"
         return 0
     fi
-    printf '%s\n' "$own"
+    legacy=$(handoff_legacy_marker "$1")
+    if [ -n "$legacy" ]; then
+        printf '%s\n' "$legacy"
+    else
+        printf '%s\n' "$own"
+    fi
+}
+
+# Print the one shared marker of earlier versions,
+# ~/.claude/handoff-state.json, when it belongs to a session.
+#   $1  session id
+# Prints its path when the file exists and its transcript_path names
+# this session's transcript; nothing otherwise. A shared marker naming
+# another session's transcript is that session's handoff.
+handoff_legacy_marker() {
+    local legacy legacy_session
+    legacy="$HOME/.claude/handoff-state.json"
+    [ -n "$1" ] && [ -f "$legacy" ] || return 0
+    legacy_session=$(handoff_session_of_transcript \
+        "$(handoff_json_field transcript_path "$(cat "$legacy")")")
+    if [ "$legacy_session" = "$1" ]; then
+        printf '%s\n' "$legacy"
+    fi
 }
 
 # Print the session id a hook input names.

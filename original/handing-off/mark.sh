@@ -67,3 +67,15 @@ printf '{"written_at":"%s","handoff_path":"%s","published_url":"%s","transcript_
     "$(date -u +%FT%TZ)" "$handoff" "$url" "$transcript" "$tokens" \
     > "$state"
 echo "marker written: $state"
+
+# The session's own marker supersedes its old shared one. Left in
+# place, the old one would serve the session again once its own marker
+# is deleted. With HANDOFF_STATE set, the shared path may be the marker
+# just written, so it stays.
+if [ -z "${HANDOFF_STATE:-}" ]; then
+    legacy=$(handoff_legacy_marker "$session")
+    if [ -n "$legacy" ]; then
+        rm "$legacy"
+        echo "old shared marker retired: $legacy"
+    fi
+fi
