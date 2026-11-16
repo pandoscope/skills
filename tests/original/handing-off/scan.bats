@@ -33,3 +33,17 @@ teardown() { rm -rf "$TMP"; }
   [[ "$output" != *"secret-host"* ]]
   [[ "$output" != *"term 1"* ]]
 }
+
+@test "the scan passes a clean draft and state and counts its terms" {
+  export SESSION_MEMORY_URL="https://forge.example/acme/memory-store"
+  export PUSH_BLOCKLIST="Acme Corp"
+  run "$SKILL/scan.sh" "$TMP/draft.md" "$TMP/state.json"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"no hit for 2 terms in 2 files"* ]]
+}
+
+@test "the scan says that it scanned for nothing when no term is configured" {
+  run "$SKILL/scan.sh" "$TMP/draft.md" "$TMP/state.json"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"scanned for nothing"* ]]
+}
