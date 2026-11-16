@@ -12,8 +12,14 @@
 # ordering is the skill's step-1 responsibility; extraction stays dumb
 # on purpose.
 set -u
-state="${HANDOFF_STATE:-$HOME/.claude/handoff-state.json}"
-if [ ! -f "$state" ]; then
+# A hook always gets its input on stdin; a person running this by hand
+# in a terminal types none.
+input=""
+[ -t 0 ] || input=$(cat)
+# shellcheck source=original/handing-off/state.sh
+. "$(dirname "${BASH_SOURCE[0]}")/state.sh"
+state=$(handoff_marker_path "$(handoff_session_of_hook_input "$input")")
+if [ -z "$state" ] || [ ! -f "$state" ]; then
     echo "COMPACTION JUST COMPLETED with no handoff marker — this" \
          "compaction ran unguarded. Tell the user at the start of your" \
          "reply: state before this point exists only in the summary," \
