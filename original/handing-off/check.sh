@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# The rung-1 half of handing-off's completion criteria: the hooks this
-# skill ships are registered, and the marker was written by this run
-# and names a real handoff. Everything below rung 1 prints as the
-# residue.
+# The completion check of handing-off's second run: the hooks this
+# skill ships are registered; the marker was written by this run, names
+# a real handoff and is not older than it; the finish-first list is
+# settled (list.sh); the Persisted list has an item. On a pass it sets
+# the phase complete and pushes the state (store.sh). Everything a
+# script cannot judge prints as the residue.
 set -euo pipefail
 
 skill_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)

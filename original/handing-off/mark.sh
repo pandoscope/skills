@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # Write the freshness marker that hooks compare against.
 #
-# Usage: mark.sh <handoff-file> [published-url]
+# Usage: mark.sh <handoff-file> [published-location]
+#        published-location: where the handoff was published, a URL or,
+#        in a session-memory store, its path in the store (never a URL
+#        of the store: the outgoing scan blocks it). Kept as
+#        published_url.
 # Env:   HANDOFF_STATE      marker path (default
 #                           ~/.claude/handoff-state/<session-id>.json,
 #                           see state.sh)
@@ -19,7 +23,7 @@
 # marker carries null and hooks fall back to age.
 set -euo pipefail
 
-handoff=${1:?usage: mark.sh <handoff-file> [published-url]}
+handoff=${1:?usage: mark.sh <handoff-file> [published-location]}
 url=${2:-}
 if [ ! -s "$handoff" ]; then
     echo "mark.sh: handoff file missing or empty: $handoff" >&2

@@ -3,13 +3,14 @@
 # guard.sh). stdout on SessionStart(source=compact) lands in the fresh
 # context — the one channel that reaches the model after compaction —
 # so this is where the handoff gets its pointer and its priorities
-# re-stated. Moved here from the installing project's hooks: this file
-# reads what mark.sh writes and parses the table SKILL.md step 2
+# re-stated, and where the phase of the handing-off runs is cleared.
+# Moved here from the installing project's hooks: this file
+# reads what mark.sh writes and parses the open-state table SKILL.md
 # defines, so every party to the contract ships and versions together.
 #
 # The open-state rows are lifted VERBATIM, in table order — notation,
 # not paraphrase — so this output cannot drift from the handoff. The
-# ordering is the skill's step-1 responsibility; extraction stays dumb
+# ordering is the skill's responsibility; extraction stays dumb
 # on purpose.
 set -u
 # A hook always gets its input on stdin; a person running this by hand

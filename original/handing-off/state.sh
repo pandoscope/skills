@@ -1,7 +1,7 @@
 # shellcheck shell=bash
-# Where a session's handoff marker lives (skills#255). Sourced by
-# mark.sh, check.sh, guard.sh and verify.sh, so all four resolve the
-# marker the same way.
+# Where a session's handoff state lives (skills#255, skills#267).
+# Sourced by every script of the skill, so all of them resolve the
+# state the same way.
 #
 # A session id is the file name of the session's transcript without
 # .jsonl. Each session gets its own marker,
