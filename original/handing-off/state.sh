@@ -78,8 +78,10 @@ handoff_json_field() {
 # The first of these that names a session wins:
 #   1. HANDOFF_TRANSCRIPT: the session of that transcript
 #   2. Claude Code's pid file, ~/.claude/sessions/$CLAUDE_PID.json,
-#      key sessionId. Not a documented interface, hence the fallback.
-#   3. the newest transcript (handoff_newest_transcript)
+#      key sessionId. Not a documented interface, hence the fallbacks.
+#   3. CLAUDE_CODE_SESSION_ID, which Claude Code sets in the model's
+#      shell
+#   4. the newest transcript (handoff_newest_transcript)
 # Prints nothing when none names a session.
 handoff_own_session() {
     if [ -n "${HANDOFF_TRANSCRIPT:-}" ]; then
@@ -94,6 +96,15 @@ handoff_own_session() {
             printf '%s\n' "$session"
             return 0
         fi
+    fi
+    # DECISION:SCOPE — The variable comes after the pid file, not
+    # before it as skills#255's review comment proposes: whether it
+    # equals the hook input's session_id on every host and after a
+    # compaction or a resume is skills#268's question 4, unanswered
+    # here. Move it first once that probe confirms it.
+    if [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
+        printf '%s\n' "$CLAUDE_CODE_SESSION_ID"
+        return 0
     fi
     handoff_session_of_transcript "$(handoff_newest_transcript)"
 }
