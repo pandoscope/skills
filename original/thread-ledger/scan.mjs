@@ -18,6 +18,10 @@
  * (newlines get truncated by some layers and `=` confuses parsers; a
  * literal `|` in a term is not expressible — documented as reserved).
  * Unset means built-in scan only: the variable is optional by design.
+ *
+ * Mirrored pair: the handing-off skill's scan.sh carries a copy of this
+ * term list, so it scans without the ledger. This function is the
+ * authoritative side; a change to the terms changes both.
  */
 export function blocklistTerms(env) {
   const terms = [];

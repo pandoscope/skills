@@ -7,9 +7,15 @@
 # (no file named, or a named file missing).
 #
 # The terms are the values of the store URL variables and the terms in
-# PUSH_BLOCKLIST. A hit is named
-# by the variable it came from, never by its value: printing the value
-# would put it in the channel this scan guards.
+# PUSH_BLOCKLIST, the terms the thread ledger's outgoing scan uses. A
+# hit is named by its source, the variable or the term's position in
+# PUSH_BLOCKLIST, never by its value: printing the value would put it
+# in the channel this scan guards. The scan finds listed terms only; a
+# secret nobody listed passes.
+#
+# Mirrored pair: blocklistTerms in the thread-ledger skill's scan.mjs
+# is the authoritative term list. This copy exists so that handing-off
+# works without the ledger; a change to the terms changes both.
 set -euo pipefail
 if [ $# -eq 0 ]; then
     echo "usage: scan.sh <file>..." >&2
@@ -53,3 +59,9 @@ for i in "${!values[@]}"; do
     done
 done
 [ "$hits" -eq 0 ] || exit 1
+if [ "${#values[@]}" -eq 0 ]; then
+    echo "scan.sh: scanned for nothing: no store URL variable and no" \
+         "PUSH_BLOCKLIST term is set"
+else
+    echo "scan.sh: no hit for ${#values[@]} terms in $# files"
+fi
