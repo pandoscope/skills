@@ -22,3 +22,11 @@ teardown() { rm -rf "$TMP"; }
   run "$SKILL/start.sh"
   [[ "$output" == *"starts: run 1"* ]]
 }
+
+@test "the cleared state in the store still names the draft by its store path" {
+  sed -i 's/- \[ \]/- [x]/' "$TMP/state/s1.draft.md"
+  "$SKILL/mark.sh" "$TMP/state/s1.draft.md" > /dev/null
+  "$SKILL/phase.sh" written > /dev/null
+  "$SKILL/verify.sh" <<< '{"session_id":"s1","source":"compact"}' > /dev/null
+  remote_file handoffs/sessions/s1/state.json | grep -q '"draft_path":"handoffs/sessions/s1/draft.md"'
+}
