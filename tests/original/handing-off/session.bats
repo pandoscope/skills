@@ -147,3 +147,20 @@ pid_file() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"machine checks pass"* ]]
 }
+
+# legacy_marker <session-id>: the one shared marker mark.sh wrote
+# before markers were per session.
+legacy_marker() {
+  printf '{"written_at":"%s","handoff_path":"%s","published_url":"","transcript_path":"%s","context_tokens":1000}\n' \
+    "$(date -u +%FT%TZ)" "$TMP/handoff.md" "$PROJECTS/$1.jsonl" > "$HOME/.claude/handoff-state.json"
+}
+
+@test "an old shared marker still serves the session that wrote it" {
+  transcript "$PROJECTS/session-a.jsonl" 1000
+  legacy_marker session-a
+  run "$SKILL/guard.sh" < <(hook_input session-a)
+  [ "$status" -eq 0 ]
+  run env HANDOFF_TRANSCRIPT="$PROJECTS/session-a.jsonl" "$SKILL/check.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"machine checks pass"* ]]
+}
