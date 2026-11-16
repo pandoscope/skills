@@ -89,3 +89,21 @@ hook_input() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"The latest handoff is $TMP/a.md"* ]]
 }
+
+# pid_file <pid> <session-id>: Claude Code's record of a running session.
+pid_file() {
+  mkdir -p "$HOME/.claude/sessions"
+  printf '{"pid":%s,"sessionId":"%s","cwd":"/work/repo","kind":"interactive"}\n' \
+    "$1" "$2" > "$HOME/.claude/sessions/$1.json"
+}
+
+@test "mark takes its session from the pid file, not the newest transcript" {
+  transcript "$PROJECTS/session-a.jsonl" 200000
+  touch -d '1 minute ago' "$PROJECTS/session-a.jsonl"
+  transcript "$PROJECTS/session-b.jsonl" 1000
+  pid_file 4242 session-a
+  run env CLAUDE_PID=4242 "$SKILL/mark.sh" "$TMP/handoff.md"
+  [ "$status" -eq 0 ]
+  grep -q '"context_tokens":200000' "$HOME/.claude/handoff-state/session-a.json"
+  [ ! -e "$HOME/.claude/handoff-state/session-b.json" ]
+}
