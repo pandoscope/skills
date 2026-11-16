@@ -129,3 +129,11 @@ usage_line() {
   [ ! -e "$TMP/state/s1.draft.md" ]
   grep -q "write the tickets" "$TMP/state/s1.draft.previous.md"
 }
+
+@test "start.sh makes the directory of the draft it names" {
+  export HANDOFF_STATE="$TMP/fresh/dir/s1.json"
+  run "$SKILL/start.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"draft: $TMP/fresh/dir/s1.draft.md"* ]]
+  [ -d "$TMP/fresh/dir" ]
+}
