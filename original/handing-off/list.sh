@@ -9,8 +9,13 @@
 #
 # The list is the checkbox list between the "Finish first" heading and
 # the next heading. An item is a line "- [ ] ..." or "- [x] ...".
-# An item is settled when it is ticked and names its owner, "model:" or
-# "principal:", first.
+# An item is settled when it is ticked, names its owner first, and, when
+# postponed, names the trigger that brings it back:
+#   - [x] model: run the probes (postponed until: the probe ticket closes)
+# DECISION:SCOPE — The owners are "model" and "principal", the two roles
+# the flow knows; any other word before the colon counts as no owner.
+# The principal ruled so when skills#267 was implemented: a colon in
+# free text cannot then pass for an owner.
 set -euo pipefail
 draft=${1:?usage: list.sh <draft>}
 if [ ! -f "$draft" ]; then
@@ -26,6 +31,10 @@ awk '
         sub(/^[[:space:]]*[-*][[:space:]]+\[[ xX]\][[:space:]]+/, "", text)
         if (!ticked) { print "unticked: " text; open++ }
         else if (text !~ /^(model|principal):[[:space:]]/) { print "no owner: " text; open++ }
+        else if (text ~ /\([[:space:]]*postponed/ \
+                 && text !~ /\([[:space:]]*postponed until:[[:space:]]*[^)[:space:]][^)]*\)/) {
+            print "postponed without trigger: " text; open++
+        }
     }
     END {
         if (open) { printf "finish-first list not settled: %d of %d items open\n", open, items; exit 1 }
