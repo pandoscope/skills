@@ -73,6 +73,14 @@ jobs:
       - name: Install bats
         run: npm install -g bats
 
+      # Before the tests: the grilling render test builds its template
+      # with tsc, and the runner image ships no tsc of its own. The
+      # pinned one from package.json goes on PATH for every later step.
+      - name: Install the type checker
+        run: |
+          npm ci
+          echo "$PWD/node_modules/.bin" >> "$GITHUB_PATH"
+
       - name: Run test suite
         run: make test
 
@@ -82,8 +90,5 @@ jobs:
       # Types are checked, never emitted: the skills run from source
       # (skills#195). The include list in tsconfig.json names the
       # JSDoc-annotated modules; a module joins it when it is annotated.
-      - name: Install the type checker
-        run: npm ci
-
       - name: Type-check the annotated modules
         run: make typecheck
