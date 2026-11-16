@@ -68,3 +68,12 @@ hook_input() {
   run "$SKILL/guard.sh" < <(hook_input session-a)
   [ "$status" -eq 0 ]
 }
+
+@test "guard takes the session from transcript_path when the input has no session_id" {
+  transcript "$PROJECTS/session-a.jsonl" 200000
+  transcript "$PROJECTS/session-b.jsonl" 1000
+  HANDOFF_TRANSCRIPT="$PROJECTS/session-a.jsonl" "$SKILL/mark.sh" "$TMP/handoff.md"
+  HANDOFF_TRANSCRIPT="$PROJECTS/session-b.jsonl" "$SKILL/mark.sh" "$TMP/handoff.md"
+  run "$SKILL/guard.sh" <<< "{\"transcript_path\":\"$PROJECTS/session-a.jsonl\"}"
+  [ "$status" -eq 0 ]
+}
