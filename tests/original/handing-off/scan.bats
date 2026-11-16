@@ -23,3 +23,13 @@ teardown() { rm -rf "$TMP"; }
   [[ "$output" != *"memory-store"* ]]
   [[ "$output" != *"state.json holds"* ]]
 }
+
+@test "the scan names a PUSH_BLOCKLIST hit by its position, not its value" {
+  export PUSH_BLOCKLIST="Acme Corp|secret-host.internal|"
+  echo "deploy to secret-host.internal" >> "$TMP/draft.md"
+  run "$SKILL/scan.sh" "$TMP/draft.md"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"$TMP/draft.md holds PUSH_BLOCKLIST term 2"* ]]
+  [[ "$output" != *"secret-host"* ]]
+  [[ "$output" != *"term 1"* ]]
+}
