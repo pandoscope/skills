@@ -40,6 +40,13 @@ if [ ! -s "$draft" ]; then
     exit 1
 fi
 
+# The draft is scanned before anything is recorded; the push scans the
+# state and the draft once more, as the store gets them.
+if ! "$here/scan.sh" "$draft"; then
+    echo "phase.sh: the scan found a blocked term; nothing was pushed, and" \
+         "the phase was not recorded. Remove the term from the draft, then rerun phase.sh $phase" >&2
+    exit 1
+fi
 # DECISION:SCOPE — The list check decides whether the list is settled,
 # not the model's word (skills#267), so the phase that says the list is
 # settled cannot be recorded past it.
@@ -57,13 +64,14 @@ if [ "$phase" = listed ]; then
 else
     handoff_state_set "$state" phase "$phase" draft_path "$draft"
 fi
-if ! "$here/scan.sh" "$draft" "$state"; then
-    echo "phase.sh: the scan found a blocked term; nothing was pushed." \
-         "Remove the term from the draft, then rerun phase.sh $phase" >&2
-    exit 1
-fi
-if ! handoff_store_push "$session" "$state" "$draft"; then
-    echo "handing-off: no store took this run's state; a resume into a" \
-         "new container loses this run"
-fi
+push_status=0
+handoff_store_push "$session" "$state" "$draft" || push_status=$?
+case "$push_status" in
+    0) ;;
+    2) echo "phase.sh: the scan found a blocked term; nothing was pushed." \
+            "Remove the term, then rerun phase.sh $phase" >&2
+       exit 1 ;;
+    *) echo "handing-off: no store took this run's state; a resume into a" \
+            "new container loses this run" ;;
+esac
 echo "phase $phase recorded in $state"

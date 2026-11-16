@@ -86,16 +86,68 @@ handoff_store_branch() {
     fi
 }
 
+# Write a session's state, and its draft when given, in the form the
+# store gets them.
+#   $1  session id
+#   $2  the local state file
+#   $3  the local draft; may be empty
+#   $4  the directory to write state.json and draft.md into
+#   $5  the store's root; may be empty
+# The rendered state names the draft, and the handoff of a marker, by
+# the draft's path in the store, and drops transcript_path: a local
+# absolute path means nothing to the container that restores it, and a
+# blocklisted word in a directory name would fail every scan.
+handoff_store_render() {
+    local session=$1 state=$2 draft=$3 out=$4 root=$5 stored="" handoff=""
+    local dir
+    dir=$(handoff_store_dir "$session")
+    cp "$state" "$out/state.json"
+    if [ -n "$draft" ]; then
+        cp "$draft" "$out/draft.md"
+    fi
+    if [ -n "$draft" ] || { [ -n "$root" ] && [ -f "$root/$dir/draft.md" ]; }; then
+        stored="$dir/draft.md"
+    fi
+    if [ -n "$(handoff_json_field handoff_path "$(cat "$state")")" ]; then
+        handoff=$stored
+    fi
+    handoff_state_set "$out/state.json" draft_path "$stored" \
+        handoff_path "$handoff" transcript_path ""
+}
+
+# Scan a session's state, and its draft when given, in the form the
+# store would get them (handoff_store_render).
+#   $1  session id
+#   $2  the local state file
+#   $3  the local draft; may be empty
+# Returns 0 when the outgoing scan passes; 2 on a hit, with scan.sh's
+# report, which names each hit by its source, on stderr.
+handoff_store_scan() {
+    local session=$1 state=$2 draft=${3:-} tmp report status=0
+    tmp=$(mktemp -d)
+    handoff_store_render "$session" "$state" "$draft" "$tmp" "$(handoff_store_root)"
+    report=$("$(dirname "${BASH_SOURCE[0]}")/scan.sh" "$tmp/state.json" \
+                 ${draft:+"$tmp/draft.md"} 2>&1) || status=2
+    rm -rf "$tmp"
+    if [ "$status" -ne 0 ]; then
+        printf '%s\n' "$report" | sed "s|$tmp/||g" >&2
+    fi
+    return "$status"
+}
+
 # Push a session's state, and its draft when given, to the store.
 #   $1  session id
 #   $2  the local state file
 #   $3  the local draft; optional
-# Returns 0 once origin holds both files; 1 with the reason on stderr
-# when no store took them: no clone, no session id, a detached HEAD, or
-# a commit or push that failed after three attempts. Git's own error is
-# forwarded with the store URLs replaced by their variable names.
+# Every push goes through the outgoing scan first (handoff_store_scan),
+# so no caller can push past it.
+# Returns 0 once origin holds the files; 2 when the scan finds a
+# blocked term, with nothing written to the store; 1 with the reason on
+# stderr when no store took them: no clone, no session id, a detached
+# HEAD, or a commit or push that failed after three attempts. Git's own
+# error is forwarded with the store URLs replaced by their names.
 handoff_store_push() {
-    local session=$1 state=$2 draft=${3:-} root dir branch out attempt
+    local session=$1 state=$2 draft=${3:-} root dir branch out attempt tmp
     root=$(handoff_store_root)
     if [ -z "$root" ]; then
         echo "handing-off: no store clone: HANDOFF_STORE names none, and no" \
@@ -106,6 +158,7 @@ handoff_store_push() {
         echo "handing-off: no session id to file the state under in $root" >&2
         return 1
     fi
+    handoff_store_scan "$session" "$state" "$draft" || return 2
     branch=$(handoff_store_branch "$root")
     if [ -z "$branch" ]; then
         echo "handing-off: the store clone $root is on no branch" >&2
@@ -113,15 +166,11 @@ handoff_store_push() {
     fi
     dir=$(handoff_store_dir "$session")
     mkdir -p "$root/$dir"
-    cp "$state" "$root/$dir/state.json"
-    # The pushed state names the draft by its path in the store; a local
-    # path means nothing to the container that restores it.
-    [ -z "$draft" ] || cp "$draft" "$root/$dir/draft.md"
-    if [ -f "$root/$dir/draft.md" ]; then
-        handoff_state_set "$root/$dir/state.json" draft_path "$dir/draft.md"
-    else
-        handoff_state_set "$root/$dir/state.json" draft_path ""
-    fi
+    tmp=$(mktemp -d)
+    handoff_store_render "$session" "$state" "$draft" "$tmp" "$root"
+    cp "$tmp/state.json" "$root/$dir/state.json"
+    [ -z "$draft" ] || cp "$tmp/draft.md" "$root/$dir/draft.md"
+    rm -rf "$tmp"
     if ! out=$(git -C "$root" add -- "$dir" 2>&1); then
         echo "handing-off: git add in $root failed: $(handoff_store_redact "$out")" >&2
         return 1
@@ -183,6 +232,10 @@ handoff_store_pull() {
     if git -C "$root" show "FETCH_HEAD:$dir/draft.md" > "$draft.tmp.$$" 2>/dev/null; then
         mv -f "$draft.tmp.$$" "$draft"
         handoff_state_set "$state" draft_path "$draft"
+        # The store names the marker's handoff by the draft's store path.
+        if [ -n "$(handoff_json_field handoff_path "$text")" ]; then
+            handoff_state_set "$state" handoff_path "$draft"
+        fi
     else
         rm -f "$draft.tmp.$$"
         handoff_state_set "$state" draft_path ""

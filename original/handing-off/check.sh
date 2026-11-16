@@ -15,7 +15,12 @@ skill_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # With HANDOFF_STATE set, the marker needs no session, and the lookup
 # would only print its newest-transcript warning.
 session=""
-[ -n "${HANDOFF_STATE:-}" ] || session=$(handoff_own_session)
+if [ -n "${HANDOFF_STATE:-}" ]; then
+    # The push still files the state under the session id.
+    session=$(handoff_own_session 2>/dev/null)
+else
+    session=$(handoff_own_session)
+fi
 state=$(handoff_marker_to_read "$session")
 settings=${CLAUDE_SETTINGS:-$HOME/.claude/settings.json}
 
@@ -110,11 +115,16 @@ persisted=$(awk '
     "$handoff has no \"Persisted\" heading with an item under it" \
     "record the sweep's findings there, or the single item \"none\""
 
-handoff_state_set "$state" phase complete
+# The scan comes before the phase: a state recorded complete passes the
+# guard and makes the next invocation propose /compact.
 draft=$(handoff_json_field draft_path "$(cat "$state")")
-"$skill_dir/scan.sh" "$state" ${draft:+"$draft"} > /dev/null || fail "BLOCKED TERM IN THE STATE" \
-    "the outgoing scan found a blocked term; nothing was pushed" \
-    "run ./scan.sh on the state and the draft to see which"
+if ! scan_report=$(handoff_store_scan "$session" "$state" "$draft" 2>&1); then
+    printf '%s\n' "$scan_report"
+    fail "BLOCKED TERM IN THE STATE OR THE DRAFT" \
+        "the outgoing scan names its hits above; nothing was recorded or pushed" \
+        "remove the terms, rerun ./mark.sh, then this check"
+fi
+handoff_state_set "$state" phase complete
 if ! handoff_store_push "$session" "$state" "$draft"; then
     echo "handing-off: no store took this run's state; a resume into a" \
          "new container loses this run"
