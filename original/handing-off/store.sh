@@ -135,8 +135,13 @@ handoff_store_push() {
             return 0
         fi
         # A rejected push is mostly another writer's commit: rebase onto
-        # it and try again.
-        git -C "$root" pull -q --rebase --autostash origin "$branch" > /dev/null 2>&1 || true
+        # it and try again. The rebase commits, so it needs the identity
+        # the commit above used; a rebase that stops is aborted, so the
+        # clone never stays mid-rebase.
+        if ! git -C "$root" -c user.name=handing-off -c user.email=noreply@anthropic.com \
+                 pull -q --rebase --autostash origin "$branch" > /dev/null 2>&1; then
+            git -C "$root" rebase --abort > /dev/null 2>&1 || true
+        fi
     done
     echo "handing-off: push from $root to $branch failed after $attempt attempts:" \
          "$(handoff_store_redact "$out")" >&2
