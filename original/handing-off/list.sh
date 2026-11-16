@@ -4,8 +4,9 @@
 #
 # Usage: list.sh <draft>
 # Exits 0 when the draft has a "Finish first" heading and every item
-# under it is settled; 1 otherwise, naming each unsettled item; 2 on a
-# usage error.
+# under it is settled (an empty list is settled); 1 when the heading is
+# missing or an item is not settled, naming each such item; 2 when the
+# draft does not exist.
 #
 # The list is the checkbox list between the "Finish first" heading and
 # the next heading. An item is a line "- [ ] ..." or "- [x] ...".
@@ -23,7 +24,7 @@ if [ ! -f "$draft" ]; then
     exit 2
 fi
 awk '
-    /^#+[[:space:]]/ { in_list = ($0 ~ /^#+[[:space:]]+Finish first[[:space:]]*$/); next }
+    /^#+[[:space:]]/ { in_list = ($0 ~ /^#+[[:space:]]+Finish first[[:space:]]*$/); found += in_list; next }
     in_list && /^[[:space:]]*[-*][[:space:]]+\[[ xX]\][[:space:]]/ {
         items++
         ticked = ($0 ~ /^[[:space:]]*[-*][[:space:]]+\[[xX]\]/)
@@ -37,6 +38,7 @@ awk '
         }
     }
     END {
+        if (!found) { print "no \"Finish first\" heading in " FILENAME; exit 1 }
         if (open) { printf "finish-first list not settled: %d of %d items open\n", open, items; exit 1 }
         printf "finish-first list settled: %d items\n", items
     }
