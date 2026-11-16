@@ -83,3 +83,11 @@ teardown() { rm -rf "$TMP"; }
   [ "$status" -eq 0 ]
   grep -q '"context_tokens":642005' "$HANDOFF_STATE"
 }
+
+@test "a usage line with no token counts records null, not zero" {
+  echo '{"type":"assistant","message":{"usage":{"output_tokens":4}}}' >> "$TMP/transcript.jsonl"
+  run "$SKILL/mark.sh" "$TMP/handoff.md"
+  [ "$status" -eq 0 ]
+  grep -q '"context_tokens":null' "$HANDOFF_STATE"
+  [[ "$output" == *"fall back to marker age"* ]]
+}
