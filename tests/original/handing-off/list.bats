@@ -48,7 +48,7 @@ MD
   run "$SKILL/list.sh" "$TMP/draft.md"
   [ "$status" -eq 1 ]
   [[ "$output" == *"no owner: write the tickets"* ]]
-  [[ "$output" == *"no owner: reviewer: read the diff"* ]]
+  [[ "$output" == *"unknown owner reviewer: reviewer: read the diff"* ]]
   [[ "$output" != *"run the suite"* ]]
 }
 
@@ -76,4 +76,84 @@ MD
   run "$SKILL/list.sh" "$TMP/none.md"
   [ "$status" -eq 2 ]
   [[ "$output" == *"no draft at $TMP/none.md"* ]]
+}
+
+# --- what the list check cannot parse fails, never passes (review of #274)
+
+@test "the list check fails on a list line that is not a checkbox item" {
+  draft <<'MD'
+- [x] model: write the tickets
+- write the README
+- [] model: empty box
+-[ ] model: no space
+1. [ ] model: numbered
+MD
+  run "$SKILL/list.sh" "$TMP/draft.md"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"not a checkbox item: - write the README"* ]]
+  [[ "$output" == *"not a checkbox item: - [] model: empty box"* ]]
+  [[ "$output" == *"not a checkbox item: -[ ] model: no space"* ]]
+  [[ "$output" == *"not a checkbox item: 1. [ ] model: numbered"* ]]
+}
+
+@test "the list check reads plus bullets and nested items as checkbox items" {
+  draft <<'MD'
++ [x] model: write the tickets
+- [x] model: run the suite
+  - [ ] model: the slow target
+MD
+  run "$SKILL/list.sh" "$TMP/draft.md"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unticked: model: the slow target"* ]]
+  [[ "$output" == *"1 of 3 items open"* ]]
+}
+
+@test "items under a lower sub-heading stay in the list" {
+  draft <<'MD'
+### model
+
+- [ ] model: write the tickets
+MD
+  run "$SKILL/list.sh" "$TMP/draft.md"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unticked: model: write the tickets"* ]]
+}
+
+@test "a fenced block inside the list neither ends it nor counts as items" {
+  draft <<'MD'
+- [x] model: run the script
+
+```sh
+# a comment, not a heading
+- [ ] not an item
+```
+
+- [ ] model: read its output
+MD
+  run "$SKILL/list.sh" "$TMP/draft.md"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unticked: model: read its output"* ]]
+  [[ "$output" != *"not an item"* ]]
+}
+
+@test "a fenced example of the heading is not the list" {
+  printf '# Handoff\n\n```markdown\n## Finish first\n\n- [x] model: x\n```\n' > "$TMP/draft.md"
+  run "$SKILL/list.sh" "$TMP/draft.md"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no \"Finish first\" heading"* ]]
+}
+
+@test "the list check reads a draft with CRLF line ends" {
+  printf '# Handoff\r\n\r\n## Finish first\r\n\r\n- [x] model: write the tickets\r\n- [ ] principal: confirm\r\n' > "$TMP/draft.md"
+  run "$SKILL/list.sh" "$TMP/draft.md"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unticked: principal: confirm"* ]]
+  [[ "$output" == *"1 of 2 items open"* ]]
+}
+
+@test "an empty finish-first list is settled" {
+  printf '# Handoff\n\n## Finish first\n\n## Open state\n' > "$TMP/draft.md"
+  run "$SKILL/list.sh" "$TMP/draft.md"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"settled: 0 items"* ]]
 }
