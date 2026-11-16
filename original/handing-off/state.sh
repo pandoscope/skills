@@ -216,7 +216,10 @@ handoff_context_tokens() {
     # cannot match inside "cache_read_input_tokens", because the
     # opening quote only ever precedes the full key.
     local line in cr cc
-    line=$(grep '"type": *"assistant"' "$1" | grep '"usage"' | tail -1 || true)
+    # Claude Code writes an API error as an assistant line with model
+    # <synthetic> and all-zero usage; that line measures nothing.
+    line=$(grep '"type": *"assistant"' "$1" | grep '"usage"' \
+               | grep -v '"model": *"<synthetic>"' | tail -1 || true)
     [ -n "$line" ] || return 0
     in=$(printf '%s' "$line" | sed -n 's/.*"input_tokens":\([0-9]\{1,\}\).*/\1/p')
     cr=$(printf '%s' "$line" | sed -n 's/.*"cache_read_input_tokens":\([0-9]\{1,\}\).*/\1/p')
