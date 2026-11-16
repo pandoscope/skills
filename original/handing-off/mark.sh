@@ -33,12 +33,15 @@ transcript=${HANDOFF_TRANSCRIPT:-}
 if [ -z "$transcript" ]; then
     # A loop, not find | sort | head -1: under pipefail, sort dies of
     # SIGPIPE once head has left and the list outgrows the pipe
-    # (skills#245). -nt also needs no GNU find -printf.
+    # (skills#245). -nt also needs no GNU find -printf. Depth 2 holds
+    # the sessions' own transcripts, projects/<project>/<session>.jsonl;
+    # subagents write theirs deeper, below <session>/subagents/.
     while IFS= read -r candidate; do
         if [ -z "$transcript" ] || [ "$candidate" -nt "$transcript" ]; then
             transcript=$candidate
         fi
-    done < <(find "$HOME/.claude/projects" -name '*.jsonl' -type f 2>/dev/null)
+    done < <(find "$HOME/.claude/projects" -mindepth 2 -maxdepth 2 \
+                   -name '*.jsonl' -type f 2>/dev/null)
 fi
 
 # sed, not a JSON tool: the consumer may lack one. The quoted key
