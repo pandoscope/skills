@@ -239,3 +239,21 @@ legacy_marker() {
   [ "$status" -eq 2 ]
   [[ "$output" == *"$TMP/explicit.json"* ]]
 }
+
+@test "marking retires the old shared marker of the same session" {
+  transcript "$PROJECTS/session-a.jsonl" 1000
+  legacy_marker session-a
+  HANDOFF_TRANSCRIPT="$PROJECTS/session-a.jsonl" "$SKILL/mark.sh" "$TMP/handoff.md"
+  rm "$HOME/.claude/handoff-state/session-a.json"
+  run "$SKILL/guard.sh" < <(hook_input session-a)
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"no handoff marker"* ]]
+}
+
+@test "marking leaves another session's old shared marker in place" {
+  transcript "$PROJECTS/session-a.jsonl" 1000
+  transcript "$PROJECTS/session-b.jsonl" 1000
+  legacy_marker session-b
+  HANDOFF_TRANSCRIPT="$PROJECTS/session-a.jsonl" "$SKILL/mark.sh" "$TMP/handoff.md"
+  [ -e "$HOME/.claude/handoff-state.json" ]
+}
