@@ -107,3 +107,13 @@ pid_file() {
   grep -q '"context_tokens":200000' "$HOME/.claude/handoff-state/session-a.json"
   [ ! -e "$HOME/.claude/handoff-state/session-b.json" ]
 }
+
+@test "mark takes its session from CLAUDE_CODE_SESSION_ID when no pid file names one" {
+  transcript "$PROJECTS/session-a.jsonl" 200000
+  touch -d '1 minute ago' "$PROJECTS/session-a.jsonl"
+  transcript "$PROJECTS/session-b.jsonl" 1000
+  run env CLAUDE_CODE_SESSION_ID=session-a "$SKILL/mark.sh" "$TMP/handoff.md"
+  [ "$status" -eq 0 ]
+  grep -q '"context_tokens":200000' "$HOME/.claude/handoff-state/session-a.json"
+  [ ! -e "$HOME/.claude/handoff-state/session-b.json" ]
+}
