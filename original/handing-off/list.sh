@@ -16,9 +16,10 @@
 # postponed, names the trigger that brings it back:
 #   - [x] model: run the probes (postponed until: the probe ticket closes)
 # DECISION:SCOPE — The owners are "model" and "principal", the two roles
-# the flow knows. Another word before the colon fails as an unknown
-# owner, named in the message; no word fails as no owner. The principal
-# ruled so when skills#267 was implemented.
+# the flow knows. Another word before the colon fails with a message of
+# its own that names the word, "unknown owner: <word>"; an item with no
+# owner word fails as "no owner". The principal decided so on the
+# review of the pull request, as skills#267 asks.
 set -euo pipefail
 draft=${1:?usage: list.sh <draft>}
 if [ ! -f "$draft" ]; then
@@ -52,7 +53,7 @@ awk '
             }
         }
         else if (match(text, /^[A-Za-z][A-Za-z0-9_-]*:[[:space:]]/)) {
-            print "unknown owner " substr(text, 1, RLENGTH - 2) ": " text; open++
+            print "unknown owner: " substr(text, 1, RLENGTH - 2) " (in \"" text "\")"; open++
         }
         else { print "no owner: " text; open++ }
         next
