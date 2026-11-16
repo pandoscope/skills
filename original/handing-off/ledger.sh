@@ -56,3 +56,54 @@ if ! reason=$(read_view "$view"); then
          "skips its ledger step"
     exit 0
 fi
+
+if [ "$command" = view ]; then
+    cat "$view"
+    exit 0
+fi
+
+draft=$2
+if [ ! -f "$draft" ]; then
+    echo "ledger.sh: no draft at $draft" >&2
+    exit 2
+fi
+# DECISION:SCOPE — An item names its thread as "(thread: <slug>)", in
+# the notation of "(dropped: ...)" and "(postponed until: ...)";
+# skills#267 left the notation open.
+# One tab-separated line per ticked item with a thread slug:
+# <event> <slug> [<reason or trigger>]. The item notation is list.sh's.
+events=$(awk '
+    function inside(text, key,    start) {
+        if (!match(text, "\\(" key ":[[:space:]]*[^)]*\\)")) return ""
+        start = index(substr(text, RSTART), ":") + 1
+        text = substr(text, RSTART + start - 1, RLENGTH - start)
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", text)
+        return text
+    }
+    /^#+[[:space:]]/ { in_list = ($0 ~ /^#+[[:space:]]+Finish first[[:space:]]*$/); next }
+    in_list && /^[[:space:]]*[-*][[:space:]]+\[[xX]\][[:space:]]/ {
+        slug = inside($0, "thread")
+        if (slug == "") next
+        if ((why = inside($0, "dropped")) != "") print "dropped\t" slug "\t" why
+        else if ((when = inside($0, "postponed until")) != "") print "parked\t" slug "\t" when
+        else print "completed\t" slug
+    }
+' "$draft")
+
+count=0
+while IFS=$'\t' read -r event slug detail; do
+    [ -n "$event" ] || continue
+    case "$event" in
+        dropped) set -- --note "$detail" ;;
+        parked) set -- --trigger "$detail" ;;
+        *) set -- ;;
+    esac
+    if ! out=$(node "$ledger" append --ev "$event" --thread "$slug" "$@" 2>&1); then
+        echo "ledger.sh: the ledger refused $event for thread $slug after" \
+             "$count events: $out" >&2
+        exit 1
+    fi
+    count=$((count + 1))
+    echo "ledger: $event $slug"
+done <<< "$events"
+echo "ledger: $count events written"
