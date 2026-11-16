@@ -81,7 +81,8 @@ handoff_json_field() {
 #      key sessionId. Not a documented interface, hence the fallbacks.
 #   3. CLAUDE_CODE_SESSION_ID, which Claude Code sets in the model's
 #      shell
-#   4. the newest transcript (handoff_newest_transcript)
+#   4. the newest transcript (handoff_newest_transcript), with a
+#      warning on stderr: it may be another session's
 # Prints nothing when none names a session.
 handoff_own_session() {
     if [ -n "${HANDOFF_TRANSCRIPT:-}" ]; then
@@ -106,7 +107,14 @@ handoff_own_session() {
         printf '%s\n' "$CLAUDE_CODE_SESSION_ID"
         return 0
     fi
-    handoff_session_of_transcript "$(handoff_newest_transcript)"
+    local newest
+    newest=$(handoff_newest_transcript)
+    if [ -n "$newest" ]; then
+        echo "handing-off: no pid file or CLAUDE_CODE_SESSION_ID names" \
+             "this session; taking the newest transcript, $newest —" \
+             "set HANDOFF_TRANSCRIPT if that is another session's" >&2
+    fi
+    handoff_session_of_transcript "$newest"
 }
 
 # Print the transcript of a session.
