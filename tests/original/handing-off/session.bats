@@ -175,3 +175,65 @@ legacy_marker() {
   run "$SKILL/verify.sh" < <(hook_input session-a)
   [[ "$output" == *"no handoff marker"* ]]
 }
+
+# --- edges of the lookup -------------------------------------------
+
+@test "mark fails when no session can be found" {
+  run "$SKILL/mark.sh" "$TMP/handoff.md"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no session to mark"* ]]
+}
+
+@test "guard blocks a hook input that names no session" {
+  run "$SKILL/guard.sh" <<< '{"hook_event_name":"PreCompact"}'
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"the hook input names no session"* ]]
+}
+
+@test "verify reports an unguarded compaction for a hook input that names no session" {
+  run "$SKILL/verify.sh" <<< '{"hook_event_name":"SessionStart"}'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"no handoff marker"* ]]
+}
+
+@test "check fails when no session can be found" {
+  run "$SKILL/check.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no session found"* ]]
+}
+
+@test "HANDOFF_TRANSCRIPT outranks the pid file" {
+  transcript "$PROJECTS/session-a.jsonl" 1000
+  transcript "$PROJECTS/session-b.jsonl" 1000
+  pid_file 4242 session-b
+  run env CLAUDE_PID=4242 HANDOFF_TRANSCRIPT="$PROJECTS/session-a.jsonl" "$SKILL/mark.sh" "$TMP/handoff.md"
+  [ "$status" -eq 0 ]
+  [ -e "$HOME/.claude/handoff-state/session-a.json" ]
+  [ ! -e "$HOME/.claude/handoff-state/session-b.json" ]
+}
+
+@test "a pid file without a sessionId falls through to CLAUDE_CODE_SESSION_ID" {
+  transcript "$PROJECTS/session-a.jsonl" 1000
+  mkdir -p "$HOME/.claude/sessions"
+  echo '{"pid":4242}' > "$HOME/.claude/sessions/4242.json"
+  run env CLAUDE_PID=4242 CLAUDE_CODE_SESSION_ID=session-a "$SKILL/mark.sh" "$TMP/handoff.md"
+  [ "$status" -eq 0 ]
+  [ -e "$HOME/.claude/handoff-state/session-a.json" ]
+}
+
+@test "a session's own marker outranks an old shared marker naming it" {
+  transcript "$PROJECTS/session-a.jsonl" 1000
+  echo "the new handoff" > "$TMP/new.md"
+  legacy_marker session-a
+  HANDOFF_TRANSCRIPT="$PROJECTS/session-a.jsonl" "$SKILL/mark.sh" "$TMP/new.md"
+  run "$SKILL/verify.sh" < <(hook_input session-a)
+  [[ "$output" == *"The latest handoff is $TMP/new.md"* ]]
+}
+
+@test "HANDOFF_STATE outranks an old shared marker" {
+  transcript "$PROJECTS/session-a.jsonl" 1000
+  legacy_marker session-a
+  run env HANDOFF_STATE="$TMP/explicit.json" "$SKILL/guard.sh" < <(hook_input session-a)
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"$TMP/explicit.json"* ]]
+}
