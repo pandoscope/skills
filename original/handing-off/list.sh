@@ -9,6 +9,8 @@
 #
 # The list is the checkbox list between the "Finish first" heading and
 # the next heading. An item is a line "- [ ] ..." or "- [x] ...".
+# An item is settled when it is ticked and names its owner, "model:" or
+# "principal:", first.
 set -euo pipefail
 draft=${1:?usage: list.sh <draft>}
 if [ ! -f "$draft" ]; then
@@ -23,6 +25,7 @@ awk '
         text = $0
         sub(/^[[:space:]]*[-*][[:space:]]+\[[ xX]\][[:space:]]+/, "", text)
         if (!ticked) { print "unticked: " text; open++ }
+        else if (text !~ /^(model|principal):[[:space:]]/) { print "no owner: " text; open++ }
     }
     END {
         if (open) { printf "finish-first list not settled: %d of %d items open\n", open, items; exit 1 }
