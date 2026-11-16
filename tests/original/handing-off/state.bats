@@ -25,3 +25,13 @@ teardown() { rm -rf "$TMP"; }
   . "$SKILL/state.sh"
   [ "$(handoff_json_field handoff_path "$(cat "$HANDOFF_STATE")")" = "$dir/handoff.md" ]
 }
+
+@test "marking keeps the phase and the draft path of the state" {
+  echo '{"phase":"written","draft_path":"/x/draft.md"}' > "$HANDOFF_STATE"
+  echo "a handoff" > "$TMP/handoff.md"
+  run "$SKILL/mark.sh" "$TMP/handoff.md"
+  [ "$status" -eq 0 ]
+  grep -q '"phase":"written"' "$HANDOFF_STATE"
+  grep -q '"draft_path":"/x/draft.md"' "$HANDOFF_STATE"
+  grep -q '"handoff_path":"'"$TMP"'/handoff.md"' "$HANDOFF_STATE"
+}

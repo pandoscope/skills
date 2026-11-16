@@ -174,3 +174,27 @@ MD
   [ "$status" -eq 0 ]
   [[ "$output" == *"no handoff marker"* ]]
 }
+
+# --- a state without a marker (skills#267) --------------------------
+# Run 1 of handing-off leaves a state with a phase and no marker.
+
+@test "guard blocks compaction on a state that holds a phase but no marker" {
+  echo '{"phase":"listed","draft_path":"/x/draft.md"}' > "$HANDOFF_STATE"
+  run "$SKILL/guard.sh" <<< '{"session_id":"s1"}'
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"COMPACTION BLOCKED: no handoff marker"* ]]
+}
+
+@test "verify reports a state that holds a phase but no marker as unguarded" {
+  echo '{"phase":"listed","draft_path":"/x/draft.md"}' > "$HANDOFF_STATE"
+  run "$SKILL/verify.sh" <<< '{"session_id":"s1"}'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"no handoff marker"* ]]
+}
+
+@test "check fails on a state that holds a phase but no marker" {
+  echo '{"phase":"listed","draft_path":"/x/draft.md"}' > "$HANDOFF_STATE"
+  run "$SKILL/check.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"NO FRESHNESS MARKER"* ]]
+}
