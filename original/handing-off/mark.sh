@@ -5,9 +5,9 @@
 # Env:   HANDOFF_STATE      marker path (default
 #                           ~/.claude/handoff-state/<session-id>.json,
 #                           see state.sh)
-#        HANDOFF_TRANSCRIPT transcript path; unset = newest *.jsonl under
-#                           ~/.claude/projects (the live transcript is the
-#                           most recently written one)
+#        HANDOFF_TRANSCRIPT transcript path; unset = this session's
+#                           transcript (lookup order in state.sh,
+#                           handoff_own_session)
 #
 # The marker records the context size at handoff time: the token sum
 # (prompt + cache reads + cache writes) of the transcript's last
@@ -33,26 +33,13 @@ handoff="$(cd "$(dirname "$handoff")" && pwd)/$(basename "$handoff")"
 # shellcheck source=original/handing-off/state.sh
 . "$(dirname "${BASH_SOURCE[0]}")/state.sh"
 
-transcript=${HANDOFF_TRANSCRIPT:-}
-if [ -z "$transcript" ]; then
-    # A loop, not find | sort | head -1: under pipefail, sort dies of
-    # SIGPIPE once head has left and the list outgrows the pipe
-    # (skills#245). -nt also needs no GNU find -printf. Depth 2 holds
-    # the sessions' own transcripts, projects/<project>/<session>.jsonl;
-    # subagents write theirs deeper, below <session>/subagents/.
-    while IFS= read -r candidate; do
-        if [ -z "$transcript" ] || [ "$candidate" -nt "$transcript" ]; then
-            transcript=$candidate
-        fi
-    done < <(find "$HOME/.claude/projects" -mindepth 2 -maxdepth 2 \
-                   -name '*.jsonl' -type f 2>/dev/null)
-fi
-
-session=$(handoff_session_of_transcript "$transcript")
+session=$(handoff_own_session)
+transcript=$(handoff_transcript_of_session "$session")
 state=$(handoff_marker_path "$session")
 if [ -z "$state" ]; then
-    echo "mark.sh: no transcript found under $HOME/.claude/projects," \
-         "so no session to mark — set HANDOFF_TRANSCRIPT or HANDOFF_STATE" >&2
+    echo "mark.sh: no session to mark — no pid file for CLAUDE_PID and" \
+         "no transcript under $HOME/.claude/projects; set" \
+         "HANDOFF_TRANSCRIPT or HANDOFF_STATE" >&2
     exit 1
 fi
 

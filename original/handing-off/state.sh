@@ -17,16 +17,33 @@ handoff_session_of_transcript() {
     basename "$1" .jsonl
 }
 
+# Tell whether a session id is a plain name, safe as a file name and
+# as a find -name pattern.
+#   $1  session id
+# Returns 0 for a letter or digit followed by letters, digits, dots,
+# dashes and underscores; 1 for anything else, the empty id included.
+# Unlike the lookups here, it returns nonzero, for a caller to test.
+handoff_valid_session() {
+    case "$1" in
+        [A-Za-z0-9]*) ;;
+        *) return 1 ;;
+    esac
+    case "$1" in
+        *[!A-Za-z0-9._-]*) return 1 ;;
+    esac
+    return 0
+}
+
 # Print the marker path a session writes to.
 #   $1  session id
 # Prints $HANDOFF_STATE when set (one explicit file, whatever the
 # session), else ~/.claude/handoff-state/<session-id>.json. Prints
-# nothing when HANDOFF_STATE is unset and the session id is empty:
-# there is no marker to name.
+# nothing when HANDOFF_STATE is unset and the session id is not a
+# plain name (handoff_valid_session): there is no marker to name.
 handoff_marker_path() {
     if [ -n "${HANDOFF_STATE:-}" ]; then
         printf '%s\n' "$HANDOFF_STATE"
-    elif [ -n "$1" ]; then
+    elif handoff_valid_session "$1"; then
         printf '%s\n' "$HOME/.claude/handoff-state/$1.json"
     fi
 }
@@ -38,19 +55,78 @@ handoff_marker_path() {
 # sed, not a JSON tool, as in mark.sh: the consumer may lack one.
 handoff_session_of_hook_input() {
     local session
-    session=$(handoff_hook_field session_id "$1")
+    session=$(handoff_json_field session_id "$1")
     if [ -z "$session" ]; then
         session=$(handoff_session_of_transcript \
-                      "$(handoff_hook_field transcript_path "$1")")
+                      "$(handoff_json_field transcript_path "$1")")
     fi
     printf '%s\n' "$session"
 }
 
-# Print the string value a key carries in a hook input.
+# Print the string value a key carries in a one-object JSON text.
 #   $1  key
-#   $2  the hook input
+#   $2  the JSON text, a hook input or a pid file
 # Prints nothing when the key is absent.
-handoff_hook_field() {
+handoff_json_field() {
     printf '%s\n' "$2" \
         | sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p"
+}
+
+# Print the session id of the session that runs the calling script.
+# For the scripts the model runs, mark.sh and check.sh; the hooks take
+# the session from their input instead.
+# The first of these that names a session wins:
+#   1. HANDOFF_TRANSCRIPT: the session of that transcript
+#   2. Claude Code's pid file, ~/.claude/sessions/$CLAUDE_PID.json,
+#      key sessionId. Not a documented interface, hence the fallback.
+#   3. the newest transcript (handoff_newest_transcript)
+# Prints nothing when none names a session.
+handoff_own_session() {
+    if [ -n "${HANDOFF_TRANSCRIPT:-}" ]; then
+        handoff_session_of_transcript "$HANDOFF_TRANSCRIPT"
+        return 0
+    fi
+    local pid_file session
+    pid_file="$HOME/.claude/sessions/${CLAUDE_PID:-}.json"
+    if [ -n "${CLAUDE_PID:-}" ] && [ -f "$pid_file" ]; then
+        session=$(handoff_json_field sessionId "$(cat "$pid_file")")
+        if [ -n "$session" ]; then
+            printf '%s\n' "$session"
+            return 0
+        fi
+    fi
+    handoff_session_of_transcript "$(handoff_newest_transcript)"
+}
+
+# Print the transcript of a session.
+#   $1  session id
+# Prints $HANDOFF_TRANSCRIPT when set, else
+# ~/.claude/projects/<project>/<session-id>.jsonl; nothing when no
+# such file exists or the session id is not a plain name.
+handoff_transcript_of_session() {
+    if [ -n "${HANDOFF_TRANSCRIPT:-}" ]; then
+        printf '%s\n' "$HANDOFF_TRANSCRIPT"
+        return 0
+    fi
+    handoff_valid_session "$1" || return 0
+    find "$HOME/.claude/projects" -mindepth 2 -maxdepth 2 \
+         -name "$1.jsonl" -type f -print -quit 2>/dev/null || true
+}
+
+# Print the newest session transcript on this machine.
+# Prints nothing when ~/.claude/projects holds none.
+handoff_newest_transcript() {
+    # A loop, not find | sort | head -1: under pipefail, sort dies of
+    # SIGPIPE once head has left and the list outgrows the pipe
+    # (skills#245). -nt also needs no GNU find -printf. Depth 2 holds
+    # the sessions' own transcripts, projects/<project>/<session>.jsonl;
+    # subagents write theirs deeper, below <session>/subagents/.
+    local candidate newest=""
+    while IFS= read -r candidate; do
+        if [ -z "$newest" ] || [ "$candidate" -nt "$newest" ]; then
+            newest=$candidate
+        fi
+    done < <(find "$HOME/.claude/projects" -mindepth 2 -maxdepth 2 \
+                   -name '*.jsonl' -type f 2>/dev/null)
+    printf '%s\n' "$newest"
 }
