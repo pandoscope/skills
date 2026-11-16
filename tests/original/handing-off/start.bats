@@ -72,3 +72,34 @@ usage_line() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"unknown phase swept"* ]]
 }
+
+@test "with the local state deleted, an invocation restores the phase and the draft from the store" {
+  sed -i 's/- \[ \]/- [x]/' "$TMP/state/s1.draft.md"
+  "$SKILL/phase.sh" written > /dev/null
+  cp "$TMP/state/s1.draft.md" "$TMP/draft.expected"
+  rm "$HANDOFF_STATE" "$TMP/state/s1.draft.md"
+  run "$SKILL/start.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"restored the phase written and the draft"* ]]
+  [[ "$output" == *"starts: run 2 at step 5"* ]]
+  cmp "$TMP/draft.expected" "$TMP/state/s1.draft.md"
+  . "$SKILL/state.sh"
+  [ "$(handoff_json_field draft_path "$(cat "$HANDOFF_STATE")")" = "$TMP/state/s1.draft.md" ]
+}
+
+@test "a restored marker keeps its token count" {
+  usage_line 100000
+  "$SKILL/mark.sh" "$TMP/state/s1.draft.md" > /dev/null
+  sed -i 's/- \[ \]/- [x]/' "$TMP/state/s1.draft.md"
+  "$SKILL/phase.sh" written > /dev/null
+  . "$SKILL/state.sh"
+  handoff_state_set "$HANDOFF_STATE" phase complete
+  . "$SKILL/store.sh"
+  handoff_store_push s1 "$HANDOFF_STATE" "$TMP/state/s1.draft.md"
+  rm "$HANDOFF_STATE"
+  usage_line 120000
+  run "$SKILL/start.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"starts: the /compact proposal again"* ]]
+  grep -q '"context_tokens":100000' "$HANDOFF_STATE"
+}
