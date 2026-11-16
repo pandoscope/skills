@@ -38,3 +38,16 @@ MD
   [[ "$output" == *"unticked: model: tick the [x] boxes in the README"* ]]
   [[ "$output" != *"write the tickets"* ]]
 }
+
+@test "the list check fails on an item without an owner and names it" {
+  draft <<'MD'
+- [x] write the tickets
+- [x] reviewer: read the diff
+- [x] model: run the suite
+MD
+  run "$SKILL/list.sh" "$TMP/draft.md"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no owner: write the tickets"* ]]
+  [[ "$output" == *"no owner: reviewer: read the diff"* ]]
+  [[ "$output" != *"run the suite"* ]]
+}
