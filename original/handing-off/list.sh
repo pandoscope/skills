@@ -17,6 +17,15 @@ if [ ! -f "$draft" ]; then
 fi
 awk '
     /^#+[[:space:]]/ { in_list = ($0 ~ /^#+[[:space:]]+Finish first[[:space:]]*$/); next }
-    in_list && /^[[:space:]]*[-*][[:space:]]+\[[ xX]\][[:space:]]/ { items++ }
-    END { printf "finish-first list settled: %d items\n", items }
+    in_list && /^[[:space:]]*[-*][[:space:]]+\[[ xX]\][[:space:]]/ {
+        items++
+        ticked = ($0 ~ /^[[:space:]]*[-*][[:space:]]+\[[xX]\]/)
+        text = $0
+        sub(/^[[:space:]]*[-*][[:space:]]+\[[ xX]\][[:space:]]+/, "", text)
+        if (!ticked) { print "unticked: " text; open++ }
+    }
+    END {
+        if (open) { printf "finish-first list not settled: %d of %d items open\n", open, items; exit 1 }
+        printf "finish-first list settled: %d items\n", items
+    }
 ' "$draft"
