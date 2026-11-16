@@ -9,14 +9,16 @@
 # draft does not exist.
 #
 # The list is the checkbox list between the "Finish first" heading and
-# the next heading. An item is a line "- [ ] ..." or "- [x] ...".
+# the next heading of the same or a higher level; fenced blocks are
+# skipped. An item is a line "- [ ] ..." or "- [x] ...", with "-", "*"
+# or "+", at any indent. Any other list line in the list fails.
 # An item is settled when it is ticked, names its owner first, and, when
 # postponed, names the trigger that brings it back:
 #   - [x] model: run the probes (postponed until: the probe ticket closes)
 # DECISION:SCOPE — The owners are "model" and "principal", the two roles
-# the flow knows; any other word before the colon counts as no owner.
-# The principal ruled so when skills#267 was implemented: a colon in
-# free text cannot then pass for an owner.
+# the flow knows. Another word before the colon fails as an unknown
+# owner, named in the message; no word fails as no owner. The principal
+# ruled so when skills#267 was implemented.
 set -euo pipefail
 draft=${1:?usage: list.sh <draft>}
 if [ ! -f "$draft" ]; then
@@ -24,18 +26,43 @@ if [ ! -f "$draft" ]; then
     exit 2
 fi
 awk '
-    /^#+[[:space:]]/ { in_list = ($0 ~ /^#+[[:space:]]+Finish first[[:space:]]*$/); found += in_list; next }
-    in_list && /^[[:space:]]*[-*][[:space:]]+\[[ xX]\][[:space:]]/ {
+    { sub(/\r$/, "") }
+    # A fenced block is example text: it neither opens nor ends the
+    # list, and its lines are no items.
+    /^[[:space:]]*(```|~~~)/ { fenced = !fenced; next }
+    fenced { next }
+    /^#+[[:space:]]/ {
+        level = index($0, " ") - 1
+        if ($0 ~ /^#+[[:space:]]+Finish first[[:space:]]*$/) { in_list = 1; list_level = level; found++; next }
+        # Only a heading of the same or a higher level ends the list.
+        if (in_list && level <= list_level) in_list = 0
+        next
+    }
+    !in_list { next }
+    /^[[:space:]]*[-*+][[:space:]]+\[[ xX]\][[:space:]]/ {
         items++
-        ticked = ($0 ~ /^[[:space:]]*[-*][[:space:]]+\[[xX]\]/)
+        ticked = ($0 ~ /^[[:space:]]*[-*+][[:space:]]+\[[xX]\]/)
         text = $0
-        sub(/^[[:space:]]*[-*][[:space:]]+\[[ xX]\][[:space:]]+/, "", text)
+        sub(/^[[:space:]]*[-*+][[:space:]]+\[[ xX]\][[:space:]]+/, "", text)
         if (!ticked) { print "unticked: " text; open++ }
-        else if (text !~ /^(model|principal):[[:space:]]/) { print "no owner: " text; open++ }
-        else if (text ~ /\([[:space:]]*postponed/ \
-                 && text !~ /\([[:space:]]*postponed until:[[:space:]]*[^)[:space:]][^)]*\)/) {
-            print "postponed without trigger: " text; open++
+        else if (text ~ /^(model|principal):[[:space:]]/) {
+            if (text ~ /\([[:space:]]*postponed/ \
+                && text !~ /\([[:space:]]*postponed until:[[:space:]]*[^)[:space:]][^)]*\)/) {
+                print "postponed without trigger: " text; open++
+            }
         }
+        else if (match(text, /^[A-Za-z][A-Za-z0-9_-]*:[[:space:]]/)) {
+            print "unknown owner " substr(text, 1, RLENGTH - 2) ": " text; open++
+        }
+        else { print "no owner: " text; open++ }
+        next
+    }
+    # Any other list line inside the list is an item the check cannot
+    # read; it fails rather than pass unread.
+    /^[[:space:]]*([-*+]|[0-9]+[.)])([[:space:]]|\[|$)/ || /^[[:space:]]*[-*+]\[/ {
+        line = $0
+        sub(/^[[:space:]]+/, "", line)
+        print "not a checkbox item: " line; open++
     }
     END {
         if (!found) { print "no \"Finish first\" heading in " FILENAME; exit 1 }
