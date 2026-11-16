@@ -64,3 +64,16 @@ MD
   [[ "$output" == *"postponed without trigger: model: rerun the suite (postponed until: )"* ]]
   [[ "$output" != *"write the ADR"* ]]
 }
+
+@test "the list check fails on a draft without a finish-first list" {
+  printf '# Handoff\n\n## Open state\n' > "$TMP/draft.md"
+  run "$SKILL/list.sh" "$TMP/draft.md"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no \"Finish first\" heading"* ]]
+}
+
+@test "the list check refuses a draft that does not exist" {
+  run "$SKILL/list.sh" "$TMP/none.md"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"no draft at $TMP/none.md"* ]]
+}
