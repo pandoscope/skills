@@ -40,7 +40,7 @@ fi
 tokens_then=$(sed -n 's/.*"context_tokens":\([0-9]\{1,\}\).*/\1/p' "$state")
 transcript=$(handoff_json_field transcript_path "$input")
 [ -f "${transcript:-/nonexistent}" ] \
-    || transcript=$(sed -n 's/.*"transcript_path":"\([^"]*\)".*/\1/p' "$state")
+    || transcript=$(handoff_json_field transcript_path "$(cat "$state")")
 tokens_now=$(handoff_context_tokens "$transcript")
 if [ -n "$tokens_then" ] && [ -n "$tokens_now" ]; then
     grown=$(( tokens_now - tokens_then ))

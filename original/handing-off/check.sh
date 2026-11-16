@@ -72,7 +72,7 @@ fi
     "no marker for this session at ${state:-(no session found)} — a compaction gate reading it treats the handoff as absent" \
     "run ./mark.sh <handoff-file> [url]"
 
-handoff=$(sed -n 's/.*"handoff_path":"\([^"]*\)".*/\1/p' "$state")
+handoff=$(handoff_json_field handoff_path "$(cat "$state")")
 if [ -z "$handoff" ] || [ ! -s "$handoff" ]; then
     fail "HANDOFF FILE MISSING OR EMPTY" \
         "the marker names '$handoff' but no such non-empty file exists" \

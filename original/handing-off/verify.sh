@@ -27,8 +27,9 @@ if [ -z "$state" ] || [ ! -f "$state" ]; then
          "the ledger before new work builds on it."
     exit 0
 fi
-path=$(sed -n 's/.*"handoff_path":"\([^"]*\)".*/\1/p' "$state")
-url=$(sed -n 's/.*"published_url":"\([^"]*\)".*/\1/p' "$state")
+marker=$(cat "$state")
+path=$(handoff_json_field handoff_path "$marker")
+url=$(handoff_json_field published_url "$marker")
 
 # First table whose header names Item and Next; rows without header
 # and separator. Multiple tables in the handoff are fine — the
