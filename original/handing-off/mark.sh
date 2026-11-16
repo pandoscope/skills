@@ -53,7 +53,8 @@ if [ -z "$tokens" ]; then
 fi
 
 handoff_state_set "$state" \
-    written_at "$(date -u +%FT%TZ)" handoff_path "$handoff" \
+    written_at "$(date -u +%FT%TZ)" written_epoch "$(date +%s)" \
+    handoff_path "$handoff" \
     published_url "$url" transcript_path "$transcript" \
     context_tokens "$tokens"
 echo "marker written: $state"

@@ -31,7 +31,7 @@ handoff_json_number() {
 # The fields of the per-session state, in the order the writer writes
 # them. Numbers are written bare, everything else as a JSON string.
 HANDOFF_STATE_STRINGS="written_at handoff_path published_url transcript_path phase draft_path"
-HANDOFF_STATE_NUMBERS="context_tokens"
+HANDOFF_STATE_NUMBERS="written_epoch context_tokens"
 
 # Print a value escaped for a JSON string: \ and " get a backslash.
 #   $1  value, free of control characters

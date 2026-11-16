@@ -14,6 +14,20 @@ handoff_has_marker() {
         && [ -n "$(handoff_json_field handoff_path "$(cat "$1")")" ]
 }
 
+# Print when a marker was written, in seconds since the epoch.
+#   $1  state file carrying a marker
+# Prints its written_epoch; the file's modification time for a marker
+# written before that field existed. The file's time alone is wrong
+# since the state holds more than the marker: a phase write touches it.
+handoff_marker_epoch() {
+    local epoch
+    epoch=$(handoff_json_number written_epoch "$(cat "$1")")
+    case "$epoch" in
+        ''|null) date -r "$1" +%s ;;
+        *) printf '%s\n' "$epoch" ;;
+    esac
+}
+
 # Print why a marker is stale; nothing when it is fresh.
 #   $1  state file carrying a marker
 #   $2  the session's transcript, the measure of its context now; may
@@ -41,7 +55,7 @@ handoff_marker_staleness() {
         fi
         return 0
     fi
-    age=$(( $(date +%s) - $(date -r "$1" +%s) ))
+    age=$(( $(date +%s) - $(handoff_marker_epoch "$1") ))
     max="${HANDOFF_MAX_AGE:-3600}"
     if [ "$age" -gt "$max" ]; then
         echo "is ${age}s old and carries no token measure to judge growth against"

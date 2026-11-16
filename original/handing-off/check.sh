@@ -8,6 +8,8 @@ set -euo pipefail
 skill_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=original/handing-off/state.sh
 . "$skill_dir/state.sh"
+# shellcheck source=original/handing-off/store.sh
+. "$skill_dir/store.sh"
 # With HANDOFF_STATE set, the marker needs no session, and the lookup
 # would only print its newest-transcript warning.
 session=""
@@ -81,12 +83,43 @@ fi
 
 # Age here means "written by this handing-off run", nothing more —
 # growth-based freshness across the session is the hooks' comparison.
-age=$(( $(date +%s) - $(date -r "$state" +%s) ))
+marked=$(handoff_marker_epoch "$state")
+age=$(( $(date +%s) - marked ))
 [ "$age" -le 900 ] || fail "MARKER PREDATES THIS RUN" \
     "the marker is ${age}s old — written by an earlier run, so this handoff was never marked" \
     "rerun ./mark.sh <handoff-file> [url] as this run's last step"
+[ "$(date -r "$handoff" +%s)" -le "$marked" ] || fail "HANDOFF CHANGED AFTER THE MARKER" \
+    "$handoff changed after the marker was written, so the marker does not cover it" \
+    "rerun ./mark.sh <handoff-file> [url], then this check"
 
-echo "machine checks pass: marker fresh, handoff file present"
+# --- Run 2's criteria (skills#267): the list check decides, never the
+# model's word that the work is done.
+if ! list_report=$("$skill_dir/list.sh" "$handoff"); then
+    printf '%s\n' "$list_report"
+    fail "FINISH-FIRST LIST NOT SETTLED" \
+        "the list check names the open items above" \
+        "settle them, or end the turn with the phase listed (./phase.sh listed)"
+fi
+persisted=$(awk '
+    /^#+[[:space:]]/ { p = ($0 ~ /^#+[[:space:]]+Persisted[[:space:]]*$/); next }
+    p && /^[[:space:]]*[-*][[:space:]]+[^[:space:]]/ { n++ }
+    END { print n + 0 }' "$handoff")
+[ "$persisted" -gt 0 ] || fail "NO PERSISTED LIST" \
+    "$handoff has no \"Persisted\" heading with an item under it" \
+    "record the sweep's findings there, or the single item \"none\""
+
+handoff_state_set "$state" phase complete
+draft=$(handoff_json_field draft_path "$(cat "$state")")
+"$skill_dir/scan.sh" "$state" ${draft:+"$draft"} > /dev/null || fail "BLOCKED TERM IN THE STATE" \
+    "the outgoing scan found a blocked term; nothing was pushed" \
+    "run ./scan.sh on the state and the draft to see which"
+if ! handoff_store_push "$session" "$state" "$draft"; then
+    echo "handing-off: no store took this run's state; a resume into a" \
+         "new container loses this run"
+fi
+
+echo "machine checks pass: marker fresh, handoff file present, list settled," \
+     "Persisted list present; phase complete"
 cat <<'RESIDUE'
 Residue — verify by reading, or hand to the human:
 - the handoff is published and its URL recorded in the marker
