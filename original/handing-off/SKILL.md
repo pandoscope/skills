@@ -34,10 +34,18 @@ is the part chosen deliberately: what is open, why, and what continues.
 3. **Publish** the file wherever the installing project keeps session
    artifacts, and update the tickets and progress records the session
    touched. Completion: the handoff has a URL.
-4. **Mark freshness**: run `./mark.sh <handoff-file> [url]`. It records
-   the live transcript's current size into `$HANDOFF_STATE` (default
-   `~/.claude/handoff-state.json`) so hooks can tell a fresh handoff
-   from a stale one. Completion: mark.sh prints the marker path.
+4. **Mark freshness**: run `./mark.sh <handoff-file> [url]`.
+   It records this session's context size in the session's own marker,
+   `~/.claude/handoff-state/<session-id>.json`,
+   so the hooks can tell a fresh handoff from a stale one.
+   When it warns that it took the newest transcript,
+   check that the transcript it names is this session's:
+   its last lines hold this session's latest messages.
+   If it is another session's, delete the marker mark.sh printed:
+   it now holds this handoff under the other session's id,
+   and that session's guard must block until it marks again.
+   Then set `HANDOFF_TRANSCRIPT` to this session's transcript and rerun.
+   Completion: mark.sh prints the marker path.
 5. **Propose focus**: from what continues next, print one to three
    candidate `/compact <focus line>` commands, first one recommended,
    each in its own individual fenced code box — one command per box,
@@ -61,7 +69,8 @@ freshness, `PRECOMPACT_GUARD=off` overrides. The installing project
 contributes only registration: where a manager owns `settings.json`
 (a `managedBy` marker), its template must carry the two entries and
 `check.sh` prints exactly what to add; everywhere else `check.sh`
-installs them itself. `HANDOFF_STATE` and `HANDOFF_TRANSCRIPT`
-(transcript path override; unset = newest transcript under
-`~/.claude/projects`) remain the data contract all three scripts
-share.
+installs them itself.
+All four scripts resolve the marker through `state.sh`,
+which documents how each finds its session.
+`HANDOFF_STATE` names one explicit marker file for every session.
+`HANDOFF_TRANSCRIPT` selects the session by its transcript.
