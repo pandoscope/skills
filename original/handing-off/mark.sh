@@ -2,7 +2,9 @@
 # Write the freshness marker that hooks compare against.
 #
 # Usage: mark.sh <handoff-file> [published-url]
-# Env:   HANDOFF_STATE      marker path (default ~/.claude/handoff-state.json)
+# Env:   HANDOFF_STATE      marker path (default
+#                           ~/.claude/handoff-state/<session-id>.json,
+#                           see state.sh)
 #        HANDOFF_TRANSCRIPT transcript path; unset = newest *.jsonl under
 #                           ~/.claude/projects (the live transcript is the
 #                           most recently written one)
@@ -28,7 +30,9 @@ fi
 # silently (skills#174). No realpath: not every consumer has GNU tools.
 handoff="$(cd "$(dirname "$handoff")" && pwd)/$(basename "$handoff")"
 
-state=${HANDOFF_STATE:-$HOME/.claude/handoff-state.json}
+# shellcheck source=original/handing-off/state.sh
+. "$(dirname "${BASH_SOURCE[0]}")/state.sh"
+
 transcript=${HANDOFF_TRANSCRIPT:-}
 if [ -z "$transcript" ]; then
     # A loop, not find | sort | head -1: under pipefail, sort dies of
@@ -42,6 +46,14 @@ if [ -z "$transcript" ]; then
         fi
     done < <(find "$HOME/.claude/projects" -mindepth 2 -maxdepth 2 \
                    -name '*.jsonl' -type f 2>/dev/null)
+fi
+
+session=$(handoff_session_of_transcript "$transcript")
+state=$(handoff_marker_path "$session")
+if [ -z "$state" ]; then
+    echo "mark.sh: no transcript found under $HOME/.claude/projects," \
+         "so no session to mark — set HANDOFF_TRANSCRIPT or HANDOFF_STATE" >&2
+    exit 1
 fi
 
 # sed, not a JSON tool: the consumer may lack one. The quoted key
