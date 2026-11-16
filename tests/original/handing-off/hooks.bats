@@ -155,3 +155,14 @@ MD
   run "$SKILL/check.sh"
   [ "$status" -eq 0 ]
 }
+
+@test "guard still sees growth after a synthetic assistant line with zero usage" {
+  "$SKILL/mark.sh" "$TMP/handoff.md" > /dev/null
+  echo '{"type":"assistant","message":{"usage":{"input_tokens":700005,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":1}}}' \
+    >> "$TMP/transcript.jsonl"
+  echo '{"type":"assistant","message":{"model":"<synthetic>","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}' \
+    >> "$TMP/transcript.jsonl"
+  run "$SKILL/guard.sh" < /dev/null
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"marker is stale"* ]]
+}
