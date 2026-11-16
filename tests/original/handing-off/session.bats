@@ -77,3 +77,15 @@ hook_input() {
   run "$SKILL/guard.sh" <<< "{\"transcript_path\":\"$PROJECTS/session-a.jsonl\"}"
   [ "$status" -eq 0 ]
 }
+
+@test "verify injects the compacted session's handoff, not the last one marked" {
+  transcript "$PROJECTS/session-a.jsonl" 1000
+  transcript "$PROJECTS/session-b.jsonl" 1000
+  echo "handoff of a" > "$TMP/a.md"
+  echo "handoff of b" > "$TMP/b.md"
+  HANDOFF_TRANSCRIPT="$PROJECTS/session-a.jsonl" "$SKILL/mark.sh" "$TMP/a.md"
+  HANDOFF_TRANSCRIPT="$PROJECTS/session-b.jsonl" "$SKILL/mark.sh" "$TMP/b.md"
+  run "$SKILL/verify.sh" < <(hook_input session-a)
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"The latest handoff is $TMP/a.md"* ]]
+}
