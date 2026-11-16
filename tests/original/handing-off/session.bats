@@ -33,3 +33,13 @@ transcript() {
   grep -q "\"transcript_path\":\"$PROJECTS/live.jsonl\"" "$TMP/state.json"
   grep -q '"context_tokens":1234' "$TMP/state.json"
 }
+
+@test "mark skips a subagent's transcript that was written last" {
+  transcript "$PROJECTS/main.jsonl" 100
+  touch -d '1 minute ago' "$PROJECTS/main.jsonl"
+  transcript "$PROJECTS/main/subagents/agent-a1.jsonl" 5
+  run env HANDOFF_STATE="$TMP/state.json" "$SKILL/mark.sh" "$TMP/handoff.md"
+  [ "$status" -eq 0 ]
+  grep -q "\"transcript_path\":\"$PROJECTS/main.jsonl\"" "$TMP/state.json"
+  grep -q '"context_tokens":100' "$TMP/state.json"
+}
