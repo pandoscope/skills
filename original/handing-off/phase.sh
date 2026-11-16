@@ -40,6 +40,14 @@ if [ ! -s "$draft" ]; then
     exit 1
 fi
 
+# DECISION:SCOPE — The list check decides whether the list is settled,
+# not the model's word (skills#267), so the phase that says the list is
+# settled cannot be recorded past it.
+if [ "$phase" = written ] && ! "$here/list.sh" "$draft"; then
+    echo "phase.sh: the finish-first list is not settled; the phase" \
+         "stays as it was. Report the open items and end the turn" >&2
+    exit 1
+fi
 handoff_state_set "$state" phase "$phase" draft_path "$draft"
 if ! "$here/scan.sh" "$draft" "$state"; then
     echo "phase.sh: the scan found a blocked term; nothing was pushed." \
