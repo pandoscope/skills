@@ -108,7 +108,7 @@ pid_file() {
   [ ! -e "$HOME/.claude/handoff-state/session-b.json" ]
 }
 
-@test "mark takes its session from CLAUDE_CODE_SESSION_ID when no pid file names one" {
+@test "mark takes its session from CLAUDE_CODE_SESSION_ID, not the newest transcript" {
   transcript "$PROJECTS/session-a.jsonl" 200000
   touch -d '1 minute ago' "$PROJECTS/session-a.jsonl"
   transcript "$PROJECTS/session-b.jsonl" 1000
@@ -118,14 +118,15 @@ pid_file() {
   [ ! -e "$HOME/.claude/handoff-state/session-b.json" ]
 }
 
-@test "the pid file outranks CLAUDE_CODE_SESSION_ID while skills#268 has not compared them" {
+@test "CLAUDE_CODE_SESSION_ID outranks the pid file, with a warning when they disagree" {
   transcript "$PROJECTS/session-a.jsonl" 200000
   transcript "$PROJECTS/session-b.jsonl" 1000
   pid_file 4242 session-a
   run env CLAUDE_PID=4242 CLAUDE_CODE_SESSION_ID=session-b "$SKILL/mark.sh" "$TMP/handoff.md"
   [ "$status" -eq 0 ]
-  [ -e "$HOME/.claude/handoff-state/session-a.json" ]
-  [ ! -e "$HOME/.claude/handoff-state/session-b.json" ]
+  [ -e "$HOME/.claude/handoff-state/session-b.json" ]
+  [ ! -e "$HOME/.claude/handoff-state/session-a.json" ]
+  [[ "$output" == *"CLAUDE_CODE_SESSION_ID=session-b"*"session-a"* ]]
 }
 
 @test "mark warns when it can only guess the newest transcript" {
@@ -212,13 +213,14 @@ legacy_marker() {
   [ ! -e "$HOME/.claude/handoff-state/session-b.json" ]
 }
 
-@test "a pid file without a sessionId falls through to CLAUDE_CODE_SESSION_ID" {
+@test "a pid file without a sessionId falls through to the newest transcript" {
   transcript "$PROJECTS/session-a.jsonl" 1000
   mkdir -p "$HOME/.claude/sessions"
   echo '{"pid":4242}' > "$HOME/.claude/sessions/4242.json"
-  run env CLAUDE_PID=4242 CLAUDE_CODE_SESSION_ID=session-a "$SKILL/mark.sh" "$TMP/handoff.md"
+  run env CLAUDE_PID=4242 "$SKILL/mark.sh" "$TMP/handoff.md"
   [ "$status" -eq 0 ]
   [ -e "$HOME/.claude/handoff-state/session-a.json" ]
+  [[ "$output" == *"newest transcript"* ]]
 }
 
 @test "a session's own marker outranks an old shared marker naming it" {
