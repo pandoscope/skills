@@ -120,10 +120,10 @@ handoff_json_field() {
 # the session from their input instead.
 # The first of these that names a session wins:
 #   1. HANDOFF_TRANSCRIPT: the session of that transcript
-#   2. Claude Code's pid file, ~/.claude/sessions/$CLAUDE_PID.json,
-#      key sessionId. Not a documented interface, hence the fallbacks.
-#   3. CLAUDE_CODE_SESSION_ID, which Claude Code sets in the model's
-#      shell
+#   2. CLAUDE_CODE_SESSION_ID, which Claude Code sets in the model's
+#      shell, with a warning on stderr when the pid file disagrees
+#   3. Claude Code's pid file, ~/.claude/sessions/$CLAUDE_PID.json,
+#      key sessionId. Not a documented interface.
 #   4. the newest transcript (handoff_newest_transcript), with a
 #      warning on stderr: it may be another session's
 # Prints nothing when none names a session.
@@ -132,28 +132,35 @@ handoff_own_session() {
         handoff_session_of_transcript "$HANDOFF_TRANSCRIPT"
         return 0
     fi
-    local pid_file session
+    local pid_file pid_session=""
     pid_file="$HOME/.claude/sessions/${CLAUDE_PID:-}.json"
     if [ -n "${CLAUDE_PID:-}" ] && [ -f "$pid_file" ]; then
-        session=$(handoff_json_field sessionId "$(cat "$pid_file")")
-        if [ -n "$session" ]; then
-            printf '%s\n' "$session"
-            return 0
-        fi
+        pid_session=$(handoff_json_field sessionId "$(cat "$pid_file")")
     fi
-    # DECISION:SCOPE — The variable comes after the pid file, not
-    # before it as skills#255's review comment proposes: whether it
-    # equals the hook input's session_id on every host and after a
-    # compaction or a resume is skills#268's question 4, unanswered
-    # here. Move it first once that probe confirms it.
+    # DECISION:SCOPE — The variable comes before the pid file.
+    # skills#268 question 4 measured it on cloud (CLI 2.1.325): it
+    # equals the hook input's session_id and the transcript's file name
+    # before and after a compaction and after a resume into a new
+    # container. The hooks key the marker on session_id, so the variable
+    # names the marker they read. The macOS half of that question is
+    # unmeasured.
     if [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
+        if [ -n "$pid_session" ] && [ "$pid_session" != "$CLAUDE_CODE_SESSION_ID" ]; then
+            echo "handing-off: CLAUDE_CODE_SESSION_ID=$CLAUDE_CODE_SESSION_ID" \
+                 "and sessionId $pid_session in $pid_file disagree;" \
+                 "taking CLAUDE_CODE_SESSION_ID" >&2
+        fi
         printf '%s\n' "$CLAUDE_CODE_SESSION_ID"
+        return 0
+    fi
+    if [ -n "$pid_session" ]; then
+        printf '%s\n' "$pid_session"
         return 0
     fi
     local newest
     newest=$(handoff_newest_transcript)
     if [ -n "$newest" ]; then
-        echo "handing-off: no pid file or CLAUDE_CODE_SESSION_ID names" \
+        echo "handing-off: no CLAUDE_CODE_SESSION_ID or pid file names" \
              "this session; taking the newest transcript, $newest —" \
              "set HANDOFF_TRANSCRIPT if that is another session's" >&2
     fi
