@@ -7,6 +7,10 @@
 # .jsonl. Each session gets its own marker,
 # ~/.claude/handoff-state/<session-id>.json: one file shared by every
 # session let parallel sessions overwrite each other's marker.
+#
+# Every lookup exits 0. A lookup that finds nothing prints nothing;
+# find and cat errors on absent files are discarded, since an absent
+# file is an empty answer.
 
 # Print the session id a transcript belongs to.
 #   $1  transcript path
@@ -89,7 +93,6 @@ handoff_legacy_marker() {
 #   $1  the hook input, the JSON object Claude Code sends on stdin
 # Prints the value of its session_id; else the session of its
 # transcript_path; nothing when the input has neither.
-# sed, not a JSON tool, as in mark.sh: the consumer may lack one.
 handoff_session_of_hook_input() {
     local session
     session=$(handoff_json_field session_id "$1")
@@ -102,8 +105,11 @@ handoff_session_of_hook_input() {
 
 # Print the string value a key carries in a one-object JSON text.
 #   $1  key
-#   $2  the JSON text, a hook input or a pid file
-# Prints nothing when the key is absent.
+#   $2  the JSON text: a hook input, a pid file or a marker
+# Prints the value of the key's last occurrence on a line; nothing
+# when the key is absent. Reads flat string values only: a value with
+# an escaped quote is cut at that quote.
+# sed, not a JSON tool: the consumer may lack one.
 handoff_json_field() {
     printf '%s\n' "$2" \
         | sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p"
@@ -177,6 +183,9 @@ handoff_newest_transcript() {
     # (skills#245). -nt also needs no GNU find -printf. Depth 2 holds
     # the sessions' own transcripts, projects/<project>/<session>.jsonl;
     # subagents write theirs deeper, below <session>/subagents/.
+    # bash 3.2, macOS's default, compares -nt in whole seconds, so two
+    # transcripts written in the same second tie; the caller warns that
+    # this pick is a guess anyway.
     local candidate newest=""
     while IFS= read -r candidate; do
         if [ -z "$newest" ] || [ "$candidate" -nt "$newest" ]; then
@@ -185,4 +194,32 @@ handoff_newest_transcript() {
     done < <(find "$HOME/.claude/projects" -mindepth 2 -maxdepth 2 \
                    -name '*.jsonl' -type f 2>/dev/null)
     printf '%s\n' "$newest"
+}
+
+# Print a transcript's context size: the token sum (prompt + cache
+# reads + cache writes) of its last assistant message's usage, the
+# measure compaction acts on. mark.sh records it; guard.sh compares
+# against it.
+#   $1  transcript path
+# Prints nothing when the path is empty, names no file, or the
+# transcript holds no assistant usage yet.
+handoff_context_tokens() {
+    [ -n "$1" ] && [ -f "$1" ] || return 0
+    # DECISION:ARCH — One measure replaces mark.sh's sed copy and
+    # guard.sh's jq copy (skills#255). It stays jq-free, as mark.sh
+    # required, and takes the guard's selection: assistant messages
+    # only, since a user line can carry a subagent's usage in its tool
+    # result. The grep matches "type":"assistant" anywhere on a line,
+    # where jq read the top-level type only. In current transcripts only
+    # top-level assistant lines carry it; subagents write their own
+    # files. sed, not a JSON tool: the quoted key "input_tokens":
+    # cannot match inside "cache_read_input_tokens", because the
+    # opening quote only ever precedes the full key.
+    local line in cr cc
+    line=$(grep '"type": *"assistant"' "$1" | grep '"usage"' | tail -1 || true)
+    [ -n "$line" ] || return 0
+    in=$(printf '%s' "$line" | sed -n 's/.*"input_tokens":\([0-9]\{1,\}\).*/\1/p')
+    cr=$(printf '%s' "$line" | sed -n 's/.*"cache_read_input_tokens":\([0-9]\{1,\}\).*/\1/p')
+    cc=$(printf '%s' "$line" | sed -n 's/.*"cache_creation_input_tokens":\([0-9]\{1,\}\).*/\1/p')
+    printf '%s\n' $(( ${in:-0} + ${cr:-0} + ${cc:-0} ))
 }

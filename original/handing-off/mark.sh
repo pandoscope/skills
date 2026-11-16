@@ -37,28 +37,18 @@ session=$(handoff_own_session)
 transcript=$(handoff_transcript_of_session "$session")
 state=$(handoff_marker_path "$session")
 if [ -z "$state" ]; then
-    echo "mark.sh: no session to mark — no pid file for CLAUDE_PID and" \
-         "no transcript under $HOME/.claude/projects; set" \
-         "HANDOFF_TRANSCRIPT or HANDOFF_STATE" >&2
+    echo "mark.sh: no session to mark: CLAUDE_PID=${CLAUDE_PID:-unset}," \
+         "CLAUDE_CODE_SESSION_ID=${CLAUDE_CODE_SESSION_ID:-unset}, no" \
+         "transcript under $HOME/.claude/projects (lookup order:" \
+         "handoff_own_session in state.sh); set HANDOFF_TRANSCRIPT" \
+         "or HANDOFF_STATE" >&2
     exit 1
 fi
 
-# sed, not a JSON tool: the consumer may lack one. The quoted key
-# "input_tokens": cannot match inside "cache_read_input_tokens" — the
-# opening quote only ever precedes the full key.
-tokens=null
-usage_line=""
-if [ -n "$transcript" ] && [ -f "$transcript" ]; then
-    usage_line=$(grep '"usage"' "$transcript" | tail -1 || true)
-else
-    transcript=""
-fi
-if [ -n "$usage_line" ]; then
-    in=$(printf '%s' "$usage_line" | sed -n 's/.*"input_tokens":\([0-9]\{1,\}\).*/\1/p')
-    cr=$(printf '%s' "$usage_line" | sed -n 's/.*"cache_read_input_tokens":\([0-9]\{1,\}\).*/\1/p')
-    cc=$(printf '%s' "$usage_line" | sed -n 's/.*"cache_creation_input_tokens":\([0-9]\{1,\}\).*/\1/p')
-    tokens=$(( ${in:-0} + ${cr:-0} + ${cc:-0} ))
-else
+[ -f "$transcript" ] || transcript=""
+tokens=$(handoff_context_tokens "$transcript")
+if [ -z "$tokens" ]; then
+    tokens=null
     echo "mark.sh: no transcript usage found — hooks fall back to marker age" >&2
 fi
 
