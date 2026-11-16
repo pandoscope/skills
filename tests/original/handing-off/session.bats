@@ -127,3 +127,11 @@ pid_file() {
   [ -e "$HOME/.claude/handoff-state/session-a.json" ]
   [ ! -e "$HOME/.claude/handoff-state/session-b.json" ]
 }
+
+@test "mark warns when it can only guess the newest transcript" {
+  transcript "$PROJECTS/session-a.jsonl" 1000
+  run "$SKILL/mark.sh" "$TMP/handoff.md"
+  [ "$status" -eq 0 ]
+  [ -e "$HOME/.claude/handoff-state/session-a.json" ]
+  [[ "$output" == *"newest transcript"*"$PROJECTS/session-a.jsonl"*"HANDOFF_TRANSCRIPT"* ]]
+}
