@@ -135,3 +135,15 @@ pid_file() {
   [ -e "$HOME/.claude/handoff-state/session-a.json" ]
   [[ "$output" == *"newest transcript"*"$PROJECTS/session-a.jsonl"*"HANDOFF_TRANSCRIPT"* ]]
 }
+
+@test "check verifies its own session's marker" {
+  transcript "$PROJECTS/session-a.jsonl" 1000
+  transcript "$PROJECTS/session-b.jsonl" 1000
+  echo "handoff of b" > "$TMP/b.md"
+  HANDOFF_TRANSCRIPT="$PROJECTS/session-a.jsonl" "$SKILL/mark.sh" "$TMP/handoff.md"
+  HANDOFF_TRANSCRIPT="$PROJECTS/session-b.jsonl" "$SKILL/mark.sh" "$TMP/b.md"
+  rm "$TMP/b.md"
+  run env HANDOFF_TRANSCRIPT="$PROJECTS/session-a.jsonl" "$SKILL/check.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"machine checks pass"* ]]
+}
