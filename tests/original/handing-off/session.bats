@@ -43,3 +43,12 @@ transcript() {
   grep -q "\"transcript_path\":\"$PROJECTS/main.jsonl\"" "$TMP/state.json"
   grep -q '"context_tokens":100' "$TMP/state.json"
 }
+
+@test "each session's mark writes its own marker, named by the session" {
+  transcript "$PROJECTS/session-a.jsonl" 200000
+  transcript "$PROJECTS/session-b.jsonl" 1000
+  HANDOFF_TRANSCRIPT="$PROJECTS/session-a.jsonl" "$SKILL/mark.sh" "$TMP/handoff.md"
+  HANDOFF_TRANSCRIPT="$PROJECTS/session-b.jsonl" "$SKILL/mark.sh" "$TMP/handoff.md"
+  grep -q '"context_tokens":200000' "$HOME/.claude/handoff-state/session-a.json"
+  grep -q '"context_tokens":1000' "$HOME/.claude/handoff-state/session-b.json"
+}
