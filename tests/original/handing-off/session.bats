@@ -164,3 +164,14 @@ legacy_marker() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"machine checks pass"* ]]
 }
+
+@test "an old shared marker of another session serves no one else" {
+  transcript "$PROJECTS/session-a.jsonl" 1000
+  transcript "$PROJECTS/session-b.jsonl" 1000
+  legacy_marker session-b
+  run "$SKILL/guard.sh" < <(hook_input session-a)
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"no handoff marker"* ]]
+  run "$SKILL/verify.sh" < <(hook_input session-a)
+  [[ "$output" == *"no handoff marker"* ]]
+}
