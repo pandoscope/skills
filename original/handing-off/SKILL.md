@@ -21,6 +21,9 @@ Run 2 confirms from the draft that the work is settled, then completes the hando
 Run `./start.sh` on every invocation.
 It prints `starts:` with the section to follow, and `draft:` with the path of the handoff draft, the handoff file before you publish it.
 When the session has no local state, it restores the pushed state first and says so.
+When it exits 3, the store did not answer: report its line and end the turn.
+Run 1 starts a new draft.
+start.sh sets an earlier one aside as `.previous.md`, and the new handoff links it as the previous handoff.
 
 - `run 1`: follow Run 1.
 - `run 2`: follow Run 2 from step 1.
@@ -40,7 +43,7 @@ When the session has no local state, it restores the pushed state first and says
    List only work that needs the current context.
    Work the next context can do goes into the open-state table in run 2.
 4. Run `./phase.sh listed`.
-   It records the phase and pushes the draft and the state.
+   It records the phase, drops the marker of any earlier cycle, and pushes the draft and the state.
    Relay its line when no store took them.
 5. Report the list as proposals.
    Ask the principal which principal items are done, and whether they have open items the list lacks.
@@ -73,7 +76,7 @@ When the session has no local state, it restores the pushed state first and says
    If it is another session's, delete the state file whose path mark.sh printed, set `HANDOFF_TRANSCRIPT` to this session's transcript and rerun mark.sh.
    Then run `./check.sh`.
    It verifies the marker, the list, the Persisted list and the hook registration.
-   On a pass, it sets the phase `complete` and pushes the state.
+   On a pass, it scans what it will push, then sets the phase `complete` and pushes the state.
    Relay any warning check.sh prints about registration timing.
 9. From what continues next, print one to three candidate `/compact <focus line>` commands, the first one recommended.
    Put each in its own fenced code block, with nothing else in it.
@@ -91,10 +94,11 @@ Then run `./phase.sh listed`, report it and end the turn: publish nothing, write
 ## Finish-first list
 
 Write the list as a checkbox list under the heading `## Finish first`, not a table: verify.sh lifts the first table with Item and Next columns.
-Each item names its owner, `model` or `principal`.
+Each item is a checkbox item and names its owner, `model` or `principal`.
+The list check fails on any other list line in the list, on another owner word, and on an item without one.
 A ticked item that was not done says why.
 A postponed item names the trigger that brings it back, and gets a row in the open-state table with the trigger in the Next column.
-An item from a ledger thread carries the thread's slug.
+An item from a ledger thread carries the thread's slug as `(thread: <slug>)`.
 
 ```markdown
 ## Finish first
@@ -122,7 +126,7 @@ A reader with none of this session's context can pick any row and continue it.
 
 The skill ships its own compaction hooks.
 `verify.sh` runs on `SessionStart` (matcher `compact`): it injects the handoff pointer and the open-state rows into the fresh context, and clears the phase.
-`guard.sh` runs on `PreCompact` and blocks compaction (exit 2) while no fresh marker exists.
+`guard.sh` runs on `PreCompact` and blocks compaction (exit 2) while no fresh marker exists, and while the phase is `listed` or `written`.
 Only the principal sets `PRECOMPACT_GUARD=off`.
 When the guard blocks, rerun the handoff.
 Where a manager owns `settings.json` (a `managedBy` marker), its template must carry both entries, and `check.sh` prints them.
@@ -133,4 +137,6 @@ The per-session state holds the phase, the draft's path and the marker.
 `state.sh` documents how each script finds its session.
 `HANDOFF_STATE` names one explicit state file, and `HANDOFF_TRANSCRIPT` selects the session by its transcript.
 `store.sh` documents where the state is pushed.
+Every push goes through the outgoing scan.
+The ledger steps need `LEDGER_SESSION_URL`, and skip in one line without it.
 `HANDOFF_STORE` names the installing project's own place for session artifacts.
