@@ -18,6 +18,8 @@ input=""
 [ -t 0 ] || input=$(cat)
 # shellcheck source=original/handing-off/state.sh
 . "$(dirname "${BASH_SOURCE[0]}")/state.sh"
+# shellcheck source=original/handing-off/store.sh
+. "$(dirname "${BASH_SOURCE[0]}")/store.sh"
 state=$(handoff_marker_to_read "$(handoff_session_of_hook_input "$input")")
 if ! handoff_has_marker "$state"; then
     echo "COMPACTION JUST COMPLETED with no handoff marker — this" \
@@ -28,6 +30,20 @@ if ! handoff_has_marker "$state"; then
     exit 0
 fi
 marker=$(cat "$state")
+
+# Every compaction ends the handing-off runs before it (skills#267): the
+# phase is cleared here and in the pushed state, so the next invocation
+# starts run 1. The marker stays for the guard.
+phase=$(handoff_json_field phase "$marker")
+if [ -n "$phase" ]; then
+    handoff_state_set "$state" phase ""
+    session=$(handoff_session_of_hook_input "$input")
+    if ! reason=$(handoff_store_push "$session" "$state" 2>&1); then
+        echo "handing-off: the phase $phase is cleared here, but no store" \
+             "took the cleared state, so a resume into a new container" \
+             "restores the phase $phase. $reason"
+    fi
+fi
 path=$(handoff_json_field handoff_path "$marker")
 url=$(handoff_json_field published_url "$marker")
 
