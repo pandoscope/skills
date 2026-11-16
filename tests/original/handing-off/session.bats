@@ -257,3 +257,25 @@ legacy_marker() {
   HANDOFF_TRANSCRIPT="$PROJECTS/session-a.jsonl" "$SKILL/mark.sh" "$TMP/handoff.md"
   [ -e "$HOME/.claude/handoff-state.json" ]
 }
+
+@test "a session id that climbs out of the marker directory names no session" {
+  run env CLAUDE_CODE_SESSION_ID='../../../escaped' "$SKILL/mark.sh" "$TMP/handoff.md"
+  [ "$status" -eq 1 ]
+  [ ! -e "$TMP/escaped.json" ]
+  [[ "$output" == *"no session to mark"* ]]
+}
+
+@test "guard ignores a hook input whose session id climbs out of the marker directory" {
+  transcript "$PROJECTS/session-a.jsonl" 1000
+  HANDOFF_TRANSCRIPT="$PROJECTS/session-a.jsonl" "$SKILL/mark.sh" "$TMP/handoff.md"
+  cp "$HOME/.claude/handoff-state/session-a.json" "$HOME/outside.json"
+  run "$SKILL/guard.sh" <<< '{"session_id":"../../outside"}'
+  [ "$status" -eq 2 ]
+}
+
+@test "a glob as session id matches no transcript" {
+  transcript "$PROJECTS/session-a.jsonl" 1000
+  run env CLAUDE_CODE_SESSION_ID='*' "$SKILL/mark.sh" "$TMP/handoff.md"
+  [ "$status" -eq 1 ]
+  [ ! -e "$HOME/.claude/handoff-state/*.json" ]
+}
