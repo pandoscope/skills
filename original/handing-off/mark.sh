@@ -52,10 +52,10 @@ if [ -z "$tokens" ]; then
     echo "mark.sh: no transcript usage found — hooks fall back to marker age" >&2
 fi
 
-mkdir -p "$(dirname "$state")"
-printf '{"written_at":"%s","handoff_path":"%s","published_url":"%s","transcript_path":"%s","context_tokens":%s}\n' \
-    "$(date -u +%FT%TZ)" "$handoff" "$url" "$transcript" "$tokens" \
-    > "$state"
+handoff_state_set "$state" \
+    written_at "$(date -u +%FT%TZ)" handoff_path "$handoff" \
+    published_url "$url" transcript_path "$transcript" \
+    context_tokens "$tokens"
 echo "marker written: $state"
 
 # The session's own marker supersedes its old shared one. Left in

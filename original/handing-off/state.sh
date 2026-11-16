@@ -8,9 +8,14 @@
 # ~/.claude/handoff-state/<session-id>.json: one file shared by every
 # session let parallel sessions overwrite each other's marker.
 #
+# JSON reads and the state writer live in fields.sh, sourced here.
+#
 # Every lookup exits 0. A lookup that finds nothing prints nothing;
 # find and cat errors on absent files are discarded, since an absent
 # file is an empty answer.
+
+# shellcheck source=original/handing-off/fields.sh
+. "$(dirname "${BASH_SOURCE[0]}")/fields.sh"
 
 # Print the session id a transcript belongs to.
 #   $1  transcript path
@@ -101,18 +106,6 @@ handoff_session_of_hook_input() {
                       "$(handoff_json_field transcript_path "$1")")
     fi
     printf '%s\n' "$session"
-}
-
-# Print the string value a key carries in a one-object JSON text.
-#   $1  key
-#   $2  the JSON text: a hook input, a pid file or a marker
-# Prints the value of the key's last occurrence on a line; nothing
-# when the key is absent. Reads flat string values only: a value with
-# an escaped quote is cut at that quote.
-# sed, not a JSON tool: the consumer may lack one.
-handoff_json_field() {
-    printf '%s\n' "$2" \
-        | sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p"
 }
 
 # Print the session id of the session that runs the calling script.
