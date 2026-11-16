@@ -244,3 +244,10 @@ MD
   run "$SKILL/guard.sh" <<< '{"session_id":"s1"}'
   [ "$status" -eq 0 ]
 }
+
+@test "a slack that is no number makes the marker stale, never fresh" {
+  "$SKILL/mark.sh" "$TMP/handoff.md" > /dev/null
+  run env HANDOFF_STALE_TOKENS=lots "$SKILL/guard.sh" <<< '{"session_id":"s1"}'
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"HANDOFF_STALE_TOKENS=lots is no number"* ]]
+}

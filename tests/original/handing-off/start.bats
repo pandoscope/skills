@@ -103,3 +103,29 @@ usage_line() {
   [[ "$output" == *"starts: the /compact proposal again"* ]]
   grep -q '"context_tokens":100000' "$HANDOFF_STATE"
 }
+
+# --- review of #274 -----------------------------------------------------
+
+@test "an unreachable store is no empty store: the invocation stops and says so" {
+  git -C "$TMP/store" remote set-url origin "$TMP/gone.git"
+  run "$SKILL/start.sh"
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"the store did not answer"* ]]
+  [[ "$output" != *"starts:"* ]]
+}
+
+@test "the phase complete without a marker starts run 1" {
+  echo '{"phase":"complete"}' > "$HANDOFF_STATE"
+  run "$SKILL/start.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"starts: run 1"* ]]
+}
+
+@test "run 1 sets an earlier cycle's draft aside" {
+  echo '{"handoff_path":"/x.md","written_epoch":1}' > "$HANDOFF_STATE"
+  run "$SKILL/start.sh"
+  [[ "$output" == *"starts: run 1"* ]]
+  [[ "$output" == *"set the earlier draft aside as $TMP/state/s1.draft.previous.md"* ]]
+  [ ! -e "$TMP/state/s1.draft.md" ]
+  grep -q "write the tickets" "$TMP/state/s1.draft.previous.md"
+}

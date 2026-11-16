@@ -47,3 +47,19 @@ teardown() { rm -rf "$TMP"; }
   [ "$status" -eq 0 ]
   [[ "$output" == *"scanned for nothing"* ]]
 }
+
+@test "the scan keeps the PUSH_BLOCKLIST terms after a newline" {
+  export PUSH_BLOCKLIST=$'Acme Corp|first\nsecond|third'
+  echo "third party" >> "$TMP/draft.md"
+  run "$SKILL/scan.sh" "$TMP/draft.md"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"PUSH_BLOCKLIST term 3"* ]]
+}
+
+@test "the scan finds a term with a quote in its JSON-escaped form" {
+  export PUSH_BLOCKLIST='say "hi"'
+  printf '{"draft_path":"say \\"hi\\""}\n' > "$TMP/state.json"
+  run "$SKILL/scan.sh" "$TMP/state.json"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"PUSH_BLOCKLIST term 1"* ]]
+}

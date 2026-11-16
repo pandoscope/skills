@@ -35,3 +35,16 @@ teardown() { rm -rf "$TMP"; }
   grep -q '"draft_path":"/x/draft.md"' "$HANDOFF_STATE"
   grep -q '"handoff_path":"'"$TMP"'/handoff.md"' "$HANDOFF_STATE"
 }
+
+@test "the state writer refuses an unknown field, a missing value, a bad number and a control character" {
+  . "$SKILL/state.sh"
+  run handoff_state_set "$HANDOFF_STATE" colour red
+  [ "$status" -eq 1 ]; [[ "$output" == *"unknown field colour"* ]]
+  run handoff_state_set "$HANDOFF_STATE" phase
+  [ "$status" -eq 1 ]; [[ "$output" == *"field phase has no value"* ]]
+  run handoff_state_set "$HANDOFF_STATE" context_tokens 12k
+  [ "$status" -eq 1 ]; [[ "$output" == *"needs digits or null"* ]]
+  run handoff_state_set "$HANDOFF_STATE" phase $'a\tb'
+  [ "$status" -eq 1 ]; [[ "$output" == *"control character"* ]]
+  [ ! -e "$HANDOFF_STATE" ]
+}

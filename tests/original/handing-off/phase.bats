@@ -80,3 +80,28 @@ teardown() { rm -rf "$TMP"; }
   done
   grep -q '"phase":"listed"' "$HANDOFF_STATE"
 }
+
+@test "a refused store commit leaves nothing staged in the store" {
+  printf '#!/bin/sh\nexit 1\n' > "$TMP/store/.git/hooks/pre-commit"
+  chmod +x "$TMP/store/.git/hooks/pre-commit"
+  run "$SKILL/phase.sh" listed
+  [[ "$output" == *"loses this run"* ]]
+  git -C "$TMP/store" diff --cached --quiet
+}
+
+@test "a push the remote keeps refusing ends after three attempts with the warning" {
+  printf '#!/bin/sh\nexit 1\n' > "$TMP/remote.git/hooks/pre-receive"
+  chmod +x "$TMP/remote.git/hooks/pre-receive"
+  run "$SKILL/phase.sh" listed
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"failed after 3 attempts"* ]]
+  [[ "$output" == *"loses this run"* ]]
+}
+
+@test "uncommitted work in the store clone stays out of the push" {
+  echo scratch > "$TMP/store/scratch.txt"
+  run "$SKILL/phase.sh" listed
+  [ "$status" -eq 0 ]
+  ! git -C "$TMP/remote.git" show main:scratch.txt 2> /dev/null || false
+  [ -e "$TMP/store/scratch.txt" ]
+}
