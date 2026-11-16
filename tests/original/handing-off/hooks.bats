@@ -33,7 +33,7 @@ teardown() { rm -rf "$TMP"; }
 # --- verify.sh -----------------------------------------------------
 
 @test "verify without a marker reports the unguarded compaction" {
-  run "$SKILL/verify.sh"
+  run "$SKILL/verify.sh" < /dev/null
   [ "$status" -eq 0 ]
   [[ "$output" == *"no handoff marker"* ]]
   [[ "$output" == *"reconstructed now"* ]]
@@ -41,7 +41,7 @@ teardown() { rm -rf "$TMP"; }
 
 @test "verify lifts the open-state rows verbatim and demands a restatement" {
   "$SKILL/mark.sh" "$TMP/handoff.md" "https://example.com/h" > /dev/null
-  run "$SKILL/verify.sh"
+  run "$SKILL/verify.sh" < /dev/null
   [ "$status" -eq 0 ]
   [[ "$output" == *"$TMP/handoff.md (published: https://example.com/h)"* ]]
   [[ "$output" == *"| repo!12 fix | green, awaiting merge | merge it |"* ]]
@@ -65,7 +65,7 @@ teardown() { rm -rf "$TMP"; }
 | the real row | open | continue |
 MD
   "$SKILL/mark.sh" "$TMP/handoff.md" > /dev/null
-  run "$SKILL/verify.sh"
+  run "$SKILL/verify.sh" < /dev/null
   [ "$status" -eq 0 ]
   [[ "$output" == *"| the real row | open | continue |"* ]]
   [[ "$output" != *"| a | b |"* ]]
@@ -74,7 +74,7 @@ MD
 @test "verify degrades to the pointer when the handoff has no table" {
   printf 'just prose\n' > "$TMP/handoff.md"
   "$SKILL/mark.sh" "$TMP/handoff.md" > /dev/null
-  run "$SKILL/verify.sh"
+  run "$SKILL/verify.sh" < /dev/null
   [ "$status" -eq 0 ]
   [[ "$output" == *"Read it unless its content is already in context"* ]]
   [[ "$output" != *"Restate"* ]]
@@ -149,7 +149,7 @@ MD
   [ "$status" -eq 0 ]
   grep -q "\"handoff_path\":\"$TMP/handoff.md\"" "$HANDOFF_STATE"
   cd /
-  run "$SKILL/verify.sh"
+  run "$SKILL/verify.sh" < /dev/null
   [ "$status" -eq 0 ]
   [[ "$output" == *"| repo!12 fix | green, awaiting merge | merge it |"* ]]
   run "$SKILL/check.sh"
