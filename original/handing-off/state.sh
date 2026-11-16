@@ -33,9 +33,24 @@ handoff_marker_path() {
 
 # Print the session id a hook input names.
 #   $1  the hook input, the JSON object Claude Code sends on stdin
-# Prints the value of its session_id; nothing when the input has none.
+# Prints the value of its session_id; else the session of its
+# transcript_path; nothing when the input has neither.
 # sed, not a JSON tool, as in mark.sh: the consumer may lack one.
 handoff_session_of_hook_input() {
-    printf '%s\n' "$1" \
-        | sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p'
+    local session
+    session=$(handoff_hook_field session_id "$1")
+    if [ -z "$session" ]; then
+        session=$(handoff_session_of_transcript \
+                      "$(handoff_hook_field transcript_path "$1")")
+    fi
+    printf '%s\n' "$session"
+}
+
+# Print the string value a key carries in a hook input.
+#   $1  key
+#   $2  the hook input
+# Prints nothing when the key is absent.
+handoff_hook_field() {
+    printf '%s\n' "$2" \
+        | sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p"
 }
