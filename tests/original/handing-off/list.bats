@@ -48,7 +48,7 @@ MD
   run "$SKILL/list.sh" "$TMP/draft.md"
   [ "$status" -eq 1 ]
   [[ "$output" == *"no owner: write the tickets"* ]]
-  [[ "$output" == *"unknown owner reviewer: reviewer: read the diff"* ]]
+  [[ "$output" == *"unknown owner: reviewer (in \"reviewer: read the diff\")"* ]]
   [[ "$output" != *"run the suite"* ]]
 }
 
