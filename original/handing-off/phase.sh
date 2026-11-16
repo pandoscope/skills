@@ -48,7 +48,15 @@ if [ "$phase" = written ] && ! "$here/list.sh" "$draft"; then
          "stays as it was. Report the open items and end the turn" >&2
     exit 1
 fi
-handoff_state_set "$state" phase "$phase" draft_path "$draft"
+if [ "$phase" = listed ]; then
+    # A new list starts a new cycle: an earlier cycle's marker would
+    # pass the guard while this list is open.
+    handoff_state_set "$state" phase "$phase" draft_path "$draft" \
+        written_at "" written_epoch "" handoff_path "" published_url "" \
+        transcript_path "" context_tokens ""
+else
+    handoff_state_set "$state" phase "$phase" draft_path "$draft"
+fi
 if ! "$here/scan.sh" "$draft" "$state"; then
     echo "phase.sh: the scan found a blocked term; nothing was pushed." \
          "Remove the term from the draft, then rerun phase.sh $phase" >&2

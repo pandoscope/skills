@@ -37,6 +37,16 @@ if ! handoff_has_marker "$state"; then
 $where. Have the session run the handing-off skill, then /compact \
 again (PRECOMPACT_GUARD=off overrides)."
 fi
+# DECISION:SCOPE — While the runs are under way the handoff is not
+# done, whatever the marker says: the principal moved this check from
+# slice B into skills#267.
+phase=$(handoff_json_field phase "$(cat "$state")")
+case "$phase" in
+    listed|written)
+        block "COMPACTION BLOCKED: the handing-off runs are in the phase \
+$phase, so the handoff is not complete. Have the session finish the \
+handing-off skill, then /compact again (PRECOMPACT_GUARD=off overrides)." ;;
+esac
 transcript=$(handoff_json_field transcript_path "$input")
 [ -f "${transcript:-/nonexistent}" ] \
     || transcript=$(handoff_json_field transcript_path "$(cat "$state")")
