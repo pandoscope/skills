@@ -57,6 +57,18 @@ handoff_marker_path() {
     fi
 }
 
+# Print the path of a session's handoff draft (skills#267): the
+# handoff file before it is published, beside the session's state.
+#   $1  session id
+# Prints the state path (handoff_marker_path) with .json replaced by
+# .draft.md; nothing when there is no state path.
+handoff_draft_path() {
+    local state
+    state=$(handoff_marker_path "$1")
+    [ -n "$state" ] || return 0
+    printf '%s\n' "${state%.json}.draft.md"
+}
+
 # Print the marker path a session reads.
 #   $1  session id
 # Prints the session's own marker path (handoff_marker_path), or the
