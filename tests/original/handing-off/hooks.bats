@@ -63,6 +63,16 @@ teardown() { rm -rf "$TMP"; }
   [[ "$output" == *"mark which item you are starting on"* ]]
 }
 
+@test "verify lifts only the open-state rows, not the finish-first or Persisted items" {
+  "$SKILL/mark.sh" "$TMP/handoff.md" > /dev/null
+  run "$SKILL/verify.sh" <<< '{"session_id":"s1"}'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"| repo!12 fix | green, awaiting merge | merge it |"* ]]
+  [[ "$output" != *"write the tickets"* ]]
+  [[ "$output" != *"run the probes"* ]]
+  [[ "$output" != *"- none"* ]]
+}
+
 @test "verify skips a table whose header is not the open-state one" {
   cat > "$TMP/handoff.md" <<'MD'
 | Key | Value |
