@@ -31,9 +31,14 @@ handoff="$(cd "$(dirname "$handoff")" && pwd)/$(basename "$handoff")"
 state=${HANDOFF_STATE:-$HOME/.claude/handoff-state.json}
 transcript=${HANDOFF_TRANSCRIPT:-}
 if [ -z "$transcript" ]; then
-    transcript=$(find "$HOME/.claude/projects" -name '*.jsonl' -type f \
-                     -printf '%T@ %p\n' 2>/dev/null \
-                 | sort -rn | head -1 | cut -d' ' -f2-)
+    # A loop, not find | sort | head -1: under pipefail, sort dies of
+    # SIGPIPE once head has left and the list outgrows the pipe
+    # (skills#245). -nt also needs no GNU find -printf.
+    while IFS= read -r candidate; do
+        if [ -z "$transcript" ] || [ "$candidate" -nt "$transcript" ]; then
+            transcript=$candidate
+        fi
+    done < <(find "$HOME/.claude/projects" -name '*.jsonl' -type f 2>/dev/null)
 fi
 
 # sed, not a JSON tool: the consumer may lack one. The quoted key
