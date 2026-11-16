@@ -108,6 +108,10 @@ function harnessClone(url) {
  * just-written event as missing. A missing clone therefore fails here,
  * naming the fix (add the store to the session's sources), exactly as
  * ensure-stores.sh does.
+ *
+ * Mirrored pair: the handing-off skill's store.sh copies this lookup and
+ * verifyOrigin, so it finds the store without the ledger. This side is
+ * authoritative; a change to either side changes both.
  */
 export function resolveRoot(explicit) {
   if (explicit) return explicit;

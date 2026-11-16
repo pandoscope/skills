@@ -17,41 +17,10 @@
 # path, never by a URL of the store: a store URL is a blocked term of
 # the outgoing scan.
 
-# Print the directory of the store's clone.
-# The first of these that holds a git clone wins:
-#   1. HANDOFF_STORE, the place an installing project names for its
-#      session artifacts
-#   2. with SESSION_MEMORY_URL set: SESSION_MEMORY_ROOT, then the
-#      harness's clone (SESSION_ROOT in ~/.claude/session.env joined
-#      with the store repository's name), then /workspace/session-memory
-# Prints nothing when none does. No clone is made here: a second clone
-# would split the store into a copy one writer writes and a copy
-# another reads.
-# Mirrored pair: resolveRoot in the thread-ledger skill's store/io.mjs
-# is the authoritative order for the session-memory store; this copy
-# lets handing-off find it without the ledger. A change to the order
-# changes both.
-handoff_store_root() {
-    local candidate session_root=""
-    if [ -n "${HANDOFF_STORE:-}" ]; then
-        [ -d "$HANDOFF_STORE/.git" ] && printf '%s\n' "$HANDOFF_STORE"
-        return 0
-    fi
-    [ -n "${SESSION_MEMORY_URL:-}" ] || return 0
-    if [ -f "$HOME/.claude/session.env" ]; then
-        session_root=$(sed -n 's/^SESSION_ROOT=//p' "$HOME/.claude/session.env" | tail -1)
-    fi
-    local repo_name=${SESSION_MEMORY_URL%/}
-    repo_name=$(basename "$repo_name" .git)
-    for candidate in "${SESSION_MEMORY_ROOT:-}" \
-                     "${session_root:+$session_root/$repo_name}" \
-                     /workspace/session-memory; do
-        if [ -n "$candidate" ] && [ -d "$candidate/.git" ]; then
-            printf '%s\n' "$candidate"
-            return 0
-        fi
-    done
-}
+# The lookup of the store's clone and its branch lives in
+# store-lookup.sh, sourced here.
+# shellcheck source=original/handing-off/store-lookup.sh
+. "$(dirname "${BASH_SOURCE[0]}")/store-lookup.sh"
 
 # Print a session's directory in the store, relative to its root.
 #   $1  session id
@@ -70,20 +39,6 @@ handoff_store_redact() {
         fi
     done
     printf '%s\n' "$text"
-}
-
-# Print the branch of the store's clone that pushes go to: its upstream
-# branch when it has one, else the branch of the same name.
-#   $1  the store's root
-# Prints nothing on a detached HEAD.
-handoff_store_branch() {
-    local upstream
-    upstream=$(git -C "$1" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || true)
-    if [ -n "$upstream" ]; then
-        printf '%s\n' "${upstream#origin/}"
-    else
-        git -C "$1" symbolic-ref --quiet --short HEAD || true
-    fi
 }
 
 # Write a session's state, and its draft when given, in the form the
@@ -160,10 +115,7 @@ handoff_store_push() {
     fi
     handoff_store_scan "$session" "$state" "$draft" || return 2
     branch=$(handoff_store_branch "$root")
-    if [ -z "$branch" ]; then
-        echo "handing-off: the store clone $root is on no branch" >&2
-        return 1
-    fi
+    [ -n "$branch" ] || return 1
     dir=$(handoff_store_dir "$session")
     mkdir -p "$root/$dir"
     tmp=$(mktemp -d)
