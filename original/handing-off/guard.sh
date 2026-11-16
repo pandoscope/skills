@@ -31,7 +31,7 @@ input=$(cat)
 . "$(dirname "${BASH_SOURCE[0]}")/state.sh"
 state=$(handoff_marker_to_read "$(handoff_session_of_hook_input "$input")")
 block() { echo "$1" >&2; exit 2; }
-if [ -z "$state" ] || [ ! -f "$state" ]; then
+if ! handoff_has_marker "$state"; then
     where=${state:-"(the hook input names no session)"}
     block "COMPACTION BLOCKED: no handoff marker for this session at \
 $where. Have the session run the handing-off skill, then /compact \

@@ -3,6 +3,17 @@
 # writes, and whether they are still fresh. Sourced by state.sh after
 # fields.sh.
 
+# Tell whether a state file carries a marker.
+#   $1  state file
+# Returns 0 when the file exists and names a handoff (handoff_path);
+# 1 otherwise. A state that holds only a phase carries no marker: run 1
+# of handing-off writes one, and the hooks must not take it for a
+# handoff (skills#267).
+handoff_has_marker() {
+    [ -n "$1" ] && [ -f "$1" ] \
+        && [ -n "$(handoff_json_field handoff_path "$(cat "$1")")" ]
+}
+
 # Print why a marker is stale; nothing when it is fresh.
 #   $1  state file carrying a marker
 #   $2  the session's transcript, the measure of its context now; may

@@ -68,7 +68,7 @@ else
     echo "hooks registered: verify.sh + guard.sh reachable from $settings"
 fi
 
-[ -n "$state" ] && [ -f "$state" ] || fail "NO FRESHNESS MARKER" \
+handoff_has_marker "$state" || fail "NO FRESHNESS MARKER" \
     "no marker for this session at ${state:-(no session found)} — a compaction gate reading it treats the handoff as absent" \
     "run ./mark.sh <handoff-file> [url]"
 

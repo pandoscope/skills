@@ -19,7 +19,7 @@ input=""
 # shellcheck source=original/handing-off/state.sh
 . "$(dirname "${BASH_SOURCE[0]}")/state.sh"
 state=$(handoff_marker_to_read "$(handoff_session_of_hook_input "$input")")
-if [ -z "$state" ] || [ ! -f "$state" ]; then
+if ! handoff_has_marker "$state"; then
     echo "COMPACTION JUST COMPLETED with no handoff marker — this" \
          "compaction ran unguarded. Tell the user at the start of your" \
          "reply: state before this point exists only in the summary," \
