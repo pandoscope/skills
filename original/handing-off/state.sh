@@ -201,8 +201,8 @@ handoff_newest_transcript() {
 # measure compaction acts on. mark.sh records it; guard.sh compares
 # against it.
 #   $1  transcript path
-# Prints nothing when the path is empty, names no file, or the
-# transcript holds no assistant usage yet.
+# Prints nothing when the path is empty, names no file, the transcript
+# holds no assistant usage yet, or its last usage carries no count.
 handoff_context_tokens() {
     [ -n "$1" ] && [ -f "$1" ] || return 0
     # DECISION:ARCH — One measure replaces mark.sh's sed copy and
@@ -224,5 +224,10 @@ handoff_context_tokens() {
     in=$(printf '%s' "$line" | sed -n 's/.*"input_tokens":\([0-9]\{1,\}\).*/\1/p')
     cr=$(printf '%s' "$line" | sed -n 's/.*"cache_read_input_tokens":\([0-9]\{1,\}\).*/\1/p')
     cc=$(printf '%s' "$line" | sed -n 's/.*"cache_creation_input_tokens":\([0-9]\{1,\}\).*/\1/p')
+    # No count read means no measure, never a size of 0: 0 would pass
+    # every stale marker.
+    if [ -z "$in$cr$cc" ]; then
+        return 0
+    fi
     printf '%s\n' $(( ${in:-0} + ${cr:-0} + ${cc:-0} ))
 }
