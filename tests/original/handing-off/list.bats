@@ -51,3 +51,16 @@ MD
   [[ "$output" == *"no owner: reviewer: read the diff"* ]]
   [[ "$output" != *"run the suite"* ]]
 }
+
+@test "the list check fails on a postponed item without a trigger and names it" {
+  draft <<'MD'
+- [x] model: run the probes (postponed)
+- [x] model: rerun the suite (postponed until: )
+- [x] model: write the ADR (postponed until: the ticket closes)
+MD
+  run "$SKILL/list.sh" "$TMP/draft.md"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"postponed without trigger: model: run the probes (postponed)"* ]]
+  [[ "$output" == *"postponed without trigger: model: rerun the suite (postponed until: )"* ]]
+  [[ "$output" != *"write the ADR"* ]]
+}
