@@ -6,7 +6,9 @@
 set -euo pipefail
 
 skill_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-state=${HANDOFF_STATE:-$HOME/.claude/handoff-state.json}
+# shellcheck source=original/handing-off/state.sh
+. "$skill_dir/state.sh"
+state=$(handoff_marker_path "$(handoff_own_session)")
 settings=${CLAUDE_SETTINGS:-$HOME/.claude/settings.json}
 
 fail() {
@@ -62,8 +64,8 @@ else
     echo "hooks registered: verify.sh + guard.sh reachable from $settings"
 fi
 
-[ -f "$state" ] || fail "NO FRESHNESS MARKER" \
-    "no marker at $state — a compaction gate reading it treats the handoff as absent" \
+[ -n "$state" ] && [ -f "$state" ] || fail "NO FRESHNESS MARKER" \
+    "no marker for this session at ${state:-(no session found)} — a compaction gate reading it treats the handoff as absent" \
     "run ./mark.sh <handoff-file> [url]"
 
 handoff=$(sed -n 's/.*"handoff_path":"\([^"]*\)".*/\1/p' "$state")
