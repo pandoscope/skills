@@ -75,3 +75,19 @@ teardown() { rm -rf "$TMP"; }
   [ "$status" -eq 1 ]
   [[ "$output" == *"MISSING OR EMPTY"* ]]
 }
+
+@test "a usage outside an assistant message is not the context size" {
+  echo '{"type":"user","toolUseResult":{"usage":{"input_tokens":300000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":9}}}' \
+    >> "$TMP/transcript.jsonl"
+  run "$SKILL/mark.sh" "$TMP/handoff.md"
+  [ "$status" -eq 0 ]
+  grep -q '"context_tokens":642005' "$HANDOFF_STATE"
+}
+
+@test "a usage line with no token counts records null, not zero" {
+  echo '{"type":"assistant","message":{"usage":{"output_tokens":4}}}' >> "$TMP/transcript.jsonl"
+  run "$SKILL/mark.sh" "$TMP/handoff.md"
+  [ "$status" -eq 0 ]
+  grep -q '"context_tokens":null' "$HANDOFF_STATE"
+  [[ "$output" == *"fall back to marker age"* ]]
+}

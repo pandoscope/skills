@@ -12,8 +12,14 @@
 # ordering is the skill's step-1 responsibility; extraction stays dumb
 # on purpose.
 set -u
-state="${HANDOFF_STATE:-$HOME/.claude/handoff-state.json}"
-if [ ! -f "$state" ]; then
+# A hook always gets its input on stdin; a person running this by hand
+# in a terminal types none.
+input=""
+[ -t 0 ] || input=$(cat)
+# shellcheck source=original/handing-off/state.sh
+. "$(dirname "${BASH_SOURCE[0]}")/state.sh"
+state=$(handoff_marker_to_read "$(handoff_session_of_hook_input "$input")")
+if [ -z "$state" ] || [ ! -f "$state" ]; then
     echo "COMPACTION JUST COMPLETED with no handoff marker — this" \
          "compaction ran unguarded. Tell the user at the start of your" \
          "reply: state before this point exists only in the summary," \
@@ -21,8 +27,9 @@ if [ ! -f "$state" ]; then
          "the ledger before new work builds on it."
     exit 0
 fi
-path=$(sed -n 's/.*"handoff_path":"\([^"]*\)".*/\1/p' "$state")
-url=$(sed -n 's/.*"published_url":"\([^"]*\)".*/\1/p' "$state")
+marker=$(cat "$state")
+path=$(handoff_json_field handoff_path "$marker")
+url=$(handoff_json_field published_url "$marker")
 
 # First table whose header names Item and Next; rows without header
 # and separator. Multiple tables in the handoff are fine — the

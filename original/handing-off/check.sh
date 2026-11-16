@@ -6,7 +6,13 @@
 set -euo pipefail
 
 skill_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-state=${HANDOFF_STATE:-$HOME/.claude/handoff-state.json}
+# shellcheck source=original/handing-off/state.sh
+. "$skill_dir/state.sh"
+# With HANDOFF_STATE set, the marker needs no session, and the lookup
+# would only print its newest-transcript warning.
+session=""
+[ -n "${HANDOFF_STATE:-}" ] || session=$(handoff_own_session)
+state=$(handoff_marker_to_read "$session")
 settings=${CLAUDE_SETTINGS:-$HOME/.claude/settings.json}
 
 fail() {
@@ -62,11 +68,11 @@ else
     echo "hooks registered: verify.sh + guard.sh reachable from $settings"
 fi
 
-[ -f "$state" ] || fail "NO FRESHNESS MARKER" \
-    "no marker at $state — a compaction gate reading it treats the handoff as absent" \
+[ -n "$state" ] && [ -f "$state" ] || fail "NO FRESHNESS MARKER" \
+    "no marker for this session at ${state:-(no session found)} — a compaction gate reading it treats the handoff as absent" \
     "run ./mark.sh <handoff-file> [url]"
 
-handoff=$(sed -n 's/.*"handoff_path":"\([^"]*\)".*/\1/p' "$state")
+handoff=$(handoff_json_field handoff_path "$(cat "$state")")
 if [ -z "$handoff" ] || [ ! -s "$handoff" ]; then
     fail "HANDOFF FILE MISSING OR EMPTY" \
         "the marker names '$handoff' but no such non-empty file exists" \

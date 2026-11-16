@@ -27,25 +27,21 @@
 set -u
 [ "${PRECOMPACT_GUARD:-on}" = "off" ] && exit 0
 input=$(cat)
-state="${HANDOFF_STATE:-$HOME/.claude/handoff-state.json}"
+# shellcheck source=original/handing-off/state.sh
+. "$(dirname "${BASH_SOURCE[0]}")/state.sh"
+state=$(handoff_marker_to_read "$(handoff_session_of_hook_input "$input")")
 block() { echo "$1" >&2; exit 2; }
-[ -f "$state" ] || block "COMPACTION BLOCKED: no handoff marker at \
-$state. Have the session run the handing-off skill, then /compact \
+if [ -z "$state" ] || [ ! -f "$state" ]; then
+    where=${state:-"(the hook input names no session)"}
+    block "COMPACTION BLOCKED: no handoff marker for this session at \
+$where. Have the session run the handing-off skill, then /compact \
 again (PRECOMPACT_GUARD=off overrides)."
-tokens_then=$(sed -n 's/.*"context_tokens":\([0-9]\{1,\}\).*/\1/p' "$state")
-transcript=$(printf '%s' "$input" | jq -r '.transcript_path // empty' 2>/dev/null)
-[ -f "${transcript:-/nonexistent}" ] \
-    || transcript=$(sed -n 's/.*"transcript_path":"\([^"]*\)".*/\1/p' "$state")
-tokens_now=""
-if [ -n "$transcript" ] && [ -f "$transcript" ]; then
-    tokens_now=$(jq -rs '[ .[] | select(.type? == "assistant") | .message.usage
-                           | select(. != null) ] | last
-                         | if . == null then empty
-                           else (.input_tokens // 0)
-                                + (.cache_read_input_tokens // 0)
-                                + (.cache_creation_input_tokens // 0) end' \
-                 "$transcript" 2>/dev/null) || tokens_now=""
 fi
+tokens_then=$(sed -n 's/.*"context_tokens":\([0-9]\{1,\}\).*/\1/p' "$state")
+transcript=$(handoff_json_field transcript_path "$input")
+[ -f "${transcript:-/nonexistent}" ] \
+    || transcript=$(handoff_json_field transcript_path "$(cat "$state")")
+tokens_now=$(handoff_context_tokens "$transcript")
 if [ -n "$tokens_then" ] && [ -n "$tokens_now" ]; then
     grown=$(( tokens_now - tokens_then ))
     slack="${HANDOFF_STALE_TOKENS:-50000}"

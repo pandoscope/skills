@@ -2,10 +2,12 @@
 # Write the freshness marker that hooks compare against.
 #
 # Usage: mark.sh <handoff-file> [published-url]
-# Env:   HANDOFF_STATE      marker path (default ~/.claude/handoff-state.json)
-#        HANDOFF_TRANSCRIPT transcript path; unset = newest *.jsonl under
-#                           ~/.claude/projects (the live transcript is the
-#                           most recently written one)
+# Env:   HANDOFF_STATE      marker path (default
+#                           ~/.claude/handoff-state/<session-id>.json,
+#                           see state.sh)
+#        HANDOFF_TRANSCRIPT transcript path; unset = this session's
+#                           transcript (lookup order in state.sh,
+#                           handoff_own_session)
 #
 # The marker records the context size at handoff time: the token sum
 # (prompt + cache reads + cache writes) of the transcript's last
@@ -28,30 +30,25 @@ fi
 # silently (skills#174). No realpath: not every consumer has GNU tools.
 handoff="$(cd "$(dirname "$handoff")" && pwd)/$(basename "$handoff")"
 
-state=${HANDOFF_STATE:-$HOME/.claude/handoff-state.json}
-transcript=${HANDOFF_TRANSCRIPT:-}
-if [ -z "$transcript" ]; then
-    transcript=$(find "$HOME/.claude/projects" -name '*.jsonl' -type f \
-                     -printf '%T@ %p\n' 2>/dev/null \
-                 | sort -rn | head -1 | cut -d' ' -f2-)
+# shellcheck source=original/handing-off/state.sh
+. "$(dirname "${BASH_SOURCE[0]}")/state.sh"
+
+session=$(handoff_own_session)
+transcript=$(handoff_transcript_of_session "$session")
+state=$(handoff_marker_path "$session")
+if [ -z "$state" ]; then
+    echo "mark.sh: no session to mark: CLAUDE_PID=${CLAUDE_PID:-unset}," \
+         "CLAUDE_CODE_SESSION_ID=${CLAUDE_CODE_SESSION_ID:-unset}, no" \
+         "transcript under $HOME/.claude/projects (lookup order:" \
+         "handoff_own_session in state.sh); set HANDOFF_TRANSCRIPT" \
+         "or HANDOFF_STATE" >&2
+    exit 1
 fi
 
-# sed, not a JSON tool: the consumer may lack one. The quoted key
-# "input_tokens": cannot match inside "cache_read_input_tokens" — the
-# opening quote only ever precedes the full key.
-tokens=null
-usage_line=""
-if [ -n "$transcript" ] && [ -f "$transcript" ]; then
-    usage_line=$(grep '"usage"' "$transcript" | tail -1 || true)
-else
-    transcript=""
-fi
-if [ -n "$usage_line" ]; then
-    in=$(printf '%s' "$usage_line" | sed -n 's/.*"input_tokens":\([0-9]\{1,\}\).*/\1/p')
-    cr=$(printf '%s' "$usage_line" | sed -n 's/.*"cache_read_input_tokens":\([0-9]\{1,\}\).*/\1/p')
-    cc=$(printf '%s' "$usage_line" | sed -n 's/.*"cache_creation_input_tokens":\([0-9]\{1,\}\).*/\1/p')
-    tokens=$(( ${in:-0} + ${cr:-0} + ${cc:-0} ))
-else
+[ -f "$transcript" ] || transcript=""
+tokens=$(handoff_context_tokens "$transcript")
+if [ -z "$tokens" ]; then
+    tokens=null
     echo "mark.sh: no transcript usage found — hooks fall back to marker age" >&2
 fi
 
@@ -60,3 +57,15 @@ printf '{"written_at":"%s","handoff_path":"%s","published_url":"%s","transcript_
     "$(date -u +%FT%TZ)" "$handoff" "$url" "$transcript" "$tokens" \
     > "$state"
 echo "marker written: $state"
+
+# The session's own marker supersedes its old shared one. Left in
+# place, the old one would serve the session again once its own marker
+# is deleted. With HANDOFF_STATE set, the shared path may be the marker
+# just written, so it stays.
+if [ -z "${HANDOFF_STATE:-}" ]; then
+    legacy=$(handoff_legacy_marker "$session")
+    if [ -n "$legacy" ]; then
+        rm "$legacy"
+        echo "old shared marker retired: $legacy"
+    fi
+fi
