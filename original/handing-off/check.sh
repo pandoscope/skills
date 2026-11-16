@@ -8,7 +8,11 @@ set -euo pipefail
 skill_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=original/handing-off/state.sh
 . "$skill_dir/state.sh"
-state=$(handoff_marker_path "$(handoff_own_session)")
+# With HANDOFF_STATE set, the marker needs no session, and the lookup
+# would only print its newest-transcript warning.
+session=""
+[ -n "${HANDOFF_STATE:-}" ] || session=$(handoff_own_session)
+state=$(handoff_marker_to_read "$session")
 settings=${CLAUDE_SETTINGS:-$HOME/.claude/settings.json}
 
 fail() {

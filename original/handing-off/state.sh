@@ -48,6 +48,22 @@ handoff_marker_path() {
     fi
 }
 
+# Print the marker path a session reads.
+#   $1  session id
+# Prints the session's own marker path (handoff_marker_path), or the
+# one shared marker of earlier versions, ~/.claude/handoff-state.json,
+# when HANDOFF_STATE is unset and the session has no own marker yet.
+handoff_marker_to_read() {
+    local own legacy
+    own=$(handoff_marker_path "$1")
+    legacy="$HOME/.claude/handoff-state.json"
+    if [ -z "${HANDOFF_STATE:-}" ] && [ ! -f "$own" ] && [ -f "$legacy" ]; then
+        printf '%s\n' "$legacy"
+        return 0
+    fi
+    printf '%s\n' "$own"
+}
+
 # Print the session id a hook input names.
 #   $1  the hook input, the JSON object Claude Code sends on stdin
 # Prints the value of its session_id; else the session of its

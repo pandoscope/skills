@@ -29,7 +29,7 @@ set -u
 input=$(cat)
 # shellcheck source=original/handing-off/state.sh
 . "$(dirname "${BASH_SOURCE[0]}")/state.sh"
-state=$(handoff_marker_path "$(handoff_session_of_hook_input "$input")")
+state=$(handoff_marker_to_read "$(handoff_session_of_hook_input "$input")")
 block() { echo "$1" >&2; exit 2; }
 [ -n "$state" ] && [ -f "$state" ] || block "COMPACTION BLOCKED: no \
 handoff marker for this session at ${state:-(the hook input names no \
