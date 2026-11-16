@@ -147,3 +147,40 @@ handoff_store_push() {
          "$(handoff_store_redact "$out")" >&2
     return 1
 }
+
+# Restore a session's pushed state, and its draft, from the store.
+#   $1  session id
+#   $2  the local state file to write
+#   $3  the local draft to write
+# Returns 0 once the state is restored, with draft_path naming the
+# local draft when the store held one; 1 when the store holds no state
+# for the session; 2, with the reason on stderr, when no store answers.
+# The restored marker keeps its token count: the transcript keeps its
+# file name across a resume, so the guard's growth rule still measures
+# against it.
+handoff_store_pull() {
+    local session=$1 state=$2 draft=$3 root branch dir out text
+    root=$(handoff_store_root)
+    if [ -z "$root" ]; then
+        echo "handing-off: no store clone to restore from" >&2
+        return 2
+    fi
+    handoff_valid_session "$session" || return 1
+    branch=$(handoff_store_branch "$root")
+    if ! out=$(git -C "$root" fetch -q origin "$branch" 2>&1); then
+        echo "handing-off: fetch in $root failed: $(handoff_store_redact "$out")" >&2
+        return 2
+    fi
+    dir=$(handoff_store_dir "$session")
+    text=$(git -C "$root" show "FETCH_HEAD:$dir/state.json" 2>/dev/null) || return 1
+    mkdir -p "$(dirname "$state")" "$(dirname "$draft")"
+    printf '%s\n' "$text" > "$state.tmp.$$"
+    mv -f "$state.tmp.$$" "$state"
+    if git -C "$root" show "FETCH_HEAD:$dir/draft.md" > "$draft.tmp.$$" 2>/dev/null; then
+        mv -f "$draft.tmp.$$" "$draft"
+        handoff_state_set "$state" draft_path "$draft"
+    else
+        rm -f "$draft.tmp.$$"
+        handoff_state_set "$state" draft_path ""
+    fi
+}

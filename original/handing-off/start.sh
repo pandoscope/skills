@@ -4,8 +4,9 @@
 # Usage: start.sh
 # Env:   HANDOFF_STATE, HANDOFF_TRANSCRIPT as for mark.sh (state.sh)
 #
-# Prints "starts: <what>" and "draft: <path>", and exits 0. The phase
-# in the session's state decides <what>:
+# Prints "starts: <what>" and "draft: <path>", and exits 0. Without a
+# local state it first restores the pushed state (store.sh) and says
+# so. The phase in the session's state decides <what>:
 #   (no phase)  run 1
 #   listed      run 2
 #   written     run 2 at step 5
@@ -16,6 +17,8 @@ set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=original/handing-off/state.sh
 . "$here/state.sh"
+# shellcheck source=original/handing-off/store.sh
+. "$here/store.sh"
 
 session=$(handoff_own_session)
 state=$(handoff_marker_path "$session")
@@ -25,6 +28,13 @@ if [ -z "$state" ]; then
     exit 1
 fi
 draft=$(handoff_draft_path "$session")
+
+# A resume into a new container leaves no local state; the pushed state
+# under the session id stands in for it. With none, run 1 starts.
+if [ ! -f "$state" ] && handoff_store_pull "$session" "$state" "$draft"; then
+    echo "restored the phase $(handoff_json_field phase "$(cat "$state")")" \
+         "and the draft from the store"
+fi
 
 phase=""
 [ -f "$state" ] && phase=$(handoff_json_field phase "$(cat "$state")")
