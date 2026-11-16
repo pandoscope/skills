@@ -52,3 +52,19 @@ transcript() {
   grep -q '"context_tokens":200000' "$HOME/.claude/handoff-state/session-a.json"
   grep -q '"context_tokens":1000' "$HOME/.claude/handoff-state/session-b.json"
 }
+
+# hook_input <session-id>: the hook input Claude Code sends, naming the
+# session and its transcript.
+hook_input() {
+  printf '{"session_id":"%s","transcript_path":"%s","hook_event_name":"PreCompact"}\n' \
+    "$1" "$PROJECTS/$1.jsonl"
+}
+
+@test "guard judges a session by its own marker, not the last one written" {
+  transcript "$PROJECTS/session-a.jsonl" 200000
+  transcript "$PROJECTS/session-b.jsonl" 1000
+  HANDOFF_TRANSCRIPT="$PROJECTS/session-a.jsonl" "$SKILL/mark.sh" "$TMP/handoff.md"
+  HANDOFF_TRANSCRIPT="$PROJECTS/session-b.jsonl" "$SKILL/mark.sh" "$TMP/handoff.md"
+  run "$SKILL/guard.sh" < <(hook_input session-a)
+  [ "$status" -eq 0 ]
+}
