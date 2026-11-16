@@ -114,9 +114,13 @@ handoff_store_push() {
     dir=$(handoff_store_dir "$session")
     mkdir -p "$root/$dir"
     cp "$state" "$root/$dir/state.json"
-    if [ -n "$draft" ]; then
-        cp "$draft" "$root/$dir/draft.md"
+    # The pushed state names the draft by its path in the store; a local
+    # path means nothing to the container that restores it.
+    [ -z "$draft" ] || cp "$draft" "$root/$dir/draft.md"
+    if [ -f "$root/$dir/draft.md" ]; then
         handoff_state_set "$root/$dir/state.json" draft_path "$dir/draft.md"
+    else
+        handoff_state_set "$root/$dir/state.json" draft_path ""
     fi
     if ! out=$(git -C "$root" add -- "$dir" 2>&1); then
         echo "handing-off: git add in $root failed: $(handoff_store_redact "$out")" >&2
