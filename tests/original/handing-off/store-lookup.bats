@@ -70,3 +70,45 @@ store_root() {
   [[ "$output" == *"no session-memory clone was found"* ]]
   [[ "$output" == *"a resume into a new container loses this run"* ]]
 }
+
+# --- the lookup refuses where the ledger refuses (review of #274) -----
+
+@test "SESSION_MEMORY_ROOT naming a clone of another repository gets nothing" {
+  git init -q --bare -b main "$TMP/remote/other.git"
+  git clone -q "$TMP/remote/other.git" "$TMP/other" 2> /dev/null
+  git -C "$TMP/other" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
+  git -C "$TMP/other" push -q origin main
+  export SESSION_MEMORY_ROOT="$TMP/other"
+  run "$SKILL/phase.sh" listed
+  [[ "$output" == *"loses this run"* ]]
+  ! git -C "$TMP/remote/other.git" show main:handoffs/sessions/s1/state.json 2> /dev/null || false
+  [ -z "$(store_root 2> /dev/null)" ]
+  ! ledger_root 2> /dev/null || false
+}
+
+@test "SESSION_MEMORY_ROOT naming no clone stops the lookup, as it stops the ledger" {
+  clone_at "$TMP/root/session-memory"
+  echo "SESSION_ROOT=$TMP/root" > "$HOME/.claude/session.env"
+  export SESSION_MEMORY_ROOT="$TMP/nowhere"
+  [ -z "$(store_root 2> /dev/null)" ]
+  ! ledger_root 2> /dev/null || false
+}
+
+@test "a store clone off its default branch takes nothing" {
+  clone_at "$TMP/root/session-memory"
+  echo "SESSION_ROOT=$TMP/root" > "$HOME/.claude/session.env"
+  git -C "$TMP/root/session-memory" checkout -q -b feature
+  run "$SKILL/phase.sh" listed
+  [[ "$output" == *"not its default branch"* ]]
+  [[ "$output" == *"loses this run"* ]]
+  ! git -C "$SESSION_MEMORY_URL" rev-parse -q --verify refs/heads/feature || false
+}
+
+@test "a store clone on a detached HEAD takes nothing" {
+  clone_at "$TMP/root/session-memory"
+  echo "SESSION_ROOT=$TMP/root" > "$HOME/.claude/session.env"
+  git -C "$TMP/root/session-memory" checkout -q --detach
+  run "$SKILL/phase.sh" listed
+  [[ "$output" == *"a detached HEAD"* ]]
+  [[ "$output" == *"loses this run"* ]]
+}
