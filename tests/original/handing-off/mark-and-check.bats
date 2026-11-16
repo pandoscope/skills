@@ -7,7 +7,23 @@ setup() {
   export HANDOFF_STATE="$TMP/state.json"
   export CLAUDE_SETTINGS="$TMP/settings.json"
   export HANDOFF_TRANSCRIPT="$TMP/transcript.jsonl"
-  echo "a handoff" > "$TMP/handoff.md"
+  cat > "$TMP/handoff.md" <<'MD'
+# Handoff
+
+## Finish first
+
+- [x] model: write the tickets
+
+## Open state
+
+| Item | State | Next |
+| --- | --- | --- |
+| repo#1 fix | open | merge it |
+
+## Persisted
+
+- none
+MD
   {
     echo '{"type":"user"}'
     echo '{"type":"assistant","message":{"usage":{"input_tokens":5,"cache_creation_input_tokens":2000,"cache_read_input_tokens":640000,"output_tokens":10}}}'
@@ -62,7 +78,9 @@ teardown() { rm -rf "$TMP"; }
 
 @test "check fails when the marker predates the run" {
   "$SKILL/mark.sh" "$TMP/handoff.md" > /dev/null
-  touch -d '30 minutes ago' "$HANDOFF_STATE"
+  . "$SKILL/state.sh"
+  handoff_state_set "$HANDOFF_STATE" written_epoch "$(( $(date +%s) - 1800 ))"
+  touch -d '30 minutes ago' "$TMP/handoff.md"
   run "$SKILL/check.sh"
   [ "$status" -eq 1 ]
   [[ "$output" == *"MARKER PREDATES THIS RUN"* ]]
@@ -90,4 +108,59 @@ teardown() { rm -rf "$TMP"; }
   [ "$status" -eq 0 ]
   grep -q '"context_tokens":null' "$HANDOFF_STATE"
   [[ "$output" == *"fall back to marker age"* ]]
+}
+
+# --- the completion criteria of run 2 (skills#267) ------------------
+
+@test "check passes and sets the phase complete" {
+  "$SKILL/mark.sh" "$TMP/handoff.md" > /dev/null
+  run "$SKILL/check.sh"
+  [ "$status" -eq 0 ]
+  grep -q '"phase":"complete"' "$HANDOFF_STATE"
+}
+
+@test "check fails without the Persisted heading" {
+  sed -i '/^## Persisted/,$d' "$TMP/handoff.md"
+  "$SKILL/mark.sh" "$TMP/handoff.md" > /dev/null
+  run "$SKILL/check.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"NO PERSISTED LIST"* ]]
+  ! grep -q '"phase":"complete"' "$HANDOFF_STATE" || false
+}
+
+@test "check fails on a Persisted heading without an item" {
+  sed -i '/^- none$/d' "$TMP/handoff.md"
+  "$SKILL/mark.sh" "$TMP/handoff.md" > /dev/null
+  run "$SKILL/check.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"NO PERSISTED LIST"* ]]
+}
+
+@test "check fails when the handoff changed after the marker" {
+  "$SKILL/mark.sh" "$TMP/handoff.md" > /dev/null
+  touch -d '1 minute' "$TMP/handoff.md"
+  run "$SKILL/check.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"HANDOFF CHANGED AFTER THE MARKER"* ]]
+  ! grep -q '"phase":"complete"' "$HANDOFF_STATE" || false
+}
+
+@test "check fails while the finish-first list is not settled" {
+  sed -i 's/- \[x\] model: write the tickets/- [ ] model: write the tickets/' "$TMP/handoff.md"
+  "$SKILL/mark.sh" "$TMP/handoff.md" > /dev/null
+  run "$SKILL/check.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FINISH-FIRST LIST NOT SETTLED"* ]]
+  [[ "$output" == *"unticked: model: write the tickets"* ]]
+}
+
+@test "a state write after marking does not make an old marker young" {
+  "$SKILL/mark.sh" "$TMP/handoff.md" > /dev/null
+  . "$SKILL/state.sh"
+  handoff_state_set "$HANDOFF_STATE" written_epoch "$(( $(date +%s) - 1800 ))"
+  touch -d '30 minutes ago' "$TMP/handoff.md"
+  handoff_state_set "$HANDOFF_STATE" phase written
+  run "$SKILL/check.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"MARKER PREDATES THIS RUN"* ]]
 }

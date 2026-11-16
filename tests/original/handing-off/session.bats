@@ -12,7 +12,7 @@ setup() {
   unset HANDOFF_STATE HANDOFF_TRANSCRIPT CLAUDE_PID CLAUDE_CODE_SESSION_ID
   PROJECTS="$HOME/.claude/projects/-work-repo"
   mkdir -p "$PROJECTS"
-  echo "a handoff" > "$TMP/handoff.md"
+  printf '# Handoff\n\n## Finish first\n\n## Persisted\n\n- none\n' > "$TMP/handoff.md"
 }
 
 teardown() { rm -rf "$TMP"; }

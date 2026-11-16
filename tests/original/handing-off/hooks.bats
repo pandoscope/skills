@@ -17,6 +17,11 @@ setup() {
   cat > "$TMP/handoff.md" <<'MD'
 # Handoff
 
+## Finish first
+
+- [x] model: write the tickets
+- [x] model: run the probes (postponed until: the probe ticket closes)
+
 ## Open state
 
 | Item | State | Next |
@@ -25,6 +30,10 @@ setup() {
 | repo#34 linter | designed, parked | grill the open questions |
 
 ## Gotchas
+
+## Persisted
+
+- none
 MD
 }
 
@@ -197,4 +206,15 @@ MD
   run "$SKILL/check.sh"
   [ "$status" -eq 1 ]
   [[ "$output" == *"NO FRESHNESS MARKER"* ]]
+}
+
+@test "guard ages a marker without token measure by its written time, not the file's" {
+  echo '{"type":"user"}' > "$TMP/transcript.jsonl"
+  "$SKILL/mark.sh" "$TMP/handoff.md" > /dev/null
+  . "$SKILL/state.sh"
+  handoff_state_set "$HANDOFF_STATE" written_epoch "$(( $(date +%s) - 7200 ))"
+  handoff_state_set "$HANDOFF_STATE" phase complete
+  run "$SKILL/guard.sh" <<< '{"session_id":"s1"}'
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"7200s old"* ]] || [[ "$output" == *"7201s old"* ]]
 }
