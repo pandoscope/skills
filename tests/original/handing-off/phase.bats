@@ -69,3 +69,14 @@ teardown() { rm -rf "$TMP"; }
   [ "$status" -eq 1 ]
   [[ "$output" == *"no handoff draft at $TMP/state/s1.draft.md"* ]]
 }
+
+@test "recording listed drops the marker of an earlier cycle" {
+  "$SKILL/mark.sh" "$TMP/state/s1.draft.md" > /dev/null
+  grep -q '"handoff_path"' "$HANDOFF_STATE"
+  run "$SKILL/phase.sh" listed
+  [ "$status" -eq 0 ]
+  for field in handoff_path written_at written_epoch context_tokens published_url transcript_path; do
+    ! grep -q "\"$field\"" "$HANDOFF_STATE" || false
+  done
+  grep -q '"phase":"listed"' "$HANDOFF_STATE"
+}

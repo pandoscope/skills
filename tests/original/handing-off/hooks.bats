@@ -228,3 +228,19 @@ MD
   [ "$status" -eq 2 ]
   [[ "$output" == *"7200s old"* ]] || [[ "$output" == *"7201s old"* ]]
 }
+
+# --- the phase holds the gate (skills#267) ---------------------------
+
+@test "guard blocks while the phase is listed or written, even with a fresh marker" {
+  "$SKILL/mark.sh" "$TMP/handoff.md" > /dev/null
+  . "$SKILL/state.sh"
+  for phase in listed written; do
+    handoff_state_set "$HANDOFF_STATE" phase "$phase"
+    run "$SKILL/guard.sh" <<< '{"session_id":"s1"}'
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"COMPACTION BLOCKED: the handing-off runs are in the phase $phase"* ]]
+  done
+  handoff_state_set "$HANDOFF_STATE" phase complete
+  run "$SKILL/guard.sh" <<< '{"session_id":"s1"}'
+  [ "$status" -eq 0 ]
+}
