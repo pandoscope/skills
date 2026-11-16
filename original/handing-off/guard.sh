@@ -37,24 +37,12 @@ if [ -z "$state" ] || [ ! -f "$state" ]; then
 $where. Have the session run the handing-off skill, then /compact \
 again (PRECOMPACT_GUARD=off overrides)."
 fi
-tokens_then=$(sed -n 's/.*"context_tokens":\([0-9]\{1,\}\).*/\1/p' "$state")
 transcript=$(handoff_json_field transcript_path "$input")
 [ -f "${transcript:-/nonexistent}" ] \
     || transcript=$(handoff_json_field transcript_path "$(cat "$state")")
-tokens_now=$(handoff_context_tokens "$transcript")
-if [ -n "$tokens_then" ] && [ -n "$tokens_now" ]; then
-    grown=$(( tokens_now - tokens_then ))
-    slack="${HANDOFF_STALE_TOKENS:-50000}"
-    [ "$grown" -le "$slack" ] || block "COMPACTION BLOCKED: the handoff \
-marker is stale — the context grew ~$grown tokens (slack $slack) since \
-it was written. Have the session rerun the handing-off skill, then \
-/compact again (PRECOMPACT_GUARD=off overrides)."
-else
-    age=$(( $(date +%s) - $(date -r "$state" +%s) ))
-    max="${HANDOFF_MAX_AGE:-3600}"
-    [ "$age" -le "$max" ] || block "COMPACTION BLOCKED: the handoff \
-marker is ${age}s old and carries no token measure to judge growth \
-against. Have the session rerun the handing-off skill, then /compact \
-again (PRECOMPACT_GUARD=off overrides)."
+if ! stale=$(handoff_marker_staleness "$state" "$transcript"); then
+    block "COMPACTION BLOCKED: the handoff marker $stale. Have the session \
+rerun the handing-off skill, then /compact again (PRECOMPACT_GUARD=off \
+overrides)."
 fi
 exit 0

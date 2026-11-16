@@ -8,7 +8,8 @@
 # ~/.claude/handoff-state/<session-id>.json: one file shared by every
 # session let parallel sessions overwrite each other's marker.
 #
-# JSON reads and the state writer live in fields.sh, sourced here.
+# JSON reads and the state writer live in fields.sh, the marker's
+# freshness in marker.sh; both are sourced here.
 #
 # Every lookup exits 0. A lookup that finds nothing prints nothing;
 # find and cat errors on absent files are discarded, since an absent
@@ -16,6 +17,8 @@
 
 # shellcheck source=original/handing-off/fields.sh
 . "$(dirname "${BASH_SOURCE[0]}")/fields.sh"
+# shellcheck source=original/handing-off/marker.sh
+. "$(dirname "${BASH_SOURCE[0]}")/marker.sh"
 
 # Print the session id a transcript belongs to.
 #   $1  transcript path
