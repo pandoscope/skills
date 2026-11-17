@@ -3,13 +3,14 @@
 # guard.sh). stdout on SessionStart(source=compact) lands in the fresh
 # context — the one channel that reaches the model after compaction —
 # so this is where the handoff gets its pointer and its priorities
-# re-stated. Moved here from the installing project's hooks: this file
-# reads what mark.sh writes and parses the table SKILL.md step 2
+# re-stated, and where the phase of the handing-off runs is cleared.
+# Moved here from the installing project's hooks: this file
+# reads what mark.sh writes and parses the open-state table SKILL.md
 # defines, so every party to the contract ships and versions together.
 #
 # The open-state rows are lifted VERBATIM, in table order — notation,
 # not paraphrase — so this output cannot drift from the handoff. The
-# ordering is the skill's step-1 responsibility; extraction stays dumb
+# ordering is the skill's responsibility; extraction stays dumb
 # on purpose.
 set -u
 # A hook always gets its input on stdin; a person running this by hand
@@ -18,18 +19,118 @@ input=""
 [ -t 0 ] || input=$(cat)
 # shellcheck source=original/handing-off/state.sh
 . "$(dirname "${BASH_SOURCE[0]}")/state.sh"
-state=$(handoff_marker_to_read "$(handoff_session_of_hook_input "$input")")
-if [ -z "$state" ] || [ ! -f "$state" ]; then
+# shellcheck source=original/handing-off/store.sh
+. "$(dirname "${BASH_SOURCE[0]}")/store.sh"
+session=$(handoff_session_of_hook_input "$input")
+state=$(handoff_marker_to_read "$session")
+
+# The run records its store in the state (store.sh); a hook does not
+# see a HANDOFF_STORE set only in the run's shell.
+if [ -z "${HANDOFF_STORE:-}" ] && [ -n "$state" ] && [ -f "$state" ]; then
+    recorded=$(handoff_json_field store_root "$(cat "$state")")
+    if [ -n "$recorded" ] && [ -d "$recorded/.git" ]; then
+        export HANDOFF_STORE="$recorded"
+    fi
+fi
+
+# bounded [--stop] <seconds> <log> <command...>: runs the command in
+# the background and waits at most that long. Returns its status; 124
+# when it is still running. Then it goes on in the background, or with
+# --stop it is stopped: a restore that lands after this hook has judged
+# the state would write a phase and a marker nobody clears (review of
+# skills#274, round two, D6).
+bounded() {
+    local stop=0 limit log pid ticks=0
+    [ "$1" != --stop ] || { stop=1; shift; }
+    limit=$1 log=$2
+    shift 2
+    "$@" > "$log" 2>&1 &
+    pid=$!
+    while kill -0 "$pid" 2>/dev/null; do
+        if [ "$ticks" -ge $((limit * 5)) ]; then
+            [ "$stop" -eq 0 ] || kill "$pid" 2>/dev/null || true
+            return 124
+        fi
+        sleep 0.2
+        ticks=$((ticks + 1))
+    done
+    wait "$pid"
+}
+wait_limit=${HANDOFF_PUSH_WAIT:-5}
+case "$wait_limit" in ''|*[!0-9]*) wait_limit=5 ;; esac
+
+# A resume into a new container loses everything under the home
+# directory: the state and the draft then come back from the store, so
+# the open-state rows still reach the fresh context.
+if [ -n "$state" ] && [ ! -f "$state" ] && [ -n "$session" ]; then
+    restore_log=$(mktemp)
+    if bounded --stop "$wait_limit" "$restore_log" \
+           handoff_store_pull "$session" "$state" "$(handoff_draft_path "$session")"; then
+        echo "handing-off: restored the state and the draft from the store."
+    fi
+    rm -f "$restore_log"
+fi
+# Every compaction ends the handing-off runs before it (skills#267): the
+# phase is cleared here, with or without a marker, so the next
+# invocation starts run 1. The cleared state is pushed last, after the
+# context is printed, and only for a bounded time.
+phase=""
+marker=""
+if [ -n "$state" ] && [ -f "$state" ]; then
+    phase=$(handoff_json_field phase "$(cat "$state")")
+    [ -z "$phase" ] || handoff_state_set "$state" phase ""
+fi
+# The compaction also consumes the marker (review of skills#274, item
+# 1): kept, it would pass the guard at the next compaction, and the
+# next verification would restate its table as current. Read it first,
+# then drop it here and in the pushed state.
+cleared=$phase
+if handoff_has_marker "$state"; then
+    marker=$(cat "$state")
+    handoff_state_set "$state" written_at "" written_epoch "" \
+        handoff_path "" published_url "" context_tokens ""
+    cleared=${phase:-the marker}
+fi
+
+# push_cleared_state: pushes the cleared state, waiting at most
+# HANDOFF_PUSH_WAIT seconds (default 5); a push still running then goes
+# on in the background. Prints one line when the push failed or did
+# not finish in time.
+push_cleared_state() {
+    [ -n "$cleared" ] || return 0
+    local log status=0
+    log=$(mktemp)
+    bounded "$wait_limit" "$log" handoff_store_push "$session" "$state" || status=$?
+    if [ "$status" -eq 124 ]; then
+        echo "handing-off: the push of the cleared state ($cleared) did not" \
+             "finish within ${wait_limit}s; until it lands, a resume into a" \
+             "new container restores it."
+    elif [ "$status" -ne 0 ]; then
+        echo "handing-off: $cleared is cleared here, but no store" \
+             "took the cleared state, so a resume into a new container" \
+             "restores it. $(tr '\n' ' ' < "$log")"
+    fi
+    rm -f "$log"
+}
+
+if [ -z "$marker" ]; then
     echo "COMPACTION JUST COMPLETED with no handoff marker — this" \
          "compaction ran unguarded. Tell the user at the start of your" \
          "reply: state before this point exists only in the summary," \
          "and a handoff should be reconstructed now from tickets and" \
          "the ledger before new work builds on it."
+    push_cleared_state
     exit 0
 fi
-marker=$(cat "$state")
 path=$(handoff_json_field handoff_path "$marker")
 url=$(handoff_json_field published_url "$marker")
+# The local copy of the handoff can be gone while the state is not; the
+# store holds it under the session, so it comes back from there.
+if [ -n "$path" ] && [ ! -f "$path" ] && [ -n "$session" ]; then
+    draft_log=$(mktemp)
+    bounded "$wait_limit" "$draft_log" handoff_store_pull_draft "$session" "$path" || true
+    rm -f "$draft_log"
+fi
 
 # First table whose header names Item and Next; rows without header
 # and separator. Multiple tables in the handoff are fine — the
@@ -48,6 +149,23 @@ if [ -n "$path" ] && [ -f "$path" ]; then
     ' "$path")
 fi
 
+# A marker that an earlier compaction did not consume (an older skill,
+# or no verification ran) names a handoff from before that compaction:
+# its table is not current. The transcript holds this compaction's own
+# boundary too, so an earlier one makes two.
+transcript=$(handoff_json_field transcript_path "$input")
+[ -f "${transcript:-/nonexistent}" ] || transcript=$(handoff_json_field transcript_path "$marker")
+epoch=$(handoff_json_number written_epoch "$marker")
+case "$epoch" in ''|null) epoch=$(date -r "$state" +%s) ;; esac
+if [ "$(handoff_compactions_since "$transcript" "$epoch")" -ge 2 ]; then
+    echo "COMPACTION JUST COMPLETED. The latest handoff, ${path:-unrecorded}," \
+         "predates an earlier compaction of this session, so its open-state" \
+         "table is not current and is not restated. Tell the user at the" \
+         "start of your reply, and reconstruct the open state from tickets" \
+         "and the ledger before new work builds on it."
+    push_cleared_state
+    exit 0
+fi
 echo "COMPACTION JUST COMPLETED. The latest handoff is" \
      "${path:-unrecorded}${url:+ (published: $url)}."
 if [ -n "$rows" ]; then
@@ -65,4 +183,5 @@ else
          "the user at the start of your reply whether the handoff is" \
          "in context."
 fi
+push_cleared_state
 exit 0

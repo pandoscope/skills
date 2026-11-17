@@ -36,6 +36,8 @@ Ubiquitous language: `docs/glossary/`, one file per term, resolve via `uvx disam
 
 - [Skills](docs/glossary/skills.md)
 - [Grilling Session](docs/glossary/grilling-session.md)
+- [Finish-first list](docs/glossary/finish-first-list.md)
+- [Sweep](docs/glossary/handoff-sweep.md)
 
 ## Rules
 

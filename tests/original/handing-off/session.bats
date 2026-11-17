@@ -4,15 +4,17 @@
 # (skills#245, skills#255). HOME is a scratch directory, so the
 # session variables of whatever session runs this suite stay out.
 
+load store_helper
+
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME" && git rev-parse --show-toplevel)"
   SKILL="$REPO_ROOT/original/handing-off"
   TMP=$(mktemp -d)
-  export HOME="$TMP/home"
+  store_isolate
   unset HANDOFF_STATE HANDOFF_TRANSCRIPT CLAUDE_PID CLAUDE_CODE_SESSION_ID
   PROJECTS="$HOME/.claude/projects/-work-repo"
   mkdir -p "$PROJECTS"
-  echo "a handoff" > "$TMP/handoff.md"
+  printf '# Handoff\n\n## Finish first\n\n## Persisted\n\n- none\n' > "$TMP/handoff.md"
 }
 
 teardown() { rm -rf "$TMP"; }
@@ -144,6 +146,7 @@ pid_file() {
   HANDOFF_TRANSCRIPT="$PROJECTS/session-a.jsonl" "$SKILL/mark.sh" "$TMP/handoff.md"
   HANDOFF_TRANSCRIPT="$PROJECTS/session-b.jsonl" "$SKILL/mark.sh" "$TMP/b.md"
   rm "$TMP/b.md"
+  record_written "$HOME/.claude/handoff-state/session-a.json"
   run env HANDOFF_TRANSCRIPT="$PROJECTS/session-a.jsonl" "$SKILL/check.sh"
   [ "$status" -eq 0 ]
   [[ "$output" == *"machine checks pass"* ]]
@@ -161,9 +164,10 @@ legacy_marker() {
   legacy_marker session-a
   run "$SKILL/guard.sh" < <(hook_input session-a)
   [ "$status" -eq 0 ]
+  # It predates the phases, so check.sh does not complete it (E4).
   run env HANDOFF_TRANSCRIPT="$PROJECTS/session-a.jsonl" "$SKILL/check.sh"
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"machine checks pass"* ]]
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"PHASE NOT WRITTEN"* ]]
 }
 
 @test "an old shared marker of another session serves no one else" {
@@ -278,4 +282,22 @@ legacy_marker() {
   run env CLAUDE_CODE_SESSION_ID='*' "$SKILL/mark.sh" "$TMP/handoff.md"
   [ "$status" -eq 1 ]
   [ ! -e "$HOME/.claude/handoff-state/*.json" ]
+}
+
+@test "with two transcripts under one session id, mark measures the live one (item 7)" {
+  # A session restarted from another checkout: an old transcript that no
+  # longer grows and the live one. Each order of the two directories is
+  # tried, since find returns them in an order of its own.
+  for live in -work-one -work-two; do
+    rm -rf "$HOME/.claude/projects" "$HOME/.claude/handoff-state"
+    transcript "$HOME/.claude/projects/-work-one/session-a.jsonl" 200000
+    transcript "$HOME/.claude/projects/-work-two/session-a.jsonl" 200000
+    transcript "$HOME/.claude/projects/$live/session-a.jsonl" 1000
+    for frozen in "$HOME"/.claude/projects/*/session-a.jsonl; do
+      [ "$frozen" = "$HOME/.claude/projects/$live/session-a.jsonl" ] || touch -d '1 hour ago' "$frozen"
+    done
+    run env CLAUDE_CODE_SESSION_ID=session-a "$SKILL/mark.sh" "$TMP/handoff.md"
+    [ "$status" -eq 0 ]
+    grep -q '"context_tokens":1000' "$HOME/.claude/handoff-state/session-a.json"
+  done
 }

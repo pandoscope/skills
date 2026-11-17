@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # Write the freshness marker that hooks compare against.
 #
-# Usage: mark.sh <handoff-file> [published-url]
+# Usage: mark.sh <handoff-file> [published-location]
+#        published-location: where the handoff was published, a URL or,
+#        in a session-memory store, its path in the store (never a URL
+#        of the store: the outgoing scan blocks it). Kept as
+#        published_url.
 # Env:   HANDOFF_STATE      marker path (default
 #                           ~/.claude/handoff-state/<session-id>.json,
 #                           see state.sh)
@@ -19,7 +23,7 @@
 # marker carries null and hooks fall back to age.
 set -euo pipefail
 
-handoff=${1:?usage: mark.sh <handoff-file> [published-url]}
+handoff=${1:?usage: mark.sh <handoff-file> [published-location]}
 url=${2:-}
 if [ ! -s "$handoff" ]; then
     echo "mark.sh: handoff file missing or empty: $handoff" >&2
@@ -52,10 +56,11 @@ if [ -z "$tokens" ]; then
     echo "mark.sh: no transcript usage found — hooks fall back to marker age" >&2
 fi
 
-mkdir -p "$(dirname "$state")"
-printf '{"written_at":"%s","handoff_path":"%s","published_url":"%s","transcript_path":"%s","context_tokens":%s}\n' \
-    "$(date -u +%FT%TZ)" "$handoff" "$url" "$transcript" "$tokens" \
-    > "$state"
+handoff_state_set "$state" \
+    written_at "$(date -u +%FT%TZ)" written_epoch "$(date +%s)" \
+    handoff_path "$handoff" \
+    published_url "$url" transcript_path "$transcript" \
+    context_tokens "$tokens"
 echo "marker written: $state"
 
 # The session's own marker supersedes its old shared one. Left in

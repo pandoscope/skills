@@ -1,16 +1,24 @@
 # shellcheck shell=bash
-# Where a session's handoff marker lives (skills#255). Sourced by
-# mark.sh, check.sh, guard.sh and verify.sh, so all four resolve the
-# marker the same way.
+# Where a session's handoff state lives (skills#255, skills#267).
+# Sourced by every script of the skill, so all of them resolve the
+# state the same way.
 #
 # A session id is the file name of the session's transcript without
 # .jsonl. Each session gets its own marker,
 # ~/.claude/handoff-state/<session-id>.json: one file shared by every
 # session let parallel sessions overwrite each other's marker.
 #
+# JSON reads and the state writer live in fields.sh, the marker's
+# freshness in marker.sh; both are sourced here.
+#
 # Every lookup exits 0. A lookup that finds nothing prints nothing;
 # find and cat errors on absent files are discarded, since an absent
 # file is an empty answer.
+
+# shellcheck source=original/handing-off/fields.sh
+. "$(dirname "${BASH_SOURCE[0]}")/fields.sh"
+# shellcheck source=original/handing-off/marker.sh
+. "$(dirname "${BASH_SOURCE[0]}")/marker.sh"
 
 # Print the session id a transcript belongs to.
 #   $1  transcript path
@@ -50,6 +58,18 @@ handoff_marker_path() {
     elif handoff_valid_session "$1"; then
         printf '%s\n' "$HOME/.claude/handoff-state/$1.json"
     fi
+}
+
+# Print the path of a session's handoff draft (skills#267): the
+# handoff file before it is published, beside the session's state.
+#   $1  session id
+# Prints the state path (handoff_marker_path) with .json replaced by
+# .draft.md; nothing when there is no state path.
+handoff_draft_path() {
+    local state
+    state=$(handoff_marker_path "$1")
+    [ -n "$state" ] || return 0
+    printf '%s\n' "${state%.json}.draft.md"
 }
 
 # Print the marker path a session reads.
@@ -101,18 +121,6 @@ handoff_session_of_hook_input() {
                       "$(handoff_json_field transcript_path "$1")")
     fi
     printf '%s\n' "$session"
-}
-
-# Print the string value a key carries in a one-object JSON text.
-#   $1  key
-#   $2  the JSON text: a hook input, a pid file or a marker
-# Prints the value of the key's last occurrence on a line; nothing
-# when the key is absent. Reads flat string values only: a value with
-# an escaped quote is cut at that quote.
-# sed, not a JSON tool: the consumer may lack one.
-handoff_json_field() {
-    printf '%s\n' "$2" \
-        | sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p"
 }
 
 # Print the session id of the session that runs the calling script.
@@ -171,15 +179,24 @@ handoff_own_session() {
 #   $1  session id
 # Prints $HANDOFF_TRANSCRIPT when set, else
 # ~/.claude/projects/<project>/<session-id>.jsonl; nothing when no
-# such file exists or the session id is not a plain name.
+# such file exists or the session id is not a plain name. A session
+# restarted from another checkout has a transcript in each project
+# directory, and only the newest still grows (review of skills#274,
+# item 7): the newest is printed.
 handoff_transcript_of_session() {
     if [ -n "${HANDOFF_TRANSCRIPT:-}" ]; then
         printf '%s\n' "$HANDOFF_TRANSCRIPT"
         return 0
     fi
     handoff_valid_session "$1" || return 0
-    find "$HOME/.claude/projects" -mindepth 2 -maxdepth 2 \
-         -name "$1.jsonl" -type f -print -quit 2>/dev/null || true
+    local candidate newest=""
+    while IFS= read -r candidate; do
+        if [ -z "$newest" ] || [ "$candidate" -nt "$newest" ]; then
+            newest=$candidate
+        fi
+    done < <(find "$HOME/.claude/projects" -mindepth 2 -maxdepth 2 \
+                  -name "$1.jsonl" -type f 2>/dev/null || true)
+    [ -z "$newest" ] || printf '%s\n' "$newest"
 }
 
 # Print the newest session transcript on this machine.

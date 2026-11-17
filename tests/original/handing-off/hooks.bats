@@ -3,10 +3,13 @@
 # source=compact), guard.sh (PreCompact), and check.sh's registration
 # installer.
 
+load store_helper
+
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME" && git rev-parse --show-toplevel)"
   SKILL="$REPO_ROOT/original/handing-off"
   TMP=$(mktemp -d)
+  store_isolate
   export HANDOFF_STATE="$TMP/state.json"
   export HANDOFF_TRANSCRIPT="$TMP/transcript.jsonl"
   export CLAUDE_SETTINGS="$TMP/settings.json"
@@ -17,6 +20,11 @@ setup() {
   cat > "$TMP/handoff.md" <<'MD'
 # Handoff
 
+## Finish first
+
+- [x] model: write the tickets
+- [x] model: run the probes (postponed until: the probe ticket closes)
+
 ## Open state
 
 | Item | State | Next |
@@ -25,6 +33,10 @@ setup() {
 | repo#34 linter | designed, parked | grill the open questions |
 
 ## Gotchas
+
+## Persisted
+
+- none
 MD
 }
 
@@ -52,6 +64,16 @@ teardown() { rm -rf "$TMP"; }
   [ "$(printf '%s\n' "$output" | grep -c '^| repo!12 fix')" -eq 1 ]
   [[ "$output" == *"Restate this list"* ]]
   [[ "$output" == *"mark which item you are starting on"* ]]
+}
+
+@test "verify lifts only the open-state rows, not the finish-first or Persisted items" {
+  "$SKILL/mark.sh" "$TMP/handoff.md" > /dev/null
+  run "$SKILL/verify.sh" <<< '{"session_id":"s1"}'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"| repo!12 fix | green, awaiting merge | merge it |"* ]]
+  [[ "$output" != *"write the tickets"* ]]
+  [[ "$output" != *"run the probes"* ]]
+  [[ "$output" != *"- none"* ]]
 }
 
 @test "verify skips a table whose header is not the open-state one" {
@@ -107,6 +129,7 @@ MD
 # --- check.sh registration -----------------------------------------
 
 @test "check installs both registrations into an absent settings.json and warns" {
+  record_written "$HANDOFF_STATE"
   "$SKILL/mark.sh" "$TMP/handoff.md" > /dev/null
   run "$SKILL/check.sh"
   [ "$status" -eq 0 ]
@@ -117,6 +140,7 @@ MD
 }
 
 @test "check is quiet-green once registered, and preserves foreign keys" {
+  record_written "$HANDOFF_STATE"
   printf '{"env": {"KEEP": "me"}, "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "x.sh"}]}]}}\n' > "$CLAUDE_SETTINGS"
   "$SKILL/mark.sh" "$TMP/handoff.md" > /dev/null
   run "$SKILL/check.sh"
@@ -149,11 +173,13 @@ MD
   [ "$status" -eq 0 ]
   grep -q "\"handoff_path\":\"$TMP/handoff.md\"" "$HANDOFF_STATE"
   cd /
+  record_written "$HANDOFF_STATE"
+  run "$SKILL/check.sh"
+  [ "$status" -eq 0 ]
+  # verify last: the compaction consumes the marker.
   run "$SKILL/verify.sh" < /dev/null
   [ "$status" -eq 0 ]
   [[ "$output" == *"| repo!12 fix | green, awaiting merge | merge it |"* ]]
-  run "$SKILL/check.sh"
-  [ "$status" -eq 0 ]
 }
 
 @test "guard still sees growth after a synthetic assistant line with zero usage" {
@@ -173,4 +199,62 @@ MD
   run bash -c "sleep 15 | timeout 5 script -qec '$SKILL/verify.sh' /dev/null"
   [ "$status" -eq 0 ]
   [[ "$output" == *"no handoff marker"* ]]
+}
+
+# --- a state without a marker (skills#267) --------------------------
+# Run 1 of handing-off leaves a state with a phase and no marker.
+
+@test "guard blocks compaction on a state that holds a phase but no marker" {
+  echo '{"phase":"listed","draft_path":"/x/draft.md"}' > "$HANDOFF_STATE"
+  run "$SKILL/guard.sh" <<< '{"session_id":"s1"}'
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"COMPACTION BLOCKED: no handoff marker"* ]]
+}
+
+@test "verify reports a state that holds a phase but no marker as unguarded" {
+  echo '{"phase":"listed","draft_path":"/x/draft.md"}' > "$HANDOFF_STATE"
+  run "$SKILL/verify.sh" <<< '{"session_id":"s1"}'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"no handoff marker"* ]]
+}
+
+@test "check fails on a state that holds a phase but no marker" {
+  echo '{"phase":"listed","draft_path":"/x/draft.md"}' > "$HANDOFF_STATE"
+  run "$SKILL/check.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"NO FRESHNESS MARKER"* ]]
+}
+
+@test "guard ages a marker without token measure by its written time, not the file's" {
+  echo '{"type":"user"}' > "$TMP/transcript.jsonl"
+  "$SKILL/mark.sh" "$TMP/handoff.md" > /dev/null
+  . "$SKILL/state.sh"
+  handoff_state_set "$HANDOFF_STATE" written_epoch "$(( $(date +%s) - 7200 ))"
+  handoff_state_set "$HANDOFF_STATE" phase complete
+  run "$SKILL/guard.sh" <<< '{"session_id":"s1"}'
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"7200s old"* ]] || [[ "$output" == *"7201s old"* ]]
+}
+
+# --- the phase holds the gate (skills#267) ---------------------------
+
+@test "guard blocks while the phase is listed or written, even with a fresh marker" {
+  "$SKILL/mark.sh" "$TMP/handoff.md" > /dev/null
+  . "$SKILL/state.sh"
+  for phase in listed written; do
+    handoff_state_set "$HANDOFF_STATE" phase "$phase"
+    run "$SKILL/guard.sh" <<< '{"session_id":"s1"}'
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"COMPACTION BLOCKED: the handing-off runs are in the phase $phase"* ]]
+  done
+  handoff_state_set "$HANDOFF_STATE" phase complete
+  run "$SKILL/guard.sh" <<< '{"session_id":"s1"}'
+  [ "$status" -eq 0 ]
+}
+
+@test "a slack that is no number makes the marker stale, never fresh" {
+  "$SKILL/mark.sh" "$TMP/handoff.md" > /dev/null
+  run env HANDOFF_STALE_TOKENS=lots "$SKILL/guard.sh" <<< '{"session_id":"s1"}'
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"HANDOFF_STALE_TOKENS=lots is no number"* ]]
 }
