@@ -70,3 +70,9 @@ compact_step() {
 @test "the skill does not use the platform's task list (item 17)" {
   grep -q "does not use the platform's task list" "$SKILL_MD"
 }
+
+@test "run 2's publish step publishes, as the ticket's run 2 does, and adds no comments (item 18)" {
+  run2=$(awk '/^## Run 2/ { r = 1; next } /^## / { r = 0 } r' "$SKILL_MD")
+  [[ "$run2" == *"Publish the draft"* ]]
+  [[ "$run2" != *"comment on the tickets"* ]]
+}

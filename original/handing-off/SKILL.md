@@ -76,7 +76,7 @@ Run 2 starts with a new invocation of this skill, never from memory of its text:
    On a hit, scan.sh names the store variable or blocklist entry that matched.
    Remove its value from the draft and rerun.
    Publish nothing until it passes.
-7. Publish the draft wherever the installing project keeps session artifacts, and comment on the tickets and progress records the session touched.
+7. Publish the draft wherever the installing project keeps session artifacts.
    In a session-memory store, record the handoff by its path in the store, never by a URL of the store.
 8. Run `./mark.sh <draft> [published-location]`.
    If it still warns that it took another session's transcript, set `HANDOFF_TRANSCRIPT` as at the start and rerun it.
