@@ -175,3 +175,28 @@ teardown() { rm -rf "$TMP"; }
   [[ "$output" == *"its location recorded in the marker: its path in the store"* ]]
   [[ "$output" != *"its URL recorded"* ]]
 }
+
+# persisted <section>: the fixture handoff with this Persisted section.
+persisted() {
+  { sed '/^## Persisted/,$d' "$TMP/handoff.md"; printf '%s\n' "$1"; } > "$TMP/h.md"
+  mv "$TMP/h.md" "$TMP/handoff.md"
+}
+
+@test "a fenced Persisted list counts for nothing (D7)" {
+  persisted $'## Notes\n\n```markdown\n## Persisted\n\n- none\n```'
+  "$SKILL/mark.sh" "$TMP/handoff.md" > /dev/null
+  run "$SKILL/check.sh"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"NO PERSISTED LIST"* ]]
+}
+
+@test "the Persisted list reads plus, numbered and sub-headed items (D7)" {
+  for section in $'## Persisted\n\n+ none' $'## Persisted\n\n1. none' \
+                 $'## Persisted\n\n### From the sweep\n\n- ruling -> rulings.md'; do
+    persisted "$section"
+    "$SKILL/mark.sh" "$TMP/handoff.md" > /dev/null
+    run "$SKILL/check.sh"
+    [[ "$output" != *"NO PERSISTED LIST"* ]]
+    [ "$status" -eq 0 ]
+  done
+}

@@ -107,9 +107,21 @@ if ! list_report=$("$skill_dir/list.sh" "$handoff"); then
         "the list check names the open items above" \
         "settle them, or end the turn with the phase listed (./phase.sh listed)"
 fi
+# The Persisted list is read as list.sh reads the finish-first list
+# (review of skills#274, round two, D7): fenced blocks are example text,
+# only a heading of the same or a higher level ends the section, and
+# any bullet or numbered item counts.
 persisted=$(awk '
-    /^#+[[:space:]]/ { p = ($0 ~ /^#+[[:space:]]+Persisted[[:space:]]*$/); next }
-    p && /^[[:space:]]*[-*][[:space:]]+[^[:space:]]/ { n++ }
+    { sub(/\r$/, "") }
+    /^[[:space:]]*(```|~~~)/ { fenced = !fenced; next }
+    fenced { next }
+    /^#+[[:space:]]/ {
+        level = index($0, " ") - 1
+        if ($0 ~ /^#+[[:space:]]+Persisted[[:space:]]*$/) { p = 1; p_level = level; next }
+        if (p && level <= p_level) p = 0
+        next
+    }
+    p && /^[[:space:]]*([-*+]|[0-9]+[.)])[[:space:]]+[^[:space:]]/ { n++ }
     END { print n + 0 }' "$handoff")
 [ "$persisted" -gt 0 ] || fail "NO PERSISTED LIST" \
     "$handoff has no \"Persisted\" heading with an item under it" \
