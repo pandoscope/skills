@@ -82,3 +82,20 @@ teardown() { rm -rf "$TMP"; }
   [[ "$output" == *"the value of SESSION_MEMORY_URL"* ]]
   ! remote_file handoffs/sessions/s1/state.json | grep -q "memory-store" || false
 }
+
+@test "a new item after complete reopens the run" {
+  "$SKILL/phase.sh" written > /dev/null
+  "$SKILL/mark.sh" "$TMP/state/s1.draft.md" > /dev/null
+  "$SKILL/check.sh" > /dev/null
+  grep -q '"phase":"complete"' "$HANDOFF_STATE"
+  sed -i 's/^- \[x\] model: write the tickets$/&\n- [ ] model: file the follow-up ticket/' "$TMP/state/s1.draft.md"
+  run "$SKILL/phase.sh" listed
+  [ "$status" -eq 0 ]
+  grep -q '"phase":"listed"' "$HANDOFF_STATE"
+  ! grep -q '"handoff_path"' "$HANDOFF_STATE" || false
+  run "$SKILL/guard.sh" <<< '{"session_id":"s1"}'
+  [ "$status" -eq 2 ]
+  run "$SKILL/start.sh"
+  [[ "$output" == *"starts: run 2"* ]]
+  remote_file handoffs/sessions/s1/state.json | grep -q '"phase":"listed"'
+}
