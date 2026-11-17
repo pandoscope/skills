@@ -81,3 +81,16 @@ compact_step() {
   run2=$(awk '/^## Run 2/ { r = 1; next } /^## / { r = 0 } r' "$SKILL_MD")
   [[ "$run2" == *"no store took"* ]]
 }
+
+@test "run 2 lists every named action and where each went, before the /compact command (item 22)" {
+  run2=$(awk '/^## Run 2/ { r = 1; next } /^## / { r = 0 } r' "$SKILL_MD")
+  step=$(printf '%s\n' "$run2" | awk '/^[0-9]+\. / { s = ($0 ~ /List every action you named/) } s')
+  [ -n "$step" ]
+  for place in "done" "on the finish-first list" "in the open-state table" "handed to the principal"; do
+    [[ "$step" == *"$place"* ]]
+  done
+  [[ "$step" == *"the run reopens"* ]]
+  named=$(printf '%s\n' "$run2" | grep -n "List every action you named" | cut -d: -f1)
+  compact=$(printf '%s\n' "$run2" | grep -n "exactly one" | cut -d: -f1)
+  [ "$named" -lt "$compact" ]
+}
