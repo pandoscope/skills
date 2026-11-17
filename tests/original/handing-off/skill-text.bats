@@ -94,3 +94,8 @@ compact_step() {
   compact=$(printf '%s\n' "$run2" | grep -n "exactly one" | cut -d: -f1)
   [ "$named" -lt "$compact" ]
 }
+
+@test "the skill says that its scripts run from its own directory (item 23)" {
+  start=$(awk '/^## Start/ { r = 1; next } /^## / { r = 0 } r' "$SKILL_MD")
+  [[ "$start" == *"skill's directory"* ]]
+}

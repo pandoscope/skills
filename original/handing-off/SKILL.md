@@ -19,6 +19,7 @@ Run 2 confirms from the draft that the work is settled, then completes the hando
 
 ## Start
 
+The scripts this skill names, such as `./start.sh`, are in the skill's directory, which the Skill tool prints as its base directory; run them from there.
 Run `./start.sh` on every invocation.
 It prints `starts:` with the section to follow, and `draft:` with the path to write the handoff draft to, the handoff file before you publish it.
 start.sh creates the directory, not the file: run 1 writes the file.
