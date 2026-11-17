@@ -176,6 +176,21 @@ while IFS=$'\t' read -r event slug detail; do
     if printf '%s\n' "$states" | grep -qxF "$slug	$event"; then
         continue
     fi
+    # The ledger lets a parked or blocked thread go on only through
+    # unblocked (TRANSITIONS in thread-ledger/core/schema.mjs): a thread
+    # parked in an earlier cycle needs it before it is dropped or parked
+    # again (review of skills#274, round two, D8).
+    if printf '%s\n' "$states" | awk -F'\t' -v slug="$slug" \
+           '$1 == slug && ($2 == "parked" || $2 == "blocked") { found = 1 } END { exit !found }'; then
+        if ! out=$(node "$ledger" append --ev unblocked --thread "$slug" \
+                   --session-url "$identity" 2>&1); then
+            echo "ledger.sh: the ledger refused unblocked for thread $slug after" \
+                 "$count events: $out" >&2
+            exit 1
+        fi
+        count=$((count + 1))
+        echo "ledger: unblocked $slug"
+    fi
     case "$event" in
         dropped) set -- --note "$detail" ;;
         parked) set -- --trigger "$detail" ;;

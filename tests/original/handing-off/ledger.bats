@@ -212,3 +212,15 @@ thread_state() { node "$LEDGER" state 2> /dev/null | jq -r --arg t "$1" '.[] | s
   [ "$status" -eq 0 ]
   grep -q '"--ev","parked","--thread","probes","--trigger","the probe ticket closes"' "$APPENDS"
 }
+
+@test "an item on a thread parked in an earlier cycle gets its event (D8)" {
+  real_ledger
+  node "$LEDGER" append --ev parked --thread readme --trigger "an earlier cycle" > /dev/null 2>&1
+  node "$LEDGER" append --ev blocked --thread probes --on external --what "a review" > /dev/null 2>&1
+  [ "$(thread_state readme)" = parked ]
+  [ "$(thread_state probes)" = blocked ]
+  run "$SKILL/ledger.sh" events "$TMP/draft.md"
+  [ "$status" -eq 0 ]
+  [ "$(thread_state readme)" = dropped ]
+  [ "$(thread_state probes)" = parked ]
+}
