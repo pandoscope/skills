@@ -99,3 +99,11 @@ compact_step() {
   start=$(awk '/^## Start/ { r = 1; next } /^## / { r = 0 } r' "$SKILL_MD")
   [[ "$start" == *"skill's directory"* ]]
 }
+
+@test "run 2 lists the named actions before the scan, the publish and the mark (item 24)" {
+  run2=$(awk '/^## Run 2/ { r = 1; next } /^## / { r = 0 } r' "$SKILL_MD")
+  at() { printf '%s\n' "$run2" | grep -n "$1" | head -1 | cut -d: -f1; }
+  [ "$(at 'List every action you named')" -lt "$(at 'Run `./scan.sh')" ]
+  [ "$(at 'List every action you named')" -lt "$(at 'Publish the draft')" ]
+  [ "$(at 'List every action you named')" -lt "$(at 'Run `./mark.sh')" ]
+}

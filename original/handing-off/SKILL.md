@@ -75,22 +75,23 @@ Whenever `phase.sh` or `check.sh` says that no store took a push, relay that lin
    Where should it be persisted, in tickets or docs or elsewhere?"
    Persist each finding, and record it under the heading `## Persisted` in the draft: the finding and a link to where it went.
    When the sweep finds nothing, the Persisted list holds the single item `- none`.
-6. Run `./scan.sh <draft>`.
+6. List every action you named in this run as needed.
+   For each, say whether it is done, on the finish-first list, in the open-state table, or handed to the principal.
+   An action that fits none of the four goes on the finish-first list, and the run reopens: run `./phase.sh listed`, report it and end the turn.
+   This comes before the scan, the publish and the mark, so that a found action reopens the run before anything is published.
+7. Run `./scan.sh <draft>`.
    On a hit, scan.sh names the store variable or blocklist entry that matched.
    Remove its value from the draft and rerun.
    Publish nothing until it passes.
-7. Publish the draft wherever the installing project keeps session artifacts.
+8. Publish the draft wherever the installing project keeps session artifacts.
    In a session-memory store, record the handoff by its path in the store, never by a URL of the store.
-8. Run `./mark.sh <draft> [published-location]`.
+9. Run `./mark.sh <draft> [published-location]`.
    If it still warns that it took another session's transcript, set `HANDOFF_TRANSCRIPT` as at the start and rerun it.
    Leave the other session's state file in place, since it holds that session's phase and draft path, and tell the principal which file mark.sh marked.
    Then run `./check.sh`.
    It verifies the marker, the list, the Persisted list and the hook registration.
    On a pass, it scans what it will push, then sets the phase `complete` and pushes the state.
    Relay any warning check.sh prints about registration timing.
-9. List every action you named in this run as needed.
-   For each, say whether it is done, on the finish-first list, in the open-state table, or handed to the principal.
-   An action that fits none of the four goes on the finish-first list, and the run reopens (below).
 10. From what continues next, print exactly one `/compact <focus line>` command.
    Put it in a fenced code block, with nothing else in it.
    End the turn on that command.
