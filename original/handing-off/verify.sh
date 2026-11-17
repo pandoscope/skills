@@ -141,6 +141,23 @@ if [ -n "$path" ] && [ -f "$path" ]; then
     ' "$path")
 fi
 
+# A marker that an earlier compaction did not consume (an older skill,
+# or no verification ran) names a handoff from before that compaction:
+# its table is not current. The transcript holds this compaction's own
+# boundary too, so an earlier one makes two.
+transcript=$(handoff_json_field transcript_path "$input")
+[ -f "${transcript:-/nonexistent}" ] || transcript=$(handoff_json_field transcript_path "$marker")
+epoch=$(handoff_json_number written_epoch "$marker")
+case "$epoch" in ''|null) epoch=$(date -r "$state" +%s) ;; esac
+if [ "$(handoff_compactions_since "$transcript" "$epoch")" -ge 2 ]; then
+    echo "COMPACTION JUST COMPLETED. The latest handoff, ${path:-unrecorded}," \
+         "predates an earlier compaction of this session, so its open-state" \
+         "table is not current and is not restated. Tell the user at the" \
+         "start of your reply, and reconstruct the open state from tickets" \
+         "and the ledger before new work builds on it."
+    push_cleared_state
+    exit 0
+fi
 echo "COMPACTION JUST COMPLETED. The latest handoff is" \
      "${path:-unrecorded}${url:+ (published: $url)}."
 if [ -n "$rows" ]; then

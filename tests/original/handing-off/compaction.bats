@@ -1,7 +1,8 @@
 #!/usr/bin/env bats
 # A compaction ends a handoff's cycle (skills#267, review of #274 on
-# 2026-11-17, item 1): the next compaction is blocked until a new
-# handoff is marked, whichever trigger starts it.
+# 2026-11-17, items 1 and 2): the next compaction is blocked until a
+# new handoff is marked, whichever trigger starts it, and no later
+# compaction restates the old handoff as current.
 
 load store_helper
 
@@ -84,4 +85,14 @@ boundary() {
   [ "$status" -eq 0 ]
   [[ "$output" != *"| repo#1 fix |"* ]]
   [[ "$output" == *"no handoff marker"* ]]
+}
+
+@test "verify restates no table from a handoff that predates an earlier compaction" {
+  "$SKILL/mark.sh" "$TMP/state/s1.draft.md" > /dev/null
+  boundary 2
+  boundary 4
+  run "$SKILL/verify.sh" <<< '{"session_id":"s1","source":"compact"}'
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"| repo#1 fix |"* ]]
+  [[ "$output" == *"predates an earlier compaction"* ]]
 }
