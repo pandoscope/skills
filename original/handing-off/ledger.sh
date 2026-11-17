@@ -98,8 +98,10 @@ fi
 # One tab-separated line per ticked item with a thread slug:
 # <event> <slug> [<reason or trigger>]. The item notation is list.sh's.
 events=$(awk '
+    # A note reads in any letter case (review of #274, item 5); the
+    # match runs on a lower-case copy, whose positions are the same.
     function inside(text, key,    start) {
-        if (!match(text, "\\(" key ":[[:space:]]*[^)]*\\)")) return ""
+        if (!match(tolower(text), "\\(" key ":[[:space:]]*[^)]*\\)")) return ""
         start = index(substr(text, RSTART), ":") + 1
         text = substr(text, RSTART + start - 1, RLENGTH - start)
         gsub(/^[[:space:]]+|[[:space:]]+$/, "", text)
@@ -113,7 +115,7 @@ events=$(awk '
     in_list && /^[[:space:]]*[-*+][[:space:]]+\[[xX]\][[:space:]]/ {
         slug = inside($0, "thread")
         if (slug == "") next
-        if ($0 ~ /\([[:space:]]*dropped[[:space:]]*(:[[:space:]]*)?\)/) print "unexplained\t" slug "\t" item($0)
+        if (tolower($0) ~ /\([[:space:]]*dropped[[:space:]]*(:[[:space:]]*)?\)/) print "unexplained\t" slug "\t" item($0)
         else if ((why = inside($0, "dropped")) != "") print "dropped\t" slug "\t" why
         else if ((when = inside($0, "postponed until")) != "") print "parked\t" slug "\t" when
         # DECISION:SCOPE — A done item leaves its thread open: the

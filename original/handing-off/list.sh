@@ -47,8 +47,10 @@ awk '
         sub(/^[[:space:]]*[-*+][[:space:]]+\[[ xX]\][[:space:]]+/, "", text)
         if (!ticked) { print "unticked: " text; open++ }
         else if (text ~ /^(model|principal):[[:space:]]/) {
-            if (text ~ /\([[:space:]]*postponed/ \
-                && text !~ /\([[:space:]]*postponed until:[[:space:]]*[^)[:space:]][^)]*\)/) {
+            # The note reads in any letter case (review of #274, item 5).
+            low = tolower(text)
+            if (low ~ /\([[:space:]]*postponed/ \
+                && low !~ /\([[:space:]]*postponed until:[[:space:]]*[^)[:space:]][^)]*\)/) {
                 print "postponed without trigger: " text; open++
             }
         }

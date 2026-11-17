@@ -169,3 +169,11 @@ thread_state() { node "$LEDGER" state 2> /dev/null | jq -r --arg t "$1" '.[] | s
   [[ "$output" == *"dropped without a reason: model: correct the README (dropped) (thread: readme)"* ]]
   [ "$(thread_state readme)" = opened ]
 }
+
+@test "run 2 writes parked for a postponed item in any letter case (item 5)" {
+  fake_ledger
+  sed -i 's/(postponed until:/(Postponed until:/' "$TMP/draft.md"
+  run "$SKILL/ledger.sh" events "$TMP/draft.md"
+  [ "$status" -eq 0 ]
+  grep -q '"--ev","parked","--thread","probes","--trigger","the probe ticket closes"' "$APPENDS"
+}

@@ -178,3 +178,14 @@ MD
   [[ "$output" == *"not a checkbox item: Some prose about the list."* ]]
   [[ "$output" != *"settled: 0 items"* ]]
 }
+
+@test "the list check reads the postponed note in any letter case (item 5)" {
+  draft <<'MD'
+- [x] model: run the probes (Postponed)
+- [x] model: file the ticket (POSTPONED until: the probe ticket closes)
+MD
+  run "$SKILL/list.sh" "$TMP/draft.md"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"postponed without trigger: model: run the probes (Postponed)"* ]]
+  [[ "$output" != *"file the ticket"* ]]
+}
