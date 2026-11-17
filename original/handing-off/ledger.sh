@@ -55,8 +55,10 @@ esac
 view=$(mktemp)
 trap 'rm -f "$view"' EXIT
 if ! reason=$(read_view "$view"); then
-    echo "handing-off: no thread ledger available ($reason); this run" \
-         "skips its ledger step"
+    # One fixed line for the run to relay; the ledger's own reason goes
+    # to stderr.
+    echo "handing-off: no thread ledger available; this run skips its ledger step"
+    echo "ledger.sh: $reason" >&2
     exit 0
 fi
 

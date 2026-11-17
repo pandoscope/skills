@@ -21,7 +21,38 @@ input=""
 . "$(dirname "${BASH_SOURCE[0]}")/state.sh"
 # shellcheck source=original/handing-off/store.sh
 . "$(dirname "${BASH_SOURCE[0]}")/store.sh"
-state=$(handoff_marker_to_read "$(handoff_session_of_hook_input "$input")")
+session=$(handoff_session_of_hook_input "$input")
+state=$(handoff_marker_to_read "$session")
+
+# bounded <seconds> <log> <command...>: runs the command in the
+# background and waits at most that long. Returns its status; 124 when
+# it is still running, and then it goes on in the background.
+bounded() {
+    local limit=$1 log=$2 pid ticks=0
+    shift 2
+    "$@" > "$log" 2>&1 &
+    pid=$!
+    while kill -0 "$pid" 2>/dev/null; do
+        [ "$ticks" -lt $((limit * 5)) ] || return 124
+        sleep 0.2
+        ticks=$((ticks + 1))
+    done
+    wait "$pid"
+}
+wait_limit=${HANDOFF_PUSH_WAIT:-5}
+case "$wait_limit" in ''|*[!0-9]*) wait_limit=5 ;; esac
+
+# A resume into a new container loses everything under the home
+# directory: the state and the draft then come back from the store, so
+# the open-state rows still reach the fresh context.
+if [ -n "$state" ] && [ ! -f "$state" ] && [ -n "$session" ]; then
+    restore_log=$(mktemp)
+    if bounded "$wait_limit" "$restore_log" \
+           handoff_store_pull "$session" "$state" "$(handoff_draft_path "$session")"; then
+        echo "handing-off: restored the state and the draft from the store."
+    fi
+    rm -f "$restore_log"
+fi
 # Every compaction ends the handing-off runs before it (skills#267): the
 # phase is cleared here, with or without a marker, so the next
 # invocation starts run 1. The cleared state is pushed last, after the
@@ -38,23 +69,14 @@ fi
 # not finish in time.
 push_cleared_state() {
     [ -n "$phase" ] || return 0
-    local log pid limit ticks=0
+    local log status=0
     log=$(mktemp)
-    limit=${HANDOFF_PUSH_WAIT:-5}
-    case "$limit" in ''|*[!0-9]*) limit=5 ;; esac
-    handoff_store_push "$(handoff_session_of_hook_input "$input")" "$state" > "$log" 2>&1 &
-    pid=$!
-    while kill -0 "$pid" 2>/dev/null; do
-        if [ "$ticks" -ge $((limit * 5)) ]; then
-            echo "handing-off: the push of the cleared phase $phase did not" \
-                 "finish within ${limit}s; until it lands, a resume into a" \
-                 "new container restores the phase $phase."
-            return 0
-        fi
-        sleep 0.2
-        ticks=$((ticks + 1))
-    done
-    if ! wait "$pid"; then
+    bounded "$wait_limit" "$log" handoff_store_push "$session" "$state" || status=$?
+    if [ "$status" -eq 124 ]; then
+        echo "handing-off: the push of the cleared phase $phase did not" \
+             "finish within ${wait_limit}s; until it lands, a resume into a" \
+             "new container restores the phase $phase."
+    elif [ "$status" -ne 0 ]; then
         echo "handing-off: the phase $phase is cleared here, but no store" \
              "took the cleared state, so a resume into a new container" \
              "restores the phase $phase. $(tr '\n' ' ' < "$log")"
