@@ -96,6 +96,13 @@ fi
 marker=$(cat "$state")
 path=$(handoff_json_field handoff_path "$marker")
 url=$(handoff_json_field published_url "$marker")
+# The local copy of the handoff can be gone while the state is not; the
+# store holds it under the session, so it comes back from there.
+if [ -n "$path" ] && [ ! -f "$path" ] && [ -n "$session" ]; then
+    draft_log=$(mktemp)
+    bounded "$wait_limit" "$draft_log" handoff_store_pull_draft "$session" "$path" || true
+    rm -f "$draft_log"
+fi
 
 # First table whose header names Item and Next; rows without header
 # and separator. Multiple tables in the handoff are fine — the

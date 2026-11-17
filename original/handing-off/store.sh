@@ -206,3 +206,26 @@ handoff_store_pull() {
         handoff_state_set "$state" draft_path ""
     fi
 }
+
+# Restore a session's draft, as the store holds it, to a local path.
+#   $1  session id
+#   $2  the local path to write
+# Returns 0 once the file is written; 1 when the store holds no draft
+# for the session or no store answers. The marker names the handoff by
+# its path in the store; this is how a reader gets it back after the
+# local copy is gone.
+handoff_store_pull_draft() {
+    local session=$1 dest=$2 root branch
+    root=$(handoff_store_root)
+    [ -n "$root" ] && handoff_valid_session "$session" || return 1
+    branch=$(handoff_store_branch "$root")
+    [ -n "$branch" ] || return 1
+    git -C "$root" fetch -q origin "$branch" 2>/dev/null || return 1
+    mkdir -p "$(dirname "$dest")"
+    if git -C "$root" show "FETCH_HEAD:$(handoff_store_dir "$session")/draft.md" > "$dest.tmp.$$" 2>/dev/null; then
+        mv -f "$dest.tmp.$$" "$dest"
+        return 0
+    fi
+    rm -f "$dest.tmp.$$"
+    return 1
+}
