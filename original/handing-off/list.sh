@@ -66,7 +66,9 @@ awk '
     /[^[:space:]]/ {
         line = $0
         sub(/^[[:space:]]+/, "", line)
-        print "not a checkbox item: " line; open++
+        # It counts among the items, so the count never reads "1 of 0"
+        # (review of #274, item 6).
+        print "not a checkbox item: " line; open++; items++
     }
     END {
         if (!found) { print "no \"Finish first\" heading in " FILENAME; exit 1 }

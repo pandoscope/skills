@@ -189,3 +189,12 @@ MD
   [[ "$output" == *"postponed without trigger: model: run the probes (Postponed)"* ]]
   [[ "$output" != *"file the ticket"* ]]
 }
+
+@test "a line the check cannot read counts among the items it reports (item 6)" {
+  draft <<'MD'
+1. [ ] model: numbered
+MD
+  run "$SKILL/list.sh" "$TMP/draft.md"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"finish-first list not settled: 1 of 1 items open"* ]]
+}
