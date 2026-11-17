@@ -149,17 +149,19 @@ while IFS=$'\t' read -r event slug detail; do
         echo "ledger: $slug stays open; a handoff completes no thread"
         continue
     fi
-    if printf '%s\n' "$states" | awk -F'\t' -v slug="$slug" -v ev="$event" \
-           '$1 == slug && $2 == ev { found = 1 } END { exit !found }'; then
-        continue
-    fi
     # The ledger lets a parked or blocked thread go on only through
     # unblocked, and a completed or dropped one only through reopened
     # (TRANSITIONS in thread-ledger/core/schema.mjs): a thread from an
     # earlier cycle needs that step before it is dropped or parked again
     # (review of skills#274, round two, D8 and its discovery).
-    row=$(printf '%s\n' "$states" | awk -F'\t' -v slug="$slug" '$1 == slug { print; exit }')
-    IFS=$'\t' read -r _ held title ticket conversation <<< "$row" || true
+    row=$(printf '%s\n' "$states" | awk -F'\037' -v slug="$slug" '$1 == slug { print; exit }')
+    IFS=$'\037' read -r _ held title ticket conversation trigger <<< "$row" || true
+    # An event the ledger already holds is not written again; a parked
+    # thread is parked again when its trigger changed (review of
+    # skills#274, round three, E5).
+    if [ "${held:-}" = "$event" ] && { [ "$event" != parked ] || [ "${trigger:-}" = "$detail" ]; }; then
+        continue
+    fi
     bridge=""
     set --
     case "${held:-}" in

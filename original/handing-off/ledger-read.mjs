@@ -4,8 +4,11 @@
 //          prints the session's open threads, one line each,
 //          "- <slug>: <state> — <title> (<ticket>)"
 //        node ledger-read.mjs rows <state.json>
-//          prints one tab-separated row per thread:
+//          prints one row per thread, its fields separated by the unit
+//          separator (\x1f), which keeps empty fields apart where a tab
+//          would let `read` merge them:
 //          <slug> <state> <title> <ticket> <"yes" when conversation_only>
+//          <the trigger of its last parked event>
 // <state.json> is the output of `ledger.mjs state`. A file that does
 // not parse reads as no threads.
 
@@ -46,8 +49,9 @@ if (mode === "view") {
   for (const t of threads) {
     if (!t || !t.thread) continue;
     const o = opening(t);
+    const parked = [...(t.events || [])].reverse().find((e) => e && e.ev === "parked") || {};
     console.log([t.thread, t.state, o.title || "", o.ticket || "",
-      o.conversation_only ? "yes" : ""].join("\t"));
+      o.conversation_only ? "yes" : "", parked.trigger || ""].join("\x1f"));
   }
 } else {
   console.error("usage: ledger-read.mjs view <state.json> <session-url> | rows <state.json>");

@@ -274,3 +274,21 @@ MD
   grep -q '"--ev","parked","--thread","probes","--trigger","the probe ticket closes"' "$APPENDS"
   grep -q '"--ev","dropped","--thread","readme","--note","a ticket covers it"' "$APPENDS"
 }
+
+# held_trigger <slug>: the trigger of the thread's last parked event.
+held_trigger() {
+  node "$LEDGER" state 2> /dev/null \
+    | jq -r --arg t "$1" '.[] | select(.thread == $t) | [.events[] | select(.ev == "parked")] | last | .trigger'
+}
+
+@test "a postponed item with a new trigger re-parks a parked thread (E5)" {
+  real_ledger
+  node "$LEDGER" append --ev parked --thread probes --trigger "an earlier cycle" > /dev/null 2>&1
+  run "$SKILL/ledger.sh" events "$TMP/draft.md"
+  [ "$status" -eq 0 ]
+  [ "$(thread_state probes)" = parked ]
+  [ "$(held_trigger probes)" = "the probe ticket closes" ]
+  run "$SKILL/ledger.sh" events "$TMP/draft.md"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"ledger: 0 events written"* ]]
+}
