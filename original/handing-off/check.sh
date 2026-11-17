@@ -134,7 +134,7 @@ echo "machine checks pass: marker fresh, handoff file present, list settled," \
      "Persisted list present; phase complete"
 cat <<'RESIDUE'
 Residue — verify by reading, or hand to the human:
-- the handoff is published and its URL recorded in the marker
+- the handoff is published and its location recorded in the marker: its path in the store, never a URL of the store
 - every open-state row carries a next action
 - tickets and progress records the session touched are updated
 - exactly one /compact command was printed for the user to run

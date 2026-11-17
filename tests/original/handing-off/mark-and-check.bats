@@ -167,3 +167,11 @@ teardown() { rm -rf "$TMP"; }
   [ "$status" -eq 1 ]
   [[ "$output" == *"MARKER PREDATES THIS RUN"* ]]
 }
+
+@test "check's residue asks for the handoff's location as SKILL.md records it (item 21)" {
+  "$SKILL/mark.sh" "$TMP/handoff.md" > /dev/null
+  run "$SKILL/check.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"its location recorded in the marker: its path in the store"* ]]
+  [[ "$output" != *"its URL recorded"* ]]
+}
