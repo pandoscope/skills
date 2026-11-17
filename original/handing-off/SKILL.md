@@ -49,9 +49,12 @@ The new handoff links that as the previous handoff.
    Relay its line when no store took them.
 5. Report the list as proposals.
    Ask the principal which principal items are done, and whether they have open items the list lacks.
+   Say that run 2 starts with a new invocation of this skill.
    End the turn: no marker, no `/compact` proposal.
 
 ## Run 2
+
+Run 2 starts with a new invocation of this skill, never from memory of its text: steps that no script checks rely on reading it again.
 
 1. Ask yourself the two questions of run 1 again, for the stretch since run 1.
    Add the new items to the list, together with the items the principal named.

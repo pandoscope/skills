@@ -48,3 +48,11 @@ compact_step() {
   open_state=$(awk '/^## Open state/ { r = 1; next } /^## / { r = 0 } r' "$SKILL_MD")
   [[ "$open_state" == *"load again"* ]]
 }
+
+@test "run 1 ends by saying that run 2 starts with a new invocation of the skill (item 12)" {
+  last=$(awk '/^## Run 1/ { r = 1; next } /^## / { r = 0 }
+              r && /^[0-9]+\. / { s = $0; next } r && /^   / { s = s "\n" $0 } END { print s }' "$SKILL_MD")
+  [[ "$last" == *"new invocation of this skill"* ]]
+  run2=$(awk '/^## Run 2/ { r = 1; next } /^## / { r = 0 } r' "$SKILL_MD")
+  [[ "$run2" == *"new invocation of this skill"* ]]
+}
