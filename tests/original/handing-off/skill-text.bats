@@ -56,3 +56,8 @@ compact_step() {
   run2=$(awk '/^## Run 2/ { r = 1; next } /^## / { r = 0 } r' "$SKILL_MD")
   [[ "$run2" == *"new invocation of this skill"* ]]
 }
+
+@test "the draft line names the path to write the draft to (item 13)" {
+  start=$(awk '/^## Start/ { r = 1; next } /^## / { r = 0 } r' "$SKILL_MD")
+  [[ "$start" == *'`draft:` with the path to write the handoff draft to'* ]]
+}

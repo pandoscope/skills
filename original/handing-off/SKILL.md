@@ -19,7 +19,8 @@ Run 2 confirms from the draft that the work is settled, then completes the hando
 ## Start
 
 Run `./start.sh` on every invocation.
-It prints `starts:` with the section to follow, and `draft:` with the path of the handoff draft, the handoff file before you publish it.
+It prints `starts:` with the section to follow, and `draft:` with the path to write the handoff draft to, the handoff file before you publish it.
+start.sh creates the directory, not the file: run 1 writes the file.
 When the session has no local state, it restores the pushed state first and says so.
 When it exits 3, the store did not answer: report its line and end the turn.
 When it warns that it took the newest transcript, check that the transcript it names holds this session's latest messages.
