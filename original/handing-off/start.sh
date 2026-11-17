@@ -46,8 +46,9 @@ if [ ! -f "$state" ]; then
     pull_status=0
     reason=$(handoff_store_pull "$session" "$state" "$draft" 2>&1) || pull_status=$?
     case "$pull_status" in
-        0) echo "restored the phase $(handoff_json_field phase "$(cat "$state")")" \
-                "and the draft from the store" ;;
+        0) restored="phase $(handoff_json_field phase "$(cat "$state")")"
+           [ "$restored" != "phase " ] || restored="state, with no phase,"
+           echo "restored the $restored and the draft from the store" ;;
         3) # Run 1 here would push over the interrupted run's draft.
            echo "start.sh: the store did not answer ($reason); stopping, so" \
                 "that run 1 does not overwrite a run the store may hold." \

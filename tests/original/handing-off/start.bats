@@ -155,3 +155,14 @@ usage_line() {
   run "$SKILL/start.sh"
   [[ "$output" == *"previous: none"* ]]
 }
+
+@test "restoring a state with no phase says so, with no blank where the phase goes (item 14)" {
+  "$SKILL/phase.sh" listed > /dev/null
+  "$SKILL/verify.sh" <<< '{"session_id":"s1","source":"compact"}' > /dev/null
+  rm "$HANDOFF_STATE"
+  run "$SKILL/start.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"the phase  and"* ]]
+  [[ "$output" == *"restored the state, with no phase, and the draft from the store"* ]]
+  [[ "$output" == *"starts: run 1"* ]]
+}
