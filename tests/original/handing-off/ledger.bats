@@ -49,6 +49,13 @@ import fs from "node:fs";
 const args = process.argv.slice(2);
 if (args[0] === "render") {
   fs.writeFileSync(args[args.indexOf("--out") + 1], "# Threads\n\n- fix-auth: open\n");
+} else if (args[0] === "state") {
+  const anchor = (session) => ({ anchor: { session } });
+  console.log(JSON.stringify([
+    { thread: "fix-auth", state: "opened", events: [{ ev: "opened", title: "Fix auth", ticket: "o/r#1", ...anchor("session_01Test") }] },
+    { thread: "other-work", state: "progress", events: [{ ev: "opened", title: "Other", ...anchor("session_01Other") }] },
+    { thread: "done-thing", state: "completed", events: [{ ev: "opened", title: "Done", ...anchor("session_01Test") }] },
+  ]));
 } else if (args[0] === "append") {
   fs.appendFileSync(process.env.APPENDS, JSON.stringify(args.slice(1)) + "\n");
 }
@@ -58,11 +65,28 @@ JS
   export LEDGER_SESSION_URL="https://claude.ai/code/session_01Test"
 }
 
-@test "with a ledger, run 1's ledger step prints the view" {
+@test "run 1's ledger step prints only this session's open threads (item 8)" {
   fake_ledger
   run "$SKILL/ledger.sh" view
   [ "$status" -eq 0 ]
-  [[ "$output" == *"- fix-auth: open"* ]]
+  [ "$output" = "- fix-auth: opened — Fix auth (o/r#1)" ]
+}
+
+@test "run 1's ledger step takes the session's identity as an argument (item 8)" {
+  fake_ledger
+  unset LEDGER_SESSION_URL
+  run "$SKILL/ledger.sh" view --session-url https://claude.ai/code/session_01Other
+  [ "$status" -eq 0 ]
+  [ "$output" = "- other-work: progress — Other" ]
+}
+
+@test "without a session identity, run 1's ledger step skips in one line (item 8)" {
+  fake_ledger
+  unset LEDGER_SESSION_URL
+  run "$SKILL/ledger.sh" view
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 1 ]
+  [[ "$output" == *"skips its ledger step"* ]]
 }
 
 @test "with a ledger, run 2 writes an event for each dropped or postponed item with a thread slug" {
@@ -95,7 +119,7 @@ JS
   cat > "$TMP/ledger.mjs" <<'JS'
 import fs from "node:fs";
 const args = process.argv.slice(2);
-if (args[0] === "render") fs.writeFileSync(args[args.indexOf("--out") + 1], "# Threads\n");
+if (args[0] === "state") console.log("[]");
 else { console.error("illegal transition for \"readme\""); process.exit(1); }
 JS
   run "$SKILL/ledger.sh" events "$TMP/draft.md"
@@ -159,6 +183,17 @@ thread_state() { node "$LEDGER" state 2> /dev/null | jq -r --arg t "$1" '.[] | s
   [ "${#lines[@]}" -eq 1 ]
   [[ "$output" == *"skips its ledger step"* ]]
   [ "$(thread_state fix-auth)" = opened ]
+}
+
+@test "run 1's view of the real ledger leaves out another session's threads (item 8)" {
+  real_ledger
+  node "$LEDGER" append --session-url https://claude.ai/code/session_01Other --ev opened \
+    --thread elsewhere --title elsewhere --ticket o/r#2 > /dev/null 2>&1
+  run "$SKILL/ledger.sh" view
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 3 ]
+  [[ "$output" == *"- fix-auth: opened"* ]]
+  [[ "$output" != *"elsewhere"* ]]
 }
 
 @test "a dropped item without a reason writes no event and is named" {

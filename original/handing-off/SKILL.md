@@ -35,8 +35,8 @@ start.sh sets an earlier one aside as `.previous.md`, and the new handoff links 
 1. Answer two questions about the session.
    Which work must be finished while the current context is still available?
    Which information exists only in the current context, and where should it be persisted?
-2. Run `./ledger.sh view`.
-   It prints the thread ledger's view, or one line saying the run skips its ledger step.
+2. Run `./ledger.sh view --session-url <this session's URL>`.
+   It prints this session's open threads from the thread ledger, or one line saying the run skips its ledger step.
    Relay that line.
    Add the view's open threads to your answers from step 1.
 3. Write the answers into the draft as the finish-first list (format below).
@@ -149,7 +149,7 @@ The per-session state holds the phase, the draft's path and the marker.
 `HANDOFF_STATE` names one explicit state file, and `HANDOFF_TRANSCRIPT` selects the session by its transcript.
 `store.sh` documents where the state is pushed.
 Every push goes through the outgoing scan.
-Run 2's ledger step needs the session's identity, from `--session-url` or `LEDGER_SESSION_URL`, and skips in one line without it.
+The ledger steps need the session's identity, from `--session-url` or `LEDGER_SESSION_URL`, and skip in one line without it.
 A handoff completes no thread: a done item leaves its thread open, and only a dropped or postponed item writes an event.
 `HANDOFF_STORE` names the installing project's own place for session artifacts.
 Every push records the store's location in the state, so the hooks find a store named only in a run's shell.

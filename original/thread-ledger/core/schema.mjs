@@ -146,6 +146,8 @@ export function stamp(event, session, msg, url, now) {
  * guarding against it: the same conversation cannot resolve to two
  * names, whatever the transcript is called.
  */
+// Mirrored in handing-off/ledger.sh (view), which picks a session's
+// threads by this id; a change here changes that copy too.
 export function sessionFromUrl(url) {
   // Parsed by hand rather than with URL(), so this stays usable on a
   // bare path and identical in node and the browser.

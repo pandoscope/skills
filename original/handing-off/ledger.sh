@@ -1,48 +1,51 @@
 #!/usr/bin/env bash
 # The ledger steps of handing-off (skills#267), for a session that keeps
 # a thread ledger (the thread-ledger skill). The ledger is optional: it
-# counts as available when a read of its view succeeds. A set store
+# counts as available when a read of its state succeeds. A set store
 # variable proves nothing, since a session can lack a clone of the
 # store.
 #
-# Usage: ledger.sh view
-#          Run 1: prints the ledger's view, whose open threads join the
-#          candidates for the finish-first list.
+# Usage: ledger.sh view [--session-url <url>]
+#          Run 1: prints this session's open threads, one line each,
+#          "- <slug>: <state> — <title> (<ticket>)"; they join the
+#          candidates for the finish-first list. A thread is the
+#          session's when one of its events is anchored in it, and open
+#          unless completed or dropped.
 #        ledger.sh events [--session-url <url>] <draft>
 #          Run 2: writes one ledger event per ticked finish-first item
 #          that carries a thread slug, "(thread: <slug>)": dropped with
 #          the reason for a dropped item, parked with the trigger for a
 #          postponed one. A done item writes no event: a handoff does
 #          not end a thread, so its thread stays open. Every append
-#          passes the session's identity, --session-url or else
-#          LEDGER_SESSION_URL.
+#          passes the session's identity.
+# The session's identity is --session-url, or else LEDGER_SESSION_URL.
 # Env:   HANDOFF_LEDGER  the ledger's entry point (default: ledger.mjs
 #                        of a thread-ledger skill beside this one)
 #
-# Without a ledger, or for events without a session identity, either
-# command prints one line saying the run
-# skips its ledger step, and exits 0. An event the ledger already holds
-# is not written again. A dropped item without a reason fails the step
-# before any event is written. Exits 1 when an event the ledger refused
-# leaves the step half done, with the ledger's error; 2 on a usage
-# error.
+# Without a ledger, or without a session identity, either command
+# prints one line saying the run skips its ledger step, and exits 0. An
+# event the ledger already holds is not written again. A dropped item
+# without a reason fails the step before any event is written. Exits 1
+# when an event the ledger refused leaves the step half done, with the
+# ledger's error; 2 on a usage error.
 set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ledger=${HANDOFF_LEDGER:-$here/../thread-ledger/ledger.mjs}
 
 usage() {
-    echo "usage: ledger.sh view | ledger.sh events [--session-url <url>] <draft>" >&2
+    echo "usage: ledger.sh view [--session-url <url>] | ledger.sh events [--session-url <url>] <draft>" >&2
     exit 2
 }
 
-# Print the ledger's view into $1; on failure print the reason, one line.
-read_view() {
+# Print the ledger's thread states, as JSON, into $1; on failure print
+# the reason, one line.
+read_state() {
     local out
     if [ ! -f "$ledger" ]; then
         echo "no ledger at $ledger"
         return 1
     fi
-    if ! out=$(node "$ledger" render --format md --out "$1" 2>&1); then
+    if ! out=$(node "$ledger" state 2>&1 > "$1"); then
         printf '%s\n' "$out" | head -n 1
         return 1
     fi
@@ -51,23 +54,22 @@ read_view() {
 command=${1:-}
 identity=${LEDGER_SESSION_URL:-}
 case "$command" in
-    view) [ $# -eq 1 ] || usage ;;
-    events)
-        shift
-        if [ "${1:-}" = --session-url ]; then
-            [ $# -ge 2 ] || usage
-            identity=$2
-            shift 2
-        fi
-        [ $# -eq 1 ] || usage
-        draft=$1
-        ;;
+    view|events) shift ;;
     *) usage ;;
 esac
+if [ "${1:-}" = --session-url ]; then
+    [ $# -ge 2 ] || usage
+    identity=$2
+    shift 2
+fi
+case "$command" in
+    view) [ $# -eq 0 ] || usage ;;
+    events) [ $# -eq 1 ] || usage; draft=$1 ;;
+esac
 
-view=$(mktemp)
-trap 'rm -f "$view"' EXIT
-if ! reason=$(read_view "$view"); then
+state_file=$(mktemp)
+trap 'rm -f "$state_file"' EXIT
+if ! reason=$(read_state "$state_file"); then
     # One fixed line for the run to relay; the ledger's own reason goes
     # to stderr.
     echo "handing-off: no thread ledger available; this run skips its ledger step"
@@ -75,16 +77,35 @@ if ! reason=$(read_view "$view"); then
     exit 0
 fi
 
-if [ "$command" = view ]; then
-    cat "$view"
-    exit 0
-fi
-
-# An append needs the conversation's identity; the ledger refuses to
-# guess it.
+# The ledger refuses to guess the conversation, and the view has no
+# other way to tell this session's threads from the rest of the store.
 if [ -z "$identity" ]; then
     echo "handing-off: the thread ledger needs this session's identity" \
          "(no --session-url, LEDGER_SESSION_URL unset); this run skips its ledger step"
+    exit 0
+fi
+
+if [ "$command" = view ]; then
+    # The session id of a URL as the ledger derives it: sessionFromUrl
+    # in thread-ledger/core/schema.mjs, mirrored here.
+    # shellcheck disable=SC2016 # the script is JavaScript, not shell
+    node -e '
+        const fs = require("node:fs");
+        const url = process.argv[2];
+        const segments = url.replace(/^[a-zA-Z][\w+.-]*:\/\//, "").split(/[?#]/)[0]
+            .split("/").slice(1).filter(Boolean);
+        const session = (segments[segments.length - 1] || "").replace(/[^A-Za-z0-9._-]/g, "-");
+        let threads = [];
+        try { threads = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); } catch {}
+        if (!Array.isArray(threads)) threads = [];
+        for (const t of threads) {
+            const events = Array.isArray(t.events) ? t.events : [];
+            if (["completed", "dropped"].includes(t.state)) continue;
+            if (!events.some((e) => e && e.anchor && e.anchor.session === session)) continue;
+            const opened = events.find((e) => e && e.title) || {};
+            const ticket = opened.ticket ? ` (${opened.ticket})` : "";
+            console.log(`- ${t.thread}: ${t.state}${opened.title ? ` — ${opened.title}` : ""}${ticket}`);
+        }' "$state_file" "$identity"
     exit 0
 fi
 
@@ -135,7 +156,7 @@ fi
 # The state each thread is in now. A second pass of run 2 writes no
 # event the ledger already holds: dropped -> dropped is illegal.
 # shellcheck disable=SC2016 # the script is JavaScript, not shell
-states=$(node "$ledger" state 2>/dev/null | node -e '
+states=$(node -e '
     let text = "";
     process.stdin.on("data", (chunk) => { text += chunk; });
     process.stdin.on("end", () => {
@@ -143,7 +164,7 @@ states=$(node "$ledger" state 2>/dev/null | node -e '
         try { threads = JSON.parse(text); } catch { return; }
         if (!Array.isArray(threads)) return;
         for (const t of threads) if (t && t.thread) console.log(`${t.thread}\t${t.state}`);
-    });' || true)
+    });' < "$state_file" || true)
 
 count=0
 while IFS=$'\t' read -r event slug detail; do
