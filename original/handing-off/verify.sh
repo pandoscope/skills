@@ -33,16 +33,24 @@ if [ -z "${HANDOFF_STORE:-}" ] && [ -n "$state" ] && [ -f "$state" ]; then
     fi
 fi
 
-# bounded <seconds> <log> <command...>: runs the command in the
-# background and waits at most that long. Returns its status; 124 when
-# it is still running, and then it goes on in the background.
+# bounded [--stop] <seconds> <log> <command...>: runs the command in
+# the background and waits at most that long. Returns its status; 124
+# when it is still running. Then it goes on in the background, or with
+# --stop it is stopped: a restore that lands after this hook has judged
+# the state would write a phase and a marker nobody clears (review of
+# skills#274, round two, D6).
 bounded() {
-    local limit=$1 log=$2 pid ticks=0
+    local stop=0 limit log pid ticks=0
+    [ "$1" != --stop ] || { stop=1; shift; }
+    limit=$1 log=$2
     shift 2
     "$@" > "$log" 2>&1 &
     pid=$!
     while kill -0 "$pid" 2>/dev/null; do
-        [ "$ticks" -lt $((limit * 5)) ] || return 124
+        if [ "$ticks" -ge $((limit * 5)) ]; then
+            [ "$stop" -eq 0 ] || kill "$pid" 2>/dev/null || true
+            return 124
+        fi
         sleep 0.2
         ticks=$((ticks + 1))
     done
@@ -56,7 +64,7 @@ case "$wait_limit" in ''|*[!0-9]*) wait_limit=5 ;; esac
 # the open-state rows still reach the fresh context.
 if [ -n "$state" ] && [ ! -f "$state" ] && [ -n "$session" ]; then
     restore_log=$(mktemp)
-    if bounded "$wait_limit" "$restore_log" \
+    if bounded --stop "$wait_limit" "$restore_log" \
            handoff_store_pull "$session" "$state" "$(handoff_draft_path "$session")"; then
         echo "handing-off: restored the state and the draft from the store."
     fi

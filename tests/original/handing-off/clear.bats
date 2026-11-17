@@ -109,3 +109,20 @@ MD
   ! remote_file handoffs/sessions/s1/state.json | grep -q '"phase"' || false
   ! remote_file handoffs/sessions/s1/state.json | grep -q '"store_root"' || false
 }
+
+@test "a restore that runs past the wait writes nothing later (D6)" {
+  sed -i 's/- \[ \]/- [x]/' "$TMP/state/s1.draft.md"
+  "$SKILL/mark.sh" "$TMP/state/s1.draft.md" > /dev/null
+  "$SKILL/phase.sh" written > /dev/null
+  rm "$HANDOFF_STATE" "$TMP/state/s1.draft.md"
+  # A git on PATH whose fetch takes three seconds.
+  mkdir -p "$TMP/bin"
+  real=$(command -v git)
+  printf '#!/bin/sh\nfor a in "$@"; do [ "$a" = fetch ] && sleep 3; done\nexec "%s" "$@"\n' "$real" > "$TMP/bin/git"
+  chmod +x "$TMP/bin/git"
+  export HANDOFF_PUSH_WAIT=1
+  PATH="$TMP/bin:$PATH" run "$SKILL/verify.sh" <<< '{"session_id":"s1","source":"compact"}'
+  [ "$status" -eq 0 ]
+  sleep 4
+  [ ! -e "$HANDOFF_STATE" ]
+}
