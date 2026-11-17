@@ -8,16 +8,19 @@
 # Usage: ledger.sh view
 #          Run 1: prints the ledger's view, whose open threads join the
 #          candidates for the finish-first list.
-#        ledger.sh events <draft>
+#        ledger.sh events [--session-url <url>] <draft>
 #          Run 2: writes one ledger event per ticked finish-first item
 #          that carries a thread slug, "(thread: <slug>)": dropped with
 #          the reason for a dropped item, parked with the trigger for a
-#          postponed one, completed for any other.
+#          postponed one. A done item writes no event: a handoff does
+#          not end a thread, so its thread stays open. Every append
+#          passes the session's identity, --session-url or else
+#          LEDGER_SESSION_URL.
 # Env:   HANDOFF_LEDGER  the ledger's entry point (default: ledger.mjs
 #                        of a thread-ledger skill beside this one)
 #
-# Without a ledger, or for events without a session identity
-# (LEDGER_SESSION_URL), either command prints one line saying the run
+# Without a ledger, or for events without a session identity, either
+# command prints one line saying the run
 # skips its ledger step, and exits 0. An event the ledger already holds
 # is not written again. A dropped item without a reason fails the step
 # before any event is written. Exits 1 when an event the ledger refused
@@ -28,7 +31,7 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ledger=${HANDOFF_LEDGER:-$here/../thread-ledger/ledger.mjs}
 
 usage() {
-    echo "usage: ledger.sh view | ledger.sh events <draft>" >&2
+    echo "usage: ledger.sh view | ledger.sh events [--session-url <url>] <draft>" >&2
     exit 2
 }
 
@@ -46,9 +49,19 @@ read_view() {
 }
 
 command=${1:-}
+identity=${LEDGER_SESSION_URL:-}
 case "$command" in
     view) [ $# -eq 1 ] || usage ;;
-    events) [ $# -eq 2 ] || usage ;;
+    events)
+        shift
+        if [ "${1:-}" = --session-url ]; then
+            [ $# -ge 2 ] || usage
+            identity=$2
+            shift 2
+        fi
+        [ $# -eq 1 ] || usage
+        draft=$1
+        ;;
     *) usage ;;
 esac
 
@@ -69,13 +82,12 @@ fi
 
 # An append needs the conversation's identity; the ledger refuses to
 # guess it.
-if [ -z "${LEDGER_SESSION_URL:-}" ]; then
+if [ -z "$identity" ]; then
     echo "handing-off: the thread ledger needs this session's identity" \
-         "(LEDGER_SESSION_URL is unset); this run skips its ledger step"
+         "(no --session-url, LEDGER_SESSION_URL unset); this run skips its ledger step"
     exit 0
 fi
 
-draft=$2
 if [ ! -f "$draft" ]; then
     echo "ledger.sh: no draft at $draft" >&2
     exit 2
@@ -104,7 +116,10 @@ events=$(awk '
         if ($0 ~ /\([[:space:]]*dropped[[:space:]]*(:[[:space:]]*)?\)/) print "unexplained\t" slug "\t" item($0)
         else if ((why = inside($0, "dropped")) != "") print "dropped\t" slug "\t" why
         else if ((when = inside($0, "postponed until")) != "") print "parked\t" slug "\t" when
-        else print "completed\t" slug
+        # DECISION:SCOPE — A done item leaves its thread open: the
+        # work of the thread appends completed when it ends (principal,
+        # 2026-11-17). Dropped and postponed items still write events.
+        else print "open\t" slug
     }
 ' "$draft")
 
@@ -116,7 +131,7 @@ if [ -n "$unexplained" ]; then
 fi
 
 # The state each thread is in now. A second pass of run 2 writes no
-# event the ledger already holds: completed -> completed is illegal.
+# event the ledger already holds: dropped -> dropped is illegal.
 # shellcheck disable=SC2016 # the script is JavaScript, not shell
 states=$(node "$ledger" state 2>/dev/null | node -e '
     let text = "";
@@ -131,6 +146,10 @@ states=$(node "$ledger" state 2>/dev/null | node -e '
 count=0
 while IFS=$'\t' read -r event slug detail; do
     [ -n "$event" ] || continue
+    if [ "$event" = open ]; then
+        echo "ledger: $slug stays open; a handoff completes no thread"
+        continue
+    fi
     if printf '%s\n' "$states" | grep -qxF "$slug	$event"; then
         continue
     fi
@@ -139,7 +158,8 @@ while IFS=$'\t' read -r event slug detail; do
         parked) set -- --trigger "$detail" ;;
         *) set -- ;;
     esac
-    if ! out=$(node "$ledger" append --ev "$event" --thread "$slug" "$@" 2>&1); then
+    if ! out=$(node "$ledger" append --ev "$event" --thread "$slug" "$@" \
+               --session-url "$identity" 2>&1); then
         echo "ledger.sh: the ledger refused $event for thread $slug after" \
              "$count events: $out" >&2
         exit 1

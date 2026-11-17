@@ -59,7 +59,7 @@ start.sh sets an earlier one aside as `.previous.md`, and the new handoff links 
    Your own statement that the work is done does not count.
 3. When the list is not settled, run `./phase.sh listed`, report the open items and end the turn.
 4. When the list is settled, collect the open state and write it into the draft (open state, below).
-   Run `./ledger.sh events <draft>`, then `./phase.sh written`.
+   Run `./ledger.sh events --session-url <this session's URL> <draft>`, then `./phase.sh written`.
 5. Ask yourself the sweep question:
    "Please check thoroughly and find out which information is only in the current context.
    Where should it be persisted, in tickets or docs or elsewhere?"
@@ -148,6 +148,7 @@ The per-session state holds the phase, the draft's path and the marker.
 `HANDOFF_STATE` names one explicit state file, and `HANDOFF_TRANSCRIPT` selects the session by its transcript.
 `store.sh` documents where the state is pushed.
 Every push goes through the outgoing scan.
-The ledger steps need `LEDGER_SESSION_URL`, and skip in one line without it.
+Run 2's ledger step needs the session's identity, from `--session-url` or `LEDGER_SESSION_URL`, and skips in one line without it.
+A handoff completes no thread: a done item leaves its thread open, and only a dropped or postponed item writes an event.
 `HANDOFF_STORE` names the installing project's own place for session artifacts.
 Every push records the store's location in the state, so the hooks find a store named only in a run's shell.
