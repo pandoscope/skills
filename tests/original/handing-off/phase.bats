@@ -105,3 +105,19 @@ teardown() { rm -rf "$TMP"; }
   ! git -C "$TMP/remote.git" show main:scratch.txt 2> /dev/null || false
   [ -e "$TMP/store/scratch.txt" ]
 }
+
+@test "a store clone that is behind fetches and rebases before it pushes (D5)" {
+  git clone -q "$TMP/remote.git" "$TMP/other" 2> /dev/null
+  git -C "$TMP/other" -c user.name=t -c user.email=t@t commit -q --allow-empty -m "another writer"
+  git -C "$TMP/other" push -q origin main
+  # A git on PATH that logs each push, then runs the real one.
+  mkdir -p "$TMP/bin"
+  real=$(command -v git)
+  printf '#!/bin/sh\nfor a in "$@"; do [ "$a" = push ] && echo push >> "%s"; done\nexec "%s" "$@"\n' \
+    "$TMP/pushes" "$real" > "$TMP/bin/git"
+  chmod +x "$TMP/bin/git"
+  PATH="$TMP/bin:$PATH" run "$SKILL/phase.sh" listed
+  [ "$status" -eq 0 ]
+  [ "$(wc -l < "$TMP/pushes")" -eq 1 ]
+  remote_file handoffs/sessions/s1/state.json | grep -q '"phase":"listed"'
+}

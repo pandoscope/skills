@@ -149,18 +149,21 @@ handoff_store_push() {
         fi
     fi
     for attempt in 1 2 3; do
-        if out=$(git -C "$root" push -q origin "HEAD:refs/heads/$branch" 2>&1); then
-            return 0
-        fi
-        # A rejected push is mostly another writer's commit: rebase onto
-        # it and try again. The rebase commits, so it needs the identity
-        # the commit above used; a rebase that stops is aborted, so the
-        # clone never stays mid-rebase.
+        # Other sessions push to the same store: fetch and rebase first,
+        # as the ticket says (review of skills#274, round two, D5), and
+        # again after a rejection. The rebase commits, so it needs the
+        # identity the commit above used; a rebase that stops is
+        # aborted, so the clone never stays mid-rebase.
+        pulled=""
         if ! pulled=$(git -C "$root" -c user.name=handing-off -c user.email=noreply@anthropic.com \
                           pull -q --rebase --autostash origin "$branch" 2>&1); then
             git -C "$root" rebase --abort > /dev/null 2>&1 || true
-            out="$out; the rebase onto origin failed: $pulled"
+            pulled="the rebase onto origin failed: $pulled"
         fi
+        if out=$(git -C "$root" push -q origin "HEAD:refs/heads/$branch" 2>&1); then
+            return 0
+        fi
+        [ -z "$pulled" ] || out="$out; $pulled"
     done
     echo "handing-off: push from $root to $branch failed after $attempt attempts:" \
          "$(handoff_store_redact "$out" "$root")" >&2
