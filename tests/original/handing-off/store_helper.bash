@@ -33,6 +33,12 @@ store_setup() {
 ## Finish first
 
 - [ ] model: write the tickets
+
+## Open state
+
+| Item | State | Next |
+| --- | --- | --- |
+| repo#1 fix | open | merge it |
 MD
 }
 

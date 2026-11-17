@@ -121,3 +121,16 @@ teardown() { rm -rf "$TMP"; }
   [ "$(wc -l < "$TMP/pushes")" -eq 1 ]
   remote_file handoffs/sessions/s1/state.json | grep -q '"phase":"listed"'
 }
+
+@test "the phase written requires the open-state table in the draft (D13)" {
+  printf '# Handoff\n\n## Finish first\n\n- [x] model: write the tickets\n' > "$TMP/state/s1.draft.md"
+  run "$SKILL/phase.sh" written
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no open-state table"* ]]
+  ! grep -q '"phase":"written"' "$HANDOFF_STATE" 2> /dev/null || false
+  printf '\n## Open state\n\n| Item | State | Next |\n| --- | --- | --- |\n| repo#1 fix | open | merge it |\n' \
+    >> "$TMP/state/s1.draft.md"
+  run "$SKILL/phase.sh" written
+  [ "$status" -eq 0 ]
+  grep -q '"phase":"written"' "$HANDOFF_STATE"
+}

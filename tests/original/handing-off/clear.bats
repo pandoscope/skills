@@ -80,14 +80,7 @@ MD
 }
 
 @test "verify reads the handoff from the store clone when the local draft is gone" {
-  cat >> "$TMP/state/s1.draft.md" <<'MD'
-
-## Open state
-
-| Item | State | Next |
-| --- | --- | --- |
-| repo#2 docs | open | write them |
-MD
+  sed -i 's/| repo#1 fix | open | merge it |/| repo#2 docs | open | write them |/' "$TMP/state/s1.draft.md"
   sed -i 's/- \[ \]/- [x]/' "$TMP/state/s1.draft.md"
   "$SKILL/mark.sh" "$TMP/state/s1.draft.md" > /dev/null
   "$SKILL/phase.sh" written > /dev/null

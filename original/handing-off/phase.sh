@@ -11,7 +11,8 @@
 # (store.sh). Exits 0 once the phase is recorded, whether or not a
 # store took it; a run without a store says so in one line. Exits 1
 # when the draft is missing, when "written" is asked while the list is
-# not settled (list.sh), or when the scan finds a blocked term, in
+# not settled (list.sh) or the draft has no open-state table, or when
+# the scan finds a blocked term, in
 # which case nothing is pushed. Exits 2 on a usage error.
 set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -53,6 +54,18 @@ fi
 if [ "$phase" = written ] && ! "$here/list.sh" "$draft"; then
     echo "phase.sh: the finish-first list is not settled; the phase" \
          "stays as it was. Report the open items and end the turn" >&2
+    exit 1
+fi
+# The phase written says the open state is in the draft; verify.sh
+# lifts it from the first table with Item and Next columns, so that
+# table must exist (principal, on review D13 of skills#274).
+if [ "$phase" = written ] && ! awk '
+        /^[[:space:]]*(```|~~~)/ { fenced = !fenced; next }
+        !fenced && /^\|/ && tolower($0) ~ /item/ && tolower($0) ~ /next/ { found = 1; exit }
+        END { exit !found }' "$draft"; then
+    echo "phase.sh: the draft has no open-state table (a table with Item" \
+         "and Next columns); the phase stays as it was. Write the open" \
+         "state into the draft, then rerun phase.sh written" >&2
     exit 1
 fi
 if [ "$phase" = listed ]; then

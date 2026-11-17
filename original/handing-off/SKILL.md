@@ -68,6 +68,7 @@ Whenever `phase.sh` or `check.sh` says that no store took a push, relay that lin
 3. When the list is not settled, run `./phase.sh listed`, report the open items and end the turn.
 4. When the list is settled, collect the open state and write it into the draft (open state, below).
    Run `./ledger.sh events --session-url <this session's URL> <draft>`, then `./phase.sh written`.
+   phase.sh refuses the phase while the draft has no open-state table.
 5. Ask yourself the sweep question:
    "Please check thoroughly and find out which information is only in the current context.
    Where should it be persisted, in tickets or docs or elsewhere?"
