@@ -166,3 +166,16 @@ usage_line() {
   [[ "$output" == *"restored the state, with no phase, and the draft from the store"* ]]
   [[ "$output" == *"starts: run 1"* ]]
 }
+
+@test "a restored run without its draft starts over at run 1 and says why (item 15)" {
+  "$SKILL/phase.sh" listed > /dev/null
+  git -C "$TMP/store" rm -q handoffs/sessions/s1/draft.md
+  git -C "$TMP/store" -c user.name=t -c user.email=t@t commit -q -m "drop the draft"
+  git -C "$TMP/store" push -q origin main
+  rm "$HANDOFF_STATE" "$TMP/state/s1.draft.md"
+  run "$SKILL/start.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"the store holds the phase listed but no draft"* ]]
+  [[ "$output" == *"starts: run 1"* ]]
+  ! grep -q '"phase"' "$HANDOFF_STATE" || false
+}

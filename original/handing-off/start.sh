@@ -46,9 +46,20 @@ if [ ! -f "$state" ]; then
     pull_status=0
     reason=$(handoff_store_pull "$session" "$state" "$draft" 2>&1) || pull_status=$?
     case "$pull_status" in
-        0) restored="phase $(handoff_json_field phase "$(cat "$state")")"
-           [ "$restored" != "phase " ] || restored="state, with no phase,"
-           echo "restored the $restored and the draft from the store" ;;
+        0) phase=$(handoff_json_field phase "$(cat "$state")")
+           restored="phase $phase"
+           [ -n "$phase" ] || restored="state, with no phase,"
+           if [ -n "$(handoff_json_field draft_path "$(cat "$state")")" ]; then
+               echo "restored the $restored and the draft from the store"
+           elif [ "$phase" = listed ] || [ "$phase" = written ]; then
+               # A run under way needs its draft (review of skills#274,
+               # item 15): without it there is nothing to continue.
+               handoff_state_set "$state" phase ""
+               echo "the store holds the phase $phase but no draft, so" \
+                    "the interrupted run cannot go on; run 1 starts over"
+           else
+               echo "restored the $restored from the store; it holds no draft"
+           fi ;;
         3) # Run 1 here would push over the interrupted run's draft.
            echo "start.sh: the store did not answer ($reason); stopping, so" \
                 "that run 1 does not overwrite a run the store may hold." \
