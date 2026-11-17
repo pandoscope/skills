@@ -21,3 +21,12 @@ compact_step() {
   [[ "$step" != *"one to three"* ]]
   [[ "$step" != *"candidate"* ]]
 }
+
+@test "run 2's ledger step passes the session's identity" {
+  run2=$(awk '/^## Run 2/ { r = 1; next } /^## / { r = 0 } r' "$SKILL_MD")
+  [[ "$run2" == *'`./ledger.sh events --session-url <this session'"'"'s URL> <draft>`'* ]]
+}
+
+@test "the skill says that a handoff completes no thread" {
+  grep -q "A handoff completes no thread" "$SKILL_MD"
+}

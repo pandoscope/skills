@@ -65,14 +65,29 @@ JS
   [[ "$output" == *"- fix-auth: open"* ]]
 }
 
-@test "with a ledger, run 2 writes one event for each item that carries a thread slug" {
+@test "with a ledger, run 2 writes an event for each dropped or postponed item with a thread slug" {
   fake_ledger
   run "$SKILL/ledger.sh" events "$TMP/draft.md"
   [ "$status" -eq 0 ]
-  [ "$(wc -l < "$APPENDS")" -eq 3 ]
-  grep -qx '\["--ev","completed","--thread","fix-auth"\]' "$APPENDS"
-  grep -qx '\["--ev","dropped","--thread","readme","--note","a ticket covers it"\]' "$APPENDS"
-  grep -qx '\["--ev","parked","--thread","probes","--trigger","the probe ticket closes"\]' "$APPENDS"
+  [ "$(wc -l < "$APPENDS")" -eq 2 ]
+  grep -qx '\["--ev","dropped","--thread","readme","--note","a ticket covers it","--session-url","https://claude.ai/code/session_01Test"\]' "$APPENDS"
+  grep -qx '\["--ev","parked","--thread","probes","--trigger","the probe ticket closes","--session-url","https://claude.ai/code/session_01Test"\]' "$APPENDS"
+}
+
+@test "run 2 appends no completion: a handoff does not end a thread" {
+  fake_ledger
+  run "$SKILL/ledger.sh" events "$TMP/draft.md"
+  [ "$status" -eq 0 ]
+  ! grep -q '"completed"' "$APPENDS" || false
+  [[ "$output" == *"fix-auth stays open"* ]]
+}
+
+@test "run 2 passes the session's identity it was given to the ledger" {
+  fake_ledger
+  unset LEDGER_SESSION_URL
+  run "$SKILL/ledger.sh" events --session-url https://claude.ai/code/session_01Given "$TMP/draft.md"
+  [ "$status" -eq 0 ]
+  [ "$(grep -c '"--session-url","https://claude.ai/code/session_01Given"\]$' "$APPENDS")" -eq 2 ]
 }
 
 @test "a ledger that refuses an event fails the step with its error" {
@@ -109,11 +124,20 @@ real_ledger() {
 
 thread_state() { node "$LEDGER" state 2> /dev/null | jq -r --arg t "$1" '.[] | select(.thread == $t) | .state'; }
 
-@test "run 2 writes its events to the real ledger" {
+@test "run 2 writes its events to the real ledger and leaves a done item's thread open" {
   real_ledger
   run "$SKILL/ledger.sh" events "$TMP/draft.md"
   [ "$status" -eq 0 ]
-  [ "$(thread_state fix-auth)" = completed ]
+  [ "$(thread_state fix-auth)" = opened ]
+  [ "$(thread_state readme)" = dropped ]
+  [ "$(thread_state probes)" = parked ]
+}
+
+@test "with the identity passed and none in the environment, run 2 writes to the real ledger" {
+  real_ledger
+  unset LEDGER_SESSION_URL
+  run "$SKILL/ledger.sh" events --session-url https://claude.ai/code/session_01Test "$TMP/draft.md"
+  [ "$status" -eq 0 ]
   [ "$(thread_state readme)" = dropped ]
   [ "$(thread_state probes)" = parked ]
 }
@@ -124,7 +148,7 @@ thread_state() { node "$LEDGER" state 2> /dev/null | jq -r --arg t "$1" '.[] | s
   run "$SKILL/ledger.sh" events "$TMP/draft.md"
   [ "$status" -eq 0 ]
   [[ "$output" == *"ledger: 0 events written"* ]]
-  [ "$(thread_state fix-auth)" = completed ]
+  [ "$(thread_state readme)" = dropped ]
 }
 
 @test "without a session identity, run 2 skips its ledger step in one line" {
