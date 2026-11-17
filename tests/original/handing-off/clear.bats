@@ -17,7 +17,7 @@ teardown() { rm -rf "$TMP"; }
   [ "$status" -eq 0 ]
   [[ "$output" == *"COMPACTION JUST COMPLETED. The latest handoff"* ]]
   ! grep -q '"phase"' "$HANDOFF_STATE" || false
-  grep -q '"handoff_path"' "$HANDOFF_STATE"
+  ! grep -q '"handoff_path"' "$HANDOFF_STATE" || false
   ! remote_file handoffs/sessions/s1/state.json | grep -q '"phase"' || false
   run "$SKILL/start.sh"
   [[ "$output" == *"starts: run 1"* ]]

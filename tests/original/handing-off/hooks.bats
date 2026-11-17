@@ -168,11 +168,12 @@ MD
   [ "$status" -eq 0 ]
   grep -q "\"handoff_path\":\"$TMP/handoff.md\"" "$HANDOFF_STATE"
   cd /
+  run "$SKILL/check.sh"
+  [ "$status" -eq 0 ]
+  # verify last: the compaction consumes the marker.
   run "$SKILL/verify.sh" < /dev/null
   [ "$status" -eq 0 ]
   [[ "$output" == *"| repo!12 fix | green, awaiting merge | merge it |"* ]]
-  run "$SKILL/check.sh"
-  [ "$status" -eq 0 ]
 }
 
 @test "guard still sees growth after a synthetic assistant line with zero usage" {

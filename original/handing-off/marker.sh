@@ -28,13 +28,32 @@ handoff_marker_epoch() {
     esac
 }
 
+# Count the compactions a transcript records since a time.
+#   $1  the session's transcript; may be empty
+#   $2  seconds since the epoch
+# Prints the number of compact_boundary records whose timestamp is at
+# or after $2; 0 without a transcript. A compaction shrinks the
+# context, so growth alone takes an older marker for fresh (review of
+# skills#274, item 1): a boundary is the measure that survives it.
+handoff_compactions_since() {
+    local count=0 stamp epoch
+    [ -n "$1" ] && [ -f "$1" ] || { echo 0; return 0; }
+    while IFS= read -r stamp; do
+        epoch=$(date -u -d "$stamp" +%s 2>/dev/null) || continue
+        [ "$epoch" -lt "$2" ] || count=$((count + 1))
+    done < <(grep '"subtype": *"compact_boundary"' "$1" \
+                 | sed -n 's/.*"timestamp": *"\([^"]*\)".*/\1/p')
+    echo "$count"
+}
+
 # Print why a marker is stale; nothing when it is fresh.
 #   $1  state file carrying a marker
 #   $2  the session's transcript, the measure of its context now; may
 #       be empty
 # Prints the rest of a sentence that starts "the handoff marker ", and
 # returns 1 when stale; returns 0 when fresh.
-# Freshness is growth-based: the marker records the context size at
+# A marker older than a compaction in the transcript is stale. Beyond
+# that, freshness is growth-based: the marker records the context size at
 # handoff time, and it goes stale once the context grew past
 # HANDOFF_STALE_TOKENS (default 50000). Age alone is wrong in both
 # directions: an old handoff with nothing after it is still fresh, a
@@ -43,6 +62,10 @@ handoff_marker_epoch() {
 # side has no token measure.
 handoff_marker_staleness() {
     local tokens_then tokens_now grown slack age max
+    if [ "$(handoff_compactions_since "$2" "$(handoff_marker_epoch "$1")")" -gt 0 ]; then
+        echo "predates a compaction of this session, which ended its cycle"
+        return 1
+    fi
     tokens_then=$(handoff_json_number context_tokens "$(cat "$1")")
     [ "$tokens_then" != null ] || tokens_then=""
     tokens_now=$(handoff_context_tokens "$2")

@@ -67,9 +67,21 @@ fi
 # invocation starts run 1. The cleared state is pushed last, after the
 # context is printed, and only for a bounded time.
 phase=""
+marker=""
 if [ -n "$state" ] && [ -f "$state" ]; then
     phase=$(handoff_json_field phase "$(cat "$state")")
     [ -z "$phase" ] || handoff_state_set "$state" phase ""
+fi
+# The compaction also consumes the marker (review of skills#274, item
+# 1): kept, it would pass the guard at the next compaction, and the
+# next verification would restate its table as current. Read it first,
+# then drop it here and in the pushed state.
+cleared=$phase
+if handoff_has_marker "$state"; then
+    marker=$(cat "$state")
+    handoff_state_set "$state" written_at "" written_epoch "" \
+        handoff_path "" published_url "" context_tokens ""
+    cleared=${phase:-the marker}
 fi
 
 # push_cleared_state: pushes the cleared state, waiting at most
@@ -77,23 +89,23 @@ fi
 # on in the background. Prints one line when the push failed or did
 # not finish in time.
 push_cleared_state() {
-    [ -n "$phase" ] || return 0
+    [ -n "$cleared" ] || return 0
     local log status=0
     log=$(mktemp)
     bounded "$wait_limit" "$log" handoff_store_push "$session" "$state" || status=$?
     if [ "$status" -eq 124 ]; then
-        echo "handing-off: the push of the cleared phase $phase did not" \
+        echo "handing-off: the push of the cleared state ($cleared) did not" \
              "finish within ${wait_limit}s; until it lands, a resume into a" \
-             "new container restores the phase $phase."
+             "new container restores it."
     elif [ "$status" -ne 0 ]; then
-        echo "handing-off: the phase $phase is cleared here, but no store" \
+        echo "handing-off: $cleared is cleared here, but no store" \
              "took the cleared state, so a resume into a new container" \
-             "restores the phase $phase. $(tr '\n' ' ' < "$log")"
+             "restores it. $(tr '\n' ' ' < "$log")"
     fi
     rm -f "$log"
 }
 
-if ! handoff_has_marker "$state"; then
+if [ -z "$marker" ]; then
     echo "COMPACTION JUST COMPLETED with no handoff marker — this" \
          "compaction ran unguarded. Tell the user at the start of your" \
          "reply: state before this point exists only in the summary," \
@@ -102,7 +114,6 @@ if ! handoff_has_marker "$state"; then
     push_cleared_state
     exit 0
 fi
-marker=$(cat "$state")
 path=$(handoff_json_field handoff_path "$marker")
 url=$(handoff_json_field published_url "$marker")
 # The local copy of the handoff can be gone while the state is not; the

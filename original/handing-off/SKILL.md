@@ -134,9 +134,10 @@ A reader with none of this session's context can pick any row and continue it.
 ## Hooks and state
 
 The skill ships its own compaction hooks.
-`verify.sh` runs on `SessionStart` (matcher `compact`): it injects the handoff pointer and the open-state rows into the fresh context, and clears the phase.
+`verify.sh` runs on `SessionStart` (matcher `compact`): it injects the handoff pointer and the open-state rows into the fresh context, and clears the phase and the marker: a compaction ends the handoff's cycle.
 Without a local state, after a resume into a new container, it restores the state and the draft from the store first.
 `guard.sh` runs on `PreCompact` and blocks compaction (exit 2) while no fresh marker exists, and while the phase is `listed` or `written`.
+A marker older than a compaction in the transcript is stale, so every compaction after the first needs a new handoff.
 Only the principal sets `PRECOMPACT_GUARD=off`.
 When the guard blocks, rerun the handoff.
 Where a manager owns `settings.json` (a `managedBy` marker), its template must carry both entries, and `check.sh` prints them.

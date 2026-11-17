@@ -79,7 +79,8 @@ teardown() { rm -rf "$TMP"; }
   "$SKILL/mark.sh" "$TMP/state/s1.draft.md" "$SESSION_MEMORY_URL/blob/main/h.md" > /dev/null
   run "$SKILL/verify.sh" <<< '{"session_id":"s1","source":"compact"}'
   [ "$status" -eq 0 ]
-  [[ "$output" == *"the value of SESSION_MEMORY_URL"* ]]
+  # The compaction consumes the marker, published URL included, before
+  # the push; whatever is left still goes through the scan.
   ! remote_file handoffs/sessions/s1/state.json | grep -q "memory-store" || false
 }
 
