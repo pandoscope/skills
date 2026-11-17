@@ -28,7 +28,7 @@ start.sh sets an earlier one aside as `.previous.md`, and the new handoff links 
 - `run 1`: follow Run 1.
 - `run 2`: follow Run 2 from step 1.
 - `run 2 at step 5`: follow Run 2 from step 5.
-- `the /compact proposal again`: repeat Run 2 step 9.
+- `the /compact proposal again`: repeat Run 2 step 10.
 
 ## Run 1
 
@@ -78,10 +78,19 @@ start.sh sets an earlier one aside as `.previous.md`, and the new handoff links 
    It verifies the marker, the list, the Persisted list and the hook registration.
    On a pass, it scans what it will push, then sets the phase `complete` and pushes the state.
    Relay any warning check.sh prints about registration timing.
-9. From what continues next, print one to three candidate `/compact <focus line>` commands, the first one recommended.
+9. List every action you named in this run as needed.
+   For each, say whether it is done, on the finish-first list, in the open-state table, or handed to the principal.
+   An action that fits none of the four goes on the finish-first list, and the run reopens (below).
+10. From what continues next, print one to three candidate `/compact <focus line>` commands, the first one recommended.
    Put each in its own fenced code block, with nothing else in it.
    End the turn on the proposals.
    Running `/compact` stays the principal's step.
+
+## A new item after complete
+
+An item that turns up once the phase is `complete` reopens the run.
+Put it on the finish-first list and run `./phase.sh listed`.
+The phase returns to `listed`, the marker stops counting, and Run 2 from step 1 completes the handoff again.
 
 ## Writes that wait
 

@@ -12,6 +12,9 @@
 #   written     run 2 at step 5
 #   complete    the /compact proposal again, while a marker exists and
 #               is fresh (marker.sh); run 1 otherwise
+# A new item after complete reopens the run: phase.sh listed returns
+# the phase to listed and drops the marker, so the next invocation
+# starts run 2.
 # Run 1 sets an earlier draft at the path aside, as <draft>.previous.md.
 # Exits 1 when no session is found or the phase is unknown; 3 when a
 # store is configured but does not answer, so the restore cannot tell
