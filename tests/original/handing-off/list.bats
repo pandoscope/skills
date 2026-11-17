@@ -157,3 +157,24 @@ MD
   [ "$status" -eq 0 ]
   [[ "$output" == *"settled: 0 items"* ]]
 }
+
+@test "the list check fails on every non-blank line it cannot read as an item (item 4)" {
+  draft <<'MD'
+| Item | Owner |
+| --- | --- |
+| write the tickets | model |
+[ ] model: no bullet
+model: bare line
+> - [ ] model: quoted
+Some prose about the list.
+MD
+  run "$SKILL/list.sh" "$TMP/draft.md"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"not a checkbox item: | Item | Owner |"* ]]
+  [[ "$output" == *"not a checkbox item: | write the tickets | model |"* ]]
+  [[ "$output" == *"not a checkbox item: [ ] model: no bullet"* ]]
+  [[ "$output" == *"not a checkbox item: model: bare line"* ]]
+  [[ "$output" == *"not a checkbox item: > - [ ] model: quoted"* ]]
+  [[ "$output" == *"not a checkbox item: Some prose about the list."* ]]
+  [[ "$output" != *"settled: 0 items"* ]]
+}

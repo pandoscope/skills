@@ -11,7 +11,7 @@
 # The list is the checkbox list between the "Finish first" heading and
 # the next heading of the same or a higher level; fenced blocks are
 # skipped. An item is a line "- [ ] ..." or "- [x] ...", with "-", "*"
-# or "+", at any indent. Any other list line in the list fails.
+# or "+", at any indent. Any other non-blank line in the list fails.
 # An item is settled when it is ticked, names its owner first, and, when
 # postponed, names the trigger that brings it back:
 #   - [x] model: run the probes (postponed until: the probe ticket closes)
@@ -58,9 +58,10 @@ awk '
         else { print "no owner: " text; open++ }
         next
     }
-    # Any other list line inside the list is an item the check cannot
-    # read; it fails rather than pass unread.
-    /^[[:space:]]*([-*+]|[0-9]+[.)])([[:space:]]|\[|$)/ || /^[[:space:]]*[-*+]\[/ {
+    # Any other non-blank line inside the list, a table, a quote or
+    # prose, is something the check cannot read; it fails rather than
+    # pass unread (review of #274, item 4).
+    /[^[:space:]]/ {
         line = $0
         sub(/^[[:space:]]+/, "", line)
         print "not a checkbox item: " line; open++

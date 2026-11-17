@@ -104,7 +104,7 @@ Then run `./phase.sh listed`, report it and end the turn: publish nothing, write
 
 Write the list as a checkbox list under the heading `## Finish first`, not a table: verify.sh lifts the first table with Item and Next columns.
 Each item is a checkbox item and names its owner, `model` or `principal`.
-The list check fails on any other list line in the list, on another owner word, and on an item without one.
+The list check fails on any other non-blank line in the list, a table or prose included, on another owner word, and on an item without one.
 A ticked item that was not done says why.
 A postponed item names the trigger that brings it back, and gets a row in the open-state table with the trigger in the Next column.
 An item from a ledger thread carries the thread's slug as `(thread: <slug>)`.
