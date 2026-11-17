@@ -106,7 +106,9 @@ events=$("$here/list.sh" --items "$draft" | awk '
     # A note reads in any letter case (review of #274, item 5); the
     # match runs on a lower-case copy, whose positions are the same.
     function inside(text, key,    start) {
-        if (!match(tolower(text), "\\(" key ":[[:space:]]*[^)]*\\)")) return ""
+        # Whitespace may follow the bracket, as list.sh allows (review
+        # of skills#274, round three, E3).
+        if (!match(tolower(text), "\\([[:space:]]*" key ":[[:space:]]*[^)]*\\)")) return ""
         start = index(substr(text, RSTART), ":") + 1
         text = substr(text, RSTART + start - 1, RLENGTH - start)
         gsub(/^[[:space:]]+|[[:space:]]+$/, "", text)

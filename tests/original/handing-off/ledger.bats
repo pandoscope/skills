@@ -263,3 +263,14 @@ MD
   [ "$(thread_state readme)" = dropped ]
   [ "$(thread_state probes)" = parked ]
 }
+
+@test "a note with whitespace after its bracket gets its event, as the list check reads it (E3)" {
+  fake_ledger
+  sed -i 's/(postponed until:/( postponed until:/; s/(dropped:/( dropped:/' "$TMP/draft.md"
+  run "$SKILL/list.sh" "$TMP/draft.md"
+  [ "$status" -eq 0 ]
+  run "$SKILL/ledger.sh" events "$TMP/draft.md"
+  [ "$status" -eq 0 ]
+  grep -q '"--ev","parked","--thread","probes","--trigger","the probe ticket closes"' "$APPENDS"
+  grep -q '"--ev","dropped","--thread","readme","--note","a ticket covers it"' "$APPENDS"
+}
