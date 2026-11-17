@@ -22,6 +22,8 @@ Run `./start.sh` on every invocation.
 It prints `starts:` with the section to follow, and `draft:` with the path of the handoff draft, the handoff file before you publish it.
 When the session has no local state, it restores the pushed state first and says so.
 When it exits 3, the store did not answer: report its line and end the turn.
+When it warns that it took the newest transcript, check that the transcript it names holds this session's latest messages.
+If it is another session's, set `HANDOFF_TRANSCRIPT` to this session's transcript and rerun start.sh: every later script finds the session the same way.
 Run 1 starts a new draft.
 start.sh sets an earlier one aside as `.previous.md`, and the new handoff links it as the previous handoff.
 
@@ -72,8 +74,8 @@ start.sh sets an earlier one aside as `.previous.md`, and the new handoff links 
 7. Publish the draft wherever the installing project keeps session artifacts, and comment on the tickets and progress records the session touched.
    In a session-memory store, record the handoff by its path in the store, never by a URL of the store.
 8. Run `./mark.sh <draft> [published-location]`.
-   When it warns that it took the newest transcript, check that the transcript it names holds this session's latest messages.
-   If it is another session's, delete the state file whose path mark.sh printed, set `HANDOFF_TRANSCRIPT` to this session's transcript and rerun mark.sh.
+   If it still warns that it took another session's transcript, set `HANDOFF_TRANSCRIPT` as at the start and rerun it.
+   Leave the other session's state file in place, since it holds that session's phase and draft path, and tell the principal which file mark.sh marked.
    Then run `./check.sh`.
    It verifies the marker, the list, the Persisted list and the hook registration.
    On a pass, it scans what it will push, then sets the phase `complete` and pushes the state.

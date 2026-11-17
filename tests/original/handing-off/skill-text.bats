@@ -30,3 +30,10 @@ compact_step() {
 @test "the skill says that a handoff completes no thread" {
   grep -q "A handoff completes no thread" "$SKILL_MD"
 }
+
+@test "the session check comes at the start, and no step deletes a state file (item 9)" {
+  start=$(awk '/^## Start/ { r = 1; next } /^## / { r = 0 } r' "$SKILL_MD")
+  [[ "$start" == *"newest transcript"* ]]
+  [[ "$start" == *"HANDOFF_TRANSCRIPT"* ]]
+  ! grep -qi "delete the state file" "$SKILL_MD" || false
+}
