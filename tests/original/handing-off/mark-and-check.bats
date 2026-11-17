@@ -10,6 +10,8 @@ setup() {
   export HANDOFF_STATE="$TMP/state.json"
   export CLAUDE_SETTINGS="$TMP/settings.json"
   export HANDOFF_TRANSCRIPT="$TMP/transcript.jsonl"
+  # check.sh completes only a run that recorded the phase written (E4).
+  record_written "$HANDOFF_STATE"
   cat > "$TMP/handoff.md" <<'MD'
 # Handoff
 
@@ -206,4 +208,13 @@ persisted() {
   run "$SKILL/check.sh"
   [ "$status" -eq 0 ]
   [[ "$output" != *"tickets and progress records"* ]]
+}
+
+@test "check refuses a run that never recorded the phase written (E4)" {
+  "$SKILL/mark.sh" "$TMP/handoff.md" > /dev/null
+  bash -c '. "$1/state.sh"; handoff_state_set "$HANDOFF_STATE" phase listed' _ "$SKILL"
+  run "$SKILL/check.sh"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"PHASE NOT WRITTEN"* ]]
+  ! grep -q '"phase":"complete"' "$HANDOFF_STATE" || false
 }

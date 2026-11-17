@@ -89,7 +89,7 @@ Whenever `phase.sh` or `check.sh` says that no store took a push, relay that lin
    If it still warns that it took another session's transcript, set `HANDOFF_TRANSCRIPT` as at the start and rerun it.
    Leave the other session's state file in place, since it holds that session's phase and draft path, and tell the principal which file mark.sh marked.
    Then run `./check.sh`.
-   It verifies the marker, the list, the Persisted list and the hook registration.
+   It verifies the phase written, the marker, the list, the Persisted list and the hook registration.
    On a pass, it scans what it will push, then sets the phase `complete` and pushes the state.
    Relay any warning check.sh prints about registration timing.
 10. From what continues next, print exactly one `/compact <focus line>` command.

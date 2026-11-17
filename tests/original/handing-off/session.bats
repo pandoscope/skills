@@ -146,6 +146,7 @@ pid_file() {
   HANDOFF_TRANSCRIPT="$PROJECTS/session-a.jsonl" "$SKILL/mark.sh" "$TMP/handoff.md"
   HANDOFF_TRANSCRIPT="$PROJECTS/session-b.jsonl" "$SKILL/mark.sh" "$TMP/b.md"
   rm "$TMP/b.md"
+  record_written "$HOME/.claude/handoff-state/session-a.json"
   run env HANDOFF_TRANSCRIPT="$PROJECTS/session-a.jsonl" "$SKILL/check.sh"
   [ "$status" -eq 0 ]
   [[ "$output" == *"machine checks pass"* ]]
@@ -163,9 +164,10 @@ legacy_marker() {
   legacy_marker session-a
   run "$SKILL/guard.sh" < <(hook_input session-a)
   [ "$status" -eq 0 ]
+  # It predates the phases, so check.sh does not complete it (E4).
   run env HANDOFF_TRANSCRIPT="$PROJECTS/session-a.jsonl" "$SKILL/check.sh"
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"machine checks pass"* ]]
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"PHASE NOT WRITTEN"* ]]
 }
 
 @test "an old shared marker of another session serves no one else" {

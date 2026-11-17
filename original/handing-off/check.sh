@@ -2,7 +2,8 @@
 # The completion check of handing-off's second run: the hooks this
 # skill ships are registered; the marker was written by this run, names
 # a real handoff and is not older than it; the finish-first list is
-# settled (list.sh); the Persisted list has an item. On a pass it sets
+# settled (list.sh); the Persisted list has an item; the run recorded
+# the phase written. On a pass it sets
 # the phase complete and pushes the state (store.sh). Everything a
 # script cannot judge prints as the residue.
 set -euo pipefail
@@ -126,6 +127,16 @@ persisted=$(awk '
 [ "$persisted" -gt 0 ] || fail "NO PERSISTED LIST" \
     "$handoff has no \"Persisted\" heading with an item under it" \
     "record the sweep's findings there, or the single item \"none\""
+
+# The phase table reaches complete only from written, and phase.sh
+# written is where the open-state table is checked (review of
+# skills#274, round three, E4).
+case "$(handoff_json_field phase "$(cat "$state")")" in
+    written|complete) ;;
+    *) fail "PHASE NOT WRITTEN" \
+        "the run has not recorded the phase written, so its open state is unchecked" \
+        "write the open state into the draft, run ./phase.sh written, then rerun check.sh" ;;
+esac
 
 # The scan comes before the phase: a state recorded complete passes the
 # guard and makes the next invocation propose /compact.

@@ -43,3 +43,10 @@ MD
 }
 
 remote_file() { git -C "$TMP/remote.git" show "main:$1"; }
+
+# record_written <state file>: the phase run 2 records once the open
+# state is in the draft; check.sh completes only from it (review of
+# skills#274, round three, E4).
+record_written() {
+  bash -c '. "$1/state.sh"; handoff_state_set "$2" phase written' _ "$SKILL" "$1"
+}

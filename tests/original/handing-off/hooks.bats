@@ -129,6 +129,7 @@ MD
 # --- check.sh registration -----------------------------------------
 
 @test "check installs both registrations into an absent settings.json and warns" {
+  record_written "$HANDOFF_STATE"
   "$SKILL/mark.sh" "$TMP/handoff.md" > /dev/null
   run "$SKILL/check.sh"
   [ "$status" -eq 0 ]
@@ -139,6 +140,7 @@ MD
 }
 
 @test "check is quiet-green once registered, and preserves foreign keys" {
+  record_written "$HANDOFF_STATE"
   printf '{"env": {"KEEP": "me"}, "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "x.sh"}]}]}}\n' > "$CLAUDE_SETTINGS"
   "$SKILL/mark.sh" "$TMP/handoff.md" > /dev/null
   run "$SKILL/check.sh"
@@ -171,6 +173,7 @@ MD
   [ "$status" -eq 0 ]
   grep -q "\"handoff_path\":\"$TMP/handoff.md\"" "$HANDOFF_STATE"
   cd /
+  record_written "$HANDOFF_STATE"
   run "$SKILL/check.sh"
   [ "$status" -eq 0 ]
   # verify last: the compaction consumes the marker.
