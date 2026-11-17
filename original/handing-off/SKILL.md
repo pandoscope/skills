@@ -11,6 +11,7 @@ description: >
 # Handing Off
 
 The handoff records what is open, why, and what continues.
+The skill does not use the platform's task list: the finish-first list in the draft is the one record.
 It takes two runs.
 Run 1 finds the work that needs the current context, proposes it and stops.
 You and the principal do that work.

@@ -66,3 +66,7 @@ compact_step() {
   grep -q "This session's URL is" "$SKILL_MD"
   grep -q "Claude-Session" "$SKILL_MD"
 }
+
+@test "the skill does not use the platform's task list (item 17)" {
+  grep -q "does not use the platform's task list" "$SKILL_MD"
+}
