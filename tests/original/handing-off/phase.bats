@@ -134,3 +134,11 @@ teardown() { rm -rf "$TMP"; }
   [ "$status" -eq 0 ]
   grep -q '"phase":"written"' "$HANDOFF_STATE"
 }
+
+@test "a table whose header lacks Item and Next is no open-state table, whatever its rows say (E2)" {
+  printf '# Handoff\n\n## Finish first\n\n- [x] model: write the tickets\n\n## Open state\n\n| Ticket | State |\n| --- | --- |\n| the next item | open |\n' \
+    > "$TMP/state/s1.draft.md"
+  run "$SKILL/phase.sh" written
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no open-state table"* ]]
+}

@@ -61,7 +61,11 @@ fi
 # table must exist (principal, on review D13 of skills#274).
 if [ "$phase" = written ] && ! awk '
         /^[[:space:]]*(```|~~~)/ { fenced = !fenced; next }
-        !fenced && /^\|/ && tolower($0) ~ /item/ && tolower($0) ~ /next/ { found = 1; exit }
+        # Only the first line of a table is its header, as verify.sh
+        # reads it (review of skills#274, round three, E2).
+        !fenced && /^\|/ { if (!in_t && tolower($0) ~ /item/ && tolower($0) ~ /next/) { found = 1; exit }
+                           in_t = 1; next }
+        { in_t = 0 }
         END { exit !found }' "$draft"; then
     echo "phase.sh: the draft has no open-state table (a table with Item" \
          "and Next columns); the phase stays as it was. Write the open" \
