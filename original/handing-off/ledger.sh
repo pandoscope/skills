@@ -118,7 +118,10 @@ fi
 # skills#267 left the notation open.
 # One tab-separated line per ticked item with a thread slug:
 # <event> <slug> [<reason or trigger>]. The item notation is list.sh's.
-events=$(awk '
+# The items come from list.sh, so the list ends, and fenced lines are
+# skipped, by the rules of the list check (review of skills#274, round
+# two, D3).
+events=$("$here/list.sh" --items "$draft" | awk '
     # A note reads in any letter case (review of #274, item 5); the
     # match runs on a lower-case copy, whose positions are the same.
     function inside(text, key,    start) {
@@ -132,8 +135,7 @@ events=$(awk '
         sub(/^[[:space:]]*[-*+][[:space:]]+\[[xX]\][[:space:]]+/, "", line)
         return line
     }
-    /^#+[[:space:]]/ { in_list = ($0 ~ /^#+[[:space:]]+Finish first[[:space:]]*$/); next }
-    in_list && /^[[:space:]]*[-*+][[:space:]]+\[[xX]\][[:space:]]/ {
+    /^[[:space:]]*[-*+][[:space:]]+\[[xX]\][[:space:]]/ {
         slug = inside($0, "thread")
         if (slug == "") next
         if (tolower($0) ~ /\([[:space:]]*dropped[[:space:]]*(:[[:space:]]*)?\)/) print "unexplained\t" slug "\t" item($0)
@@ -144,7 +146,7 @@ events=$(awk '
         # 2026-11-17). Dropped and postponed items still write events.
         else print "open\t" slug
     }
-' "$draft")
+')
 
 unexplained=$(printf '%s\n' "$events" | awk -F'\t' '$1 == "unexplained" { print "dropped without a reason: " $3 }')
 if [ -n "$unexplained" ]; then

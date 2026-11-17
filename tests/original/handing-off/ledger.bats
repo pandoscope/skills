@@ -224,3 +224,30 @@ thread_state() { node "$LEDGER" state 2> /dev/null | jq -r --arg t "$1" '.[] | s
   [ "$(thread_state readme)" = dropped ]
   [ "$(thread_state probes)" = parked ]
 }
+
+@test "run 2 reads the finish-first list by the rules of the list check (D3)" {
+  fake_ledger
+  cat > "$TMP/draft.md" <<'MD'
+# Handoff
+
+## Finish first
+
+- [x] model: merge the fix (thread: fix-auth)
+
+### From the ledger
+
+- [x] model: run the probes (postponed until: the probe ticket closes) (thread: probes)
+
+```markdown
+- [x] model: an example (dropped: only an example) (thread: example)
+```
+
+## Open state
+MD
+  run "$SKILL/list.sh" "$TMP/draft.md"
+  [ "$status" -eq 0 ]
+  run "$SKILL/ledger.sh" events "$TMP/draft.md"
+  [ "$status" -eq 0 ]
+  grep -q '"--ev","parked","--thread","probes"' "$APPENDS"
+  ! grep -q '"example"' "$APPENDS" || false
+}

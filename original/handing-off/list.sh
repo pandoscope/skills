@@ -2,7 +2,7 @@
 # The list check (skills#267): is the finish-first list in a handoff
 # draft settled?
 #
-# Usage: list.sh <draft>
+# Usage: list.sh [--items] <draft>
 # Exits 0 when the draft has a "Finish first" heading and every item
 # under it is settled (an empty list is settled); 1 when the heading is
 # missing or an item is not settled, naming each such item; 2 when the
@@ -21,12 +21,20 @@
 # owner word fails as "no owner". The principal decided so on the
 # review of the pull request, as skills#267 asks.
 set -euo pipefail
-draft=${1:?usage: list.sh <draft>}
+# --items prints the list's checkbox items, one raw line each, and
+# judges nothing: the ledger step reads the list by these same rules
+# (review of skills#274, round two, D3).
+items_only=0
+if [ "${1:-}" = --items ]; then
+    items_only=1
+    shift
+fi
+draft=${1:?usage: list.sh [--items] <draft>}
 if [ ! -f "$draft" ]; then
     echo "list.sh: no draft at $draft" >&2
     exit 2
 fi
-awk '
+awk -v items_only="$items_only" '
     { sub(/\r$/, "") }
     # A fenced block is example text: it neither opens nor ends the
     # list, and its lines are no items.
@@ -40,6 +48,8 @@ awk '
         next
     }
     !in_list { next }
+    items_only && /^[[:space:]]*[-*+][[:space:]]+\[[ xX]\][[:space:]]/ { print; next }
+    items_only { next }
     /^[[:space:]]*[-*+][[:space:]]+\[[ xX]\][[:space:]]/ {
         items++
         ticked = ($0 ~ /^[[:space:]]*[-*+][[:space:]]+\[[xX]\]/)
@@ -71,6 +81,7 @@ awk '
         print "not a checkbox item: " line; open++; items++
     }
     END {
+        if (items_only) exit 0
         if (!found) { print "no \"Finish first\" heading in " FILENAME; exit 1 }
         if (open) { printf "finish-first list not settled: %d of %d items open\n", open, items; exit 1 }
         printf "finish-first list settled: %d items\n", items
