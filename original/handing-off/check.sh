@@ -137,5 +137,5 @@ Residue — verify by reading, or hand to the human:
 - the handoff is published and its URL recorded in the marker
 - every open-state row carries a next action
 - tickets and progress records the session touched are updated
-- /compact focus proposals were printed for the user to choose
+- exactly one /compact command was printed for the user to run
 RESIDUE

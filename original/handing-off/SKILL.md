@@ -81,9 +81,9 @@ start.sh sets an earlier one aside as `.previous.md`, and the new handoff links 
 9. List every action you named in this run as needed.
    For each, say whether it is done, on the finish-first list, in the open-state table, or handed to the principal.
    An action that fits none of the four goes on the finish-first list, and the run reopens (below).
-10. From what continues next, print one to three candidate `/compact <focus line>` commands, the first one recommended.
-   Put each in its own fenced code block, with nothing else in it.
-   End the turn on the proposals.
+10. From what continues next, print exactly one `/compact <focus line>` command.
+   Put it in a fenced code block, with nothing else in it.
+   End the turn on that command.
    Running `/compact` stays the principal's step.
 
 ## A new item after complete
