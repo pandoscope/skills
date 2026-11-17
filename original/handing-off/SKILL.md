@@ -130,6 +130,7 @@ Order items by urgency, then importance, with a blocker before what waits on it.
 Surface low-hanging fruit of high value early.
 
 Write it into the draft: what happened since the previous handoff; an open-state table (item | state | next); standing rules; gotchas; a link to the previous handoff.
+Among the gotchas, name the skills, tool schemas and prose rules the session loaded, which the fresh context must load again: a compaction drops them.
 A second handoff in a session starts from the current state, not from the previous handoff's table, whose rows go stale as they are done.
 Every row carries a next action, stays on one line and stands in priority order: verify.sh lifts the rows verbatim into the post-compaction context.
 A reader with none of this session's context can pick any row and continue it.

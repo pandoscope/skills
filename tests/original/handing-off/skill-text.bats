@@ -43,3 +43,8 @@ compact_step() {
   grep -q "starts from the current state" "$SKILL_MD"
   grep -q '`previous:`' "$SKILL_MD"
 }
+
+@test "the handoff names the skills and tools to load again after a compaction (item 11)" {
+  open_state=$(awk '/^## Open state/ { r = 1; next } /^## / { r = 0 } r' "$SKILL_MD")
+  [[ "$open_state" == *"load again"* ]]
+}
