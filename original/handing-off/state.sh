@@ -179,15 +179,24 @@ handoff_own_session() {
 #   $1  session id
 # Prints $HANDOFF_TRANSCRIPT when set, else
 # ~/.claude/projects/<project>/<session-id>.jsonl; nothing when no
-# such file exists or the session id is not a plain name.
+# such file exists or the session id is not a plain name. A session
+# restarted from another checkout has a transcript in each project
+# directory, and only the newest still grows (review of skills#274,
+# item 7): the newest is printed.
 handoff_transcript_of_session() {
     if [ -n "${HANDOFF_TRANSCRIPT:-}" ]; then
         printf '%s\n' "$HANDOFF_TRANSCRIPT"
         return 0
     fi
     handoff_valid_session "$1" || return 0
-    find "$HOME/.claude/projects" -mindepth 2 -maxdepth 2 \
-         -name "$1.jsonl" -type f -print -quit 2>/dev/null || true
+    local candidate newest=""
+    while IFS= read -r candidate; do
+        if [ -z "$newest" ] || [ "$candidate" -nt "$newest" ]; then
+            newest=$candidate
+        fi
+    done < <(find "$HOME/.claude/projects" -mindepth 2 -maxdepth 2 \
+                  -name "$1.jsonl" -type f 2>/dev/null || true)
+    [ -z "$newest" ] || printf '%s\n' "$newest"
 }
 
 # Print the newest session transcript on this machine.

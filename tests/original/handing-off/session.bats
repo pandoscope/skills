@@ -281,3 +281,21 @@ legacy_marker() {
   [ "$status" -eq 1 ]
   [ ! -e "$HOME/.claude/handoff-state/*.json" ]
 }
+
+@test "with two transcripts under one session id, mark measures the live one (item 7)" {
+  # A session restarted from another checkout: an old transcript that no
+  # longer grows and the live one. Each order of the two directories is
+  # tried, since find returns them in an order of its own.
+  for live in -work-one -work-two; do
+    rm -rf "$HOME/.claude/projects" "$HOME/.claude/handoff-state"
+    transcript "$HOME/.claude/projects/-work-one/session-a.jsonl" 200000
+    transcript "$HOME/.claude/projects/-work-two/session-a.jsonl" 200000
+    transcript "$HOME/.claude/projects/$live/session-a.jsonl" 1000
+    for frozen in "$HOME"/.claude/projects/*/session-a.jsonl; do
+      [ "$frozen" = "$HOME/.claude/projects/$live/session-a.jsonl" ] || touch -d '1 hour ago' "$frozen"
+    done
+    run env CLAUDE_CODE_SESSION_ID=session-a "$SKILL/mark.sh" "$TMP/handoff.md"
+    [ "$status" -eq 0 ]
+    grep -q '"context_tokens":1000' "$HOME/.claude/handoff-state/session-a.json"
+  done
+}
