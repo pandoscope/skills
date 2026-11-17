@@ -4,11 +4,13 @@
 # (skills#245, skills#255). HOME is a scratch directory, so the
 # session variables of whatever session runs this suite stay out.
 
+load store_helper
+
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME" && git rev-parse --show-toplevel)"
   SKILL="$REPO_ROOT/original/handing-off"
   TMP=$(mktemp -d)
-  export HOME="$TMP/home"
+  store_isolate
   unset HANDOFF_STATE HANDOFF_TRANSCRIPT CLAUDE_PID CLAUDE_CODE_SESSION_ID
   PROJECTS="$HOME/.claude/projects/-work-repo"
   mkdir -p "$PROJECTS"

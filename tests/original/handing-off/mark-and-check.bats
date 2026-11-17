@@ -1,9 +1,12 @@
 #!/usr/bin/env bats
 
+load store_helper
+
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME" && git rev-parse --show-toplevel)"
   SKILL="$REPO_ROOT/original/handing-off"
   TMP=$(mktemp -d)
+  store_isolate
   export HANDOFF_STATE="$TMP/state.json"
   export CLAUDE_SETTINGS="$TMP/settings.json"
   export HANDOFF_TRANSCRIPT="$TMP/transcript.jsonl"

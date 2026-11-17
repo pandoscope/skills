@@ -3,10 +3,13 @@
 # source=compact), guard.sh (PreCompact), and check.sh's registration
 # installer.
 
+load store_helper
+
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME" && git rev-parse --show-toplevel)"
   SKILL="$REPO_ROOT/original/handing-off"
   TMP=$(mktemp -d)
+  store_isolate
   export HANDOFF_STATE="$TMP/state.json"
   export HANDOFF_TRANSCRIPT="$TMP/transcript.jsonl"
   export CLAUDE_SETTINGS="$TMP/settings.json"
