@@ -198,3 +198,16 @@ MD
   [ "$status" -eq 1 ]
   [[ "$output" == *"finish-first list not settled: 1 of 1 items open"* ]]
 }
+
+@test "an unticked item names its owner problem too (D1)" {
+  draft <<'MD'
+- [ ] bob: write the tickets
+- [ ] write the README
+MD
+  run "$SKILL/list.sh" "$TMP/draft.md"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unticked: bob: write the tickets"* ]]
+  [[ "$output" == *"unknown owner: bob (in \"bob: write the tickets\")"* ]]
+  [[ "$output" == *"no owner: write the README"* ]]
+  [[ "$output" == *"2 of 2 items open"* ]]
+}

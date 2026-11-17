@@ -55,19 +55,24 @@ awk -v items_only="$items_only" '
         ticked = ($0 ~ /^[[:space:]]*[-*+][[:space:]]+\[[xX]\]/)
         text = $0
         sub(/^[[:space:]]*[-*+][[:space:]]+\[[ xX]\][[:space:]]+/, "", text)
-        if (!ticked) { print "unticked: " text; open++ }
-        else if (text ~ /^(model|principal):[[:space:]]/) {
+        # Each problem of an item is named, and the item counts as open
+        # once: an unticked item names its owner problem too (review of
+        # skills#274, round two, D1).
+        bad = 0
+        if (!ticked) { print "unticked: " text; bad = 1 }
+        if (text ~ /^(model|principal):[[:space:]]/) {
             # The note reads in any letter case (review of #274, item 5).
             low = tolower(text)
-            if (low ~ /\([[:space:]]*postponed/ \
+            if (ticked && low ~ /\([[:space:]]*postponed/ \
                 && low !~ /\([[:space:]]*postponed until:[[:space:]]*[^)[:space:]][^)]*\)/) {
-                print "postponed without trigger: " text; open++
+                print "postponed without trigger: " text; bad = 1
             }
         }
         else if (match(text, /^[A-Za-z][A-Za-z0-9_-]*:[[:space:]]/)) {
-            print "unknown owner: " substr(text, 1, RLENGTH - 2) " (in \"" text "\")"; open++
+            print "unknown owner: " substr(text, 1, RLENGTH - 2) " (in \"" text "\")"; bad = 1
         }
-        else { print "no owner: " text; open++ }
+        else { print "no owner: " text; bad = 1 }
+        open += bad
         next
     }
     # Any other non-blank line inside the list, a table, a quote or
