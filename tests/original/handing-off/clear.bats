@@ -97,3 +97,15 @@ MD
   [[ "$output" == *"| repo#2 docs | open | write them |"* ]]
   [ -f "$TMP/state/s1.draft.md" ]
 }
+
+@test "the hooks find a store that was named only in the run's shell" {
+  sed -i 's/- \[ \]/- [x]/' "$TMP/state/s1.draft.md"
+  "$SKILL/mark.sh" "$TMP/state/s1.draft.md" > /dev/null
+  "$SKILL/phase.sh" written > /dev/null
+  # The hook runs in another process: HANDOFF_STORE is not set there.
+  run env -u HANDOFF_STORE "$SKILL/verify.sh" <<< '{"session_id":"s1","source":"compact"}'
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"no store took"* ]]
+  ! remote_file handoffs/sessions/s1/state.json | grep -q '"phase"' || false
+  ! remote_file handoffs/sessions/s1/state.json | grep -q '"store_root"' || false
+}
