@@ -57,3 +57,24 @@ teardown() { rm -rf "$TMP"; }
   [[ "${lines[0]}" == *"COMPACTION JUST COMPLETED"* ]]
   [[ "$output" == *"did not finish within 1s"* ]]
 }
+
+@test "after a resume into a fresh home, verify restores the state from the store and lifts the rows" {
+  cat >> "$TMP/state/s1.draft.md" <<'MD'
+
+## Open state
+
+| Item | State | Next |
+| --- | --- | --- |
+| repo#1 fix | open | merge it |
+MD
+  sed -i 's/- \[ \]/- [x]/' "$TMP/state/s1.draft.md"
+  "$SKILL/mark.sh" "$TMP/state/s1.draft.md" > /dev/null
+  "$SKILL/phase.sh" written > /dev/null
+  # A resume into a new container loses everything under the home.
+  rm "$HANDOFF_STATE" "$TMP/state/s1.draft.md"
+  run "$SKILL/verify.sh" <<< '{"session_id":"s1","source":"compact"}'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"| repo#1 fix | open | merge it |"* ]]
+  [ -f "$TMP/state/s1.draft.md" ]
+  ! grep -q '"phase"' "$HANDOFF_STATE" || false
+}

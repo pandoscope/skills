@@ -3,6 +3,8 @@
 # run 2 writes one event per finish-first item that carries a thread
 # slug. Without a ledger, each step says in one line that it skipped.
 
+bats_require_minimum_version 1.5.0
+
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME" && git rev-parse --show-toplevel)"
   SKILL="$REPO_ROOT/original/handing-off"
@@ -25,18 +27,18 @@ teardown() { rm -rf "$TMP"; }
 
 @test "without a ledger, run 1's ledger step prints one line that it skipped" {
   export HANDOFF_LEDGER="$TMP/no-ledger.mjs"
-  run "$SKILL/ledger.sh" view
+  run --separate-stderr "$SKILL/ledger.sh" view
   [ "$status" -eq 0 ]
-  [ "${#lines[@]}" -eq 1 ]
-  [[ "$output" == *"skips its ledger step"* ]]
+  [ "$output" = "handing-off: no thread ledger available; this run skips its ledger step" ]
+  [[ "$stderr" == *"no ledger at $TMP/no-ledger.mjs"* ]]
 }
 
 @test "without a ledger, run 2's ledger step prints one line that it skipped" {
   export HANDOFF_LEDGER="$TMP/no-ledger.mjs"
-  run "$SKILL/ledger.sh" events "$TMP/draft.md"
+  run --separate-stderr "$SKILL/ledger.sh" events "$TMP/draft.md"
   [ "$status" -eq 0 ]
-  [ "${#lines[@]}" -eq 1 ]
-  [[ "$output" == *"skips its ledger step"* ]]
+  [ "$output" = "handing-off: no thread ledger available; this run skips its ledger step" ]
+  [[ "$stderr" == *"no ledger at $TMP/no-ledger.mjs"* ]]
 }
 
 # fake_ledger: a ledger that renders a fixed view and logs each append
