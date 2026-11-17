@@ -51,12 +51,14 @@ if [ ! -f "$state" ]; then
            [ -n "$phase" ] || restored="state, with no phase,"
            if [ -n "$(handoff_json_field draft_path "$(cat "$state")")" ]; then
                echo "restored the $restored and the draft from the store"
-           elif [ "$phase" = listed ] || [ "$phase" = written ]; then
-               # A run under way needs its draft (review of skills#274,
-               # item 15): without it there is nothing to continue.
-               handoff_state_set "$state" phase ""
+           elif [ "$phase" = listed ] || [ "$phase" = written ] || [ "$phase" = complete ]; then
+               # A run needs its draft (review of skills#274, item 15),
+               # and a complete one's marker names it (round three, E6):
+               # without it there is nothing to continue or propose.
+               handoff_state_set "$state" phase "" handoff_path "" published_url "" \
+                   written_at "" written_epoch "" context_tokens ""
                echo "the store holds the phase $phase but no draft, so" \
-                    "the interrupted run cannot go on; run 1 starts over"
+                    "the run cannot go on; run 1 starts over"
            else
                echo "restored the $restored from the store; it holds no draft"
            fi ;;

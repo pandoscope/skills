@@ -179,3 +179,18 @@ usage_line() {
   [[ "$output" == *"starts: run 1"* ]]
   ! grep -q '"phase"' "$HANDOFF_STATE" || false
 }
+
+@test "a restored complete without its draft starts over at run 1 and says why (E6)" {
+  "$SKILL/phase.sh" listed > /dev/null
+  printf '{"phase":"complete","handoff_path":"handoffs/sessions/s1/draft.md","written_epoch":%s}\n' \
+    "$(date +%s)" > "$TMP/store/handoffs/sessions/s1/state.json"
+  git -C "$TMP/store" rm -q handoffs/sessions/s1/draft.md
+  git -C "$TMP/store" -c user.name=t -c user.email=t@t commit -q -am "complete without its draft"
+  git -C "$TMP/store" push -q origin main
+  rm "$HANDOFF_STATE" "$TMP/state/s1.draft.md"
+  run "$SKILL/start.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"the store holds the phase complete but no draft"* ]]
+  [[ "$output" == *"starts: run 1"* ]]
+  ! grep -q '"handoff_path"' "$HANDOFF_STATE" || false
+}
