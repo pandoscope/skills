@@ -61,3 +61,8 @@ compact_step() {
   start=$(awk '/^## Start/ { r = 1; next } /^## / { r = 0 } r' "$SKILL_MD")
   [[ "$start" == *'`draft:` with the path to write the handoff draft to'* ]]
 }
+
+@test "the skill says where this session's URL comes from (item 16)" {
+  grep -q "This session's URL is" "$SKILL_MD"
+  grep -q "Claude-Session" "$SKILL_MD"
+}

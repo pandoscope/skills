@@ -158,6 +158,8 @@ The per-session state holds the phase, the draft's path and the marker.
 `store.sh` documents where the state is pushed.
 Every push goes through the outgoing scan.
 The ledger steps need the session's identity, from `--session-url` or `LEDGER_SESSION_URL`, and skip in one line without it.
+This session's URL is the value of `LEDGER_SESSION_URL` when it is set; otherwise, the URL that the session's own commits name in their `Claude-Session:` trailer.
+Without either, ask the principal for it, or let the ledger steps skip.
 A handoff completes no thread: a done item leaves its thread open, and only a dropped or postponed item writes an event.
 `HANDOFF_STORE` names the installing project's own place for session artifacts.
 Every push records the store's location in the state, so the hooks find a store named only in a run's shell.
