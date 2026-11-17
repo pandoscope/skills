@@ -24,6 +24,15 @@ input=""
 session=$(handoff_session_of_hook_input "$input")
 state=$(handoff_marker_to_read "$session")
 
+# The run records its store in the state (store.sh); a hook does not
+# see a HANDOFF_STORE set only in the run's shell.
+if [ -z "${HANDOFF_STORE:-}" ] && [ -n "$state" ] && [ -f "$state" ]; then
+    recorded=$(handoff_json_field store_root "$(cat "$state")")
+    if [ -n "$recorded" ] && [ -d "$recorded/.git" ]; then
+        export HANDOFF_STORE="$recorded"
+    fi
+fi
+
 # bounded <seconds> <log> <command...>: runs the command in the
 # background and waits at most that long. Returns its status; 124 when
 # it is still running, and then it goes on in the background.

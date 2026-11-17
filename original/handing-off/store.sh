@@ -57,7 +57,8 @@ handoff_store_redact() {
 # The rendered state names the draft, and the handoff of a marker, by
 # the draft's path in the store, and drops transcript_path: a local
 # absolute path means nothing to the container that restores it, and a
-# blocklisted word in a directory name would fail every scan.
+# blocklisted word in a directory name would fail every scan. The same
+# holds for store_root.
 handoff_store_render() {
     local session=$1 state=$2 draft=$3 out=$4 root=$5 stored="" handoff=""
     local dir
@@ -73,7 +74,7 @@ handoff_store_render() {
         handoff=$stored
     fi
     handoff_state_set "$out/state.json" draft_path "$stored" \
-        handoff_path "$handoff" transcript_path ""
+        handoff_path "$handoff" transcript_path "" store_root ""
 }
 
 # Scan a session's state, and its draft when given, in the form the
@@ -120,6 +121,9 @@ handoff_store_push() {
         return 1
     fi
     handoff_store_scan "$session" "$state" "$draft" || return 2
+    # The hooks run in processes of their own, where a store named only
+    # in the run's shell is unknown: the state records where it is.
+    handoff_state_set "$state" store_root "$root"
     branch=$(handoff_store_branch "$root")
     [ -n "$branch" ] || return 1
     dir=$(handoff_store_dir "$session")

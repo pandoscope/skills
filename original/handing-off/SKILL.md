@@ -150,3 +150,4 @@ The per-session state holds the phase, the draft's path and the marker.
 Every push goes through the outgoing scan.
 The ledger steps need `LEDGER_SESSION_URL`, and skip in one line without it.
 `HANDOFF_STORE` names the installing project's own place for session artifacts.
+Every push records the store's location in the state, so the hooks find a store named only in a run's shell.
