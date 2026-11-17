@@ -126,6 +126,7 @@ A reader with none of this session's context can pick any row and continue it.
 
 The skill ships its own compaction hooks.
 `verify.sh` runs on `SessionStart` (matcher `compact`): it injects the handoff pointer and the open-state rows into the fresh context, and clears the phase.
+Without a local state, after a resume into a new container, it restores the state and the draft from the store first.
 `guard.sh` runs on `PreCompact` and blocks compaction (exit 2) while no fresh marker exists, and while the phase is `listed` or `written`.
 Only the principal sets `PRECOMPACT_GUARD=off`.
 When the guard blocks, rerun the handoff.
