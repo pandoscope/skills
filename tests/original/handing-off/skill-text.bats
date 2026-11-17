@@ -76,3 +76,8 @@ compact_step() {
   [[ "$run2" == *"Publish the draft"* ]]
   [[ "$run2" != *"comment on the tickets"* ]]
 }
+
+@test "run 2 relays the line that no store took a push (item 20)" {
+  run2=$(awk '/^## Run 2/ { r = 1; next } /^## / { r = 0 } r' "$SKILL_MD")
+  [[ "$run2" == *"no store took"* ]]
+}

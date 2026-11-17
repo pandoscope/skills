@@ -57,6 +57,7 @@ The new handoff links that as the previous handoff.
 ## Run 2
 
 Run 2 starts with a new invocation of this skill, never from memory of its text: steps that no script checks rely on reading it again.
+Whenever `phase.sh` or `check.sh` says that no store took a push, relay that line: a resume into a new container loses what was not pushed.
 
 1. Ask yourself the two questions of run 1 again, for the stretch since run 1.
    Add the new items to the list, together with the items the principal named.
