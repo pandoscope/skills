@@ -4,7 +4,9 @@
 # Usage: start.sh
 # Env:   HANDOFF_STATE, HANDOFF_TRANSCRIPT as for mark.sh (state.sh)
 #
-# Prints "starts: <what>" and "draft: <path>", and exits 0. Without a
+# Prints "starts: <what>" and "draft: <path>", and for run 1
+# "previous: <path in the store> at <commit>" or "previous: none"; exits
+# 0. Without a
 # local state it first restores the pushed state (store.sh) and says
 # so. The phase in the session's state decides <what>:
 #   (no phase)  run 1
@@ -15,7 +17,8 @@
 # A new item after complete reopens the run: phase.sh listed returns
 # the phase to listed and drops the marker, so the next invocation
 # starts run 2.
-# Run 1 sets an earlier draft at the path aside, as <draft>.previous.md.
+# Run 1 sets an earlier draft at the path aside, as <draft>.previous.md,
+# a local working copy only.
 # Exits 1 when no session is found or the phase is unknown; 3 when a
 # store is configured but does not answer, so the restore cannot tell
 # whether it holds a run.
@@ -77,3 +80,19 @@ if [ "$starts" = "run 1" ] && [ -f "$draft" ]; then
 fi
 echo "starts: $starts"
 echo "draft: $draft"
+# The previous handoff is the draft the store last took for this
+# session, named by path and commit: the path alone is overwritten by
+# this run, and a local copy is lost on a resume (review of skills#274,
+# item 10).
+if [ "$starts" = "run 1" ]; then
+    root=${HANDOFF_STORE:-}
+    [ -n "$root" ] || [ ! -f "$state" ] || root=$(handoff_json_field store_root "$(cat "$state")")
+    [ -n "$root" ] || root=$(handoff_store_root 2>/dev/null || true)
+    previous=""
+    if [ -n "$root" ] && [ -d "$root/.git" ]; then
+        file="$(handoff_store_dir "$session")/draft.md"
+        sha=$(git -C "$root" log -1 --format=%h -- "$file" 2>/dev/null || true)
+        [ -z "$sha" ] || previous="$file at $sha"
+    fi
+    echo "previous: ${previous:-none}"
+fi

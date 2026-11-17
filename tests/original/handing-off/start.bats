@@ -137,3 +137,21 @@ usage_line() {
   [[ "$output" == *"draft: $TMP/fresh/dir/s1.draft.md"* ]]
   [ -d "$TMP/fresh/dir" ]
 }
+
+@test "run 1 names the previous handoff by its path and commit in the store (item 10)" {
+  "$SKILL/phase.sh" listed > /dev/null
+  sha=$(git -C "$TMP/remote.git" log -1 --format=%h main -- handoffs/sessions/s1/draft.md)
+  # The compaction cleared the phase; a resume into a new container
+  # loses the local draft and its set-aside copy alike.
+  "$SKILL/verify.sh" <<< '{"session_id":"s1","source":"compact"}' > /dev/null
+  rm -f "$TMP/state/s1.draft.md" "$TMP/state/s1.draft.previous.md"
+  run "$SKILL/start.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"starts: run 1"* ]]
+  [[ "$output" == *"previous: handoffs/sessions/s1/draft.md at $sha"* ]]
+}
+
+@test "the first run 1 of a session names no previous handoff (item 10)" {
+  run "$SKILL/start.sh"
+  [[ "$output" == *"previous: none"* ]]
+}

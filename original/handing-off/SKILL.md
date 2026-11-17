@@ -24,8 +24,8 @@ When the session has no local state, it restores the pushed state first and says
 When it exits 3, the store did not answer: report its line and end the turn.
 When it warns that it took the newest transcript, check that the transcript it names holds this session's latest messages.
 If it is another session's, set `HANDOFF_TRANSCRIPT` to this session's transcript and rerun start.sh: every later script finds the session the same way.
-Run 1 starts a new draft.
-start.sh sets an earlier one aside as `.previous.md`, and the new handoff links it as the previous handoff.
+Run 1 starts a new draft, and start.sh prints `previous:` with the previous handoff's path and commit in the store, or `none`.
+The new handoff links that as the previous handoff.
 
 - `run 1`: follow Run 1.
 - `run 2`: follow Run 2 from step 1.
@@ -130,6 +130,7 @@ Order items by urgency, then importance, with a blocker before what waits on it.
 Surface low-hanging fruit of high value early.
 
 Write it into the draft: what happened since the previous handoff; an open-state table (item | state | next); standing rules; gotchas; a link to the previous handoff.
+A second handoff in a session starts from the current state, not from the previous handoff's table, whose rows go stale as they are done.
 Every row carries a next action, stays on one line and stands in priority order: verify.sh lifts the rows verbatim into the post-compaction context.
 A reader with none of this session's context can pick any row and continue it.
 

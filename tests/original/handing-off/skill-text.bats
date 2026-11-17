@@ -37,3 +37,9 @@ compact_step() {
   [[ "$start" == *"HANDOFF_TRANSCRIPT"* ]]
   ! grep -qi "delete the state file" "$SKILL_MD" || false
 }
+
+@test "a second handoff starts from the current state and links the previous one in the store (item 10)" {
+  ! grep -q '\.previous\.md' "$SKILL_MD" || false
+  grep -q "starts from the current state" "$SKILL_MD"
+  grep -q '`previous:`' "$SKILL_MD"
+}
