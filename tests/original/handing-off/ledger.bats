@@ -251,3 +251,15 @@ MD
   grep -q '"--ev","parked","--thread","probes"' "$APPENDS"
   ! grep -q '"example"' "$APPENDS" || false
 }
+
+@test "an item on a thread completed or dropped earlier gets its event (discovery of round two)" {
+  real_ledger
+  node "$LEDGER" append --ev completed --thread readme > /dev/null 2>&1
+  node "$LEDGER" append --ev dropped --thread probes --note "an earlier cycle" > /dev/null 2>&1
+  [ "$(thread_state readme)" = completed ]
+  [ "$(thread_state probes)" = dropped ]
+  run "$SKILL/ledger.sh" events "$TMP/draft.md"
+  [ "$status" -eq 0 ]
+  [ "$(thread_state readme)" = dropped ]
+  [ "$(thread_state probes)" = parked ]
+}

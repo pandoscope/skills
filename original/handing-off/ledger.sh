@@ -86,26 +86,7 @@ if [ -z "$identity" ]; then
 fi
 
 if [ "$command" = view ]; then
-    # The session id of a URL as the ledger derives it: sessionFromUrl
-    # in thread-ledger/core/schema.mjs, mirrored here.
-    # shellcheck disable=SC2016 # the script is JavaScript, not shell
-    node -e '
-        const fs = require("node:fs");
-        const url = process.argv[2];
-        const segments = url.replace(/^[a-zA-Z][\w+.-]*:\/\//, "").split(/[?#]/)[0]
-            .split("/").slice(1).filter(Boolean);
-        const session = (segments[segments.length - 1] || "").replace(/[^A-Za-z0-9._-]/g, "-");
-        let threads = [];
-        try { threads = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); } catch {}
-        if (!Array.isArray(threads)) threads = [];
-        for (const t of threads) {
-            const events = Array.isArray(t.events) ? t.events : [];
-            if (["completed", "dropped"].includes(t.state)) continue;
-            if (!events.some((e) => e && e.anchor && e.anchor.session === session)) continue;
-            const opened = events.find((e) => e && e.title) || {};
-            const ticket = opened.ticket ? ` (${opened.ticket})` : "";
-            console.log(`- ${t.thread}: ${t.state}${opened.title ? ` — ${opened.title}` : ""}${ticket}`);
-        }' "$state_file" "$identity"
+    node "$here/ledger-read.mjs" view "$state_file" "$identity"
     exit 0
 fi
 
@@ -157,16 +138,7 @@ fi
 
 # The state each thread is in now. A second pass of run 2 writes no
 # event the ledger already holds: dropped -> dropped is illegal.
-# shellcheck disable=SC2016 # the script is JavaScript, not shell
-states=$(node -e '
-    let text = "";
-    process.stdin.on("data", (chunk) => { text += chunk; });
-    process.stdin.on("end", () => {
-        let threads = [];
-        try { threads = JSON.parse(text); } catch { return; }
-        if (!Array.isArray(threads)) return;
-        for (const t of threads) if (t && t.thread) console.log(`${t.thread}\t${t.state}`);
-    });' < "$state_file" || true)
+states=$(node "$here/ledger-read.mjs" rows "$state_file" || true)
 
 count=0
 while IFS=$'\t' read -r event slug detail; do
@@ -175,23 +147,36 @@ while IFS=$'\t' read -r event slug detail; do
         echo "ledger: $slug stays open; a handoff completes no thread"
         continue
     fi
-    if printf '%s\n' "$states" | grep -qxF "$slug	$event"; then
+    if printf '%s\n' "$states" | awk -F'\t' -v slug="$slug" -v ev="$event" \
+           '$1 == slug && $2 == ev { found = 1 } END { exit !found }'; then
         continue
     fi
     # The ledger lets a parked or blocked thread go on only through
-    # unblocked (TRANSITIONS in thread-ledger/core/schema.mjs): a thread
-    # parked in an earlier cycle needs it before it is dropped or parked
-    # again (review of skills#274, round two, D8).
-    if printf '%s\n' "$states" | awk -F'\t' -v slug="$slug" \
-           '$1 == slug && ($2 == "parked" || $2 == "blocked") { found = 1 } END { exit !found }'; then
-        if ! out=$(node "$ledger" append --ev unblocked --thread "$slug" \
+    # unblocked, and a completed or dropped one only through reopened
+    # (TRANSITIONS in thread-ledger/core/schema.mjs): a thread from an
+    # earlier cycle needs that step before it is dropped or parked again
+    # (review of skills#274, round two, D8 and its discovery).
+    row=$(printf '%s\n' "$states" | awk -F'\t' -v slug="$slug" '$1 == slug { print; exit }')
+    IFS=$'\t' read -r _ held title ticket conversation <<< "$row" || true
+    bridge=""
+    set --
+    case "${held:-}" in
+        parked|blocked) bridge=unblocked ;;
+        completed|dropped)
+            bridge=reopened
+            set -- --title "$title"
+            if [ -n "$ticket" ]; then set -- "$@" --ticket "$ticket"
+            elif [ -n "$conversation" ]; then set -- "$@" --conversation-only; fi ;;
+    esac
+    if [ -n "$bridge" ]; then
+        if ! out=$(node "$ledger" append --ev "$bridge" --thread "$slug" "$@" \
                    --session-url "$identity" 2>&1); then
-            echo "ledger.sh: the ledger refused unblocked for thread $slug after" \
+            echo "ledger.sh: the ledger refused $bridge for thread $slug after" \
                  "$count events: $out" >&2
             exit 1
         fi
         count=$((count + 1))
-        echo "ledger: unblocked $slug"
+        echo "ledger: $bridge $slug"
     fi
     case "$event" in
         dropped) set -- --note "$detail" ;;
