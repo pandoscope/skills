@@ -200,3 +200,10 @@ persisted() {
     [ "$status" -eq 0 ]
   done
 }
+
+@test "check's residue asks for nothing run 2 does not do (point 14)" {
+  "$SKILL/mark.sh" "$TMP/handoff.md" > /dev/null
+  run "$SKILL/check.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"tickets and progress records"* ]]
+}
