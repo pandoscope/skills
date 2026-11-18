@@ -1,0 +1,26 @@
+{
+  "pr": "pandoscope/skills#286",
+  "head": "6c08bd061de010debabc2a89ba71ca41d42dd6e8",
+  "pass": "spec-fidelity",
+  "model_tier": "opus",
+  "findings": [
+    {
+      "file": "original/thread-ledger/preflight.mjs",
+      "line": 32,
+      "rule": "**Guard**: a store that still holds `config/shortcodes.json` or `repo-codes.json` beside the waybill's map fails every reader.",
+      "input": "`heartbeat.mjs --preflight --draft <file>` on a store holding `config/shortcodes.json` beside `../waybill/shortcodes.json`, in a run with no turn boundary (ctx.turnStart null)",
+      "finding_basis": "judged",
+      "confidence": 50,
+      "finding": "The preflight lint, which the body lists among the readers, catches the guard's LedgerError and treats the second map as no map, skipping the draft lint silently; the response check it relies on returns `unconfigured` at checks/response.mjs:34 before it reads the map, so this run exits 0 and never names the second map."
+    },
+    {
+      "file": "original/thread-ledger/store/shortcodes.mjs",
+      "line": 62,
+      "rule": "The response check returns a failed verdict naming the file, and render stops with the same error.",
+      "input": "a waybill checkout whose `shortcodes.json` is not valid JSON (or is a JSON array), with no store map beside it, then `ledger.mjs render --out x.html`",
+      "finding_basis": "judged",
+      "confidence": 25,
+      "finding": "Render now stops and the response check now fails on an unreadable or non-object waybill map, which no second map caused; the body scopes failing to the second-map guard, and before this change an unreadable map degraded the views to the GitHub defaults."
+    }
+  ]
+}
