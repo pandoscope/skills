@@ -103,6 +103,8 @@ describe("the response check and the shortcode map", () => {
     const verdict = checkResponseHygiene(ctx(session({ storeMaps: ["config/shortcodes.json"] })));
     assert.equal(verdict.verdict, "fail");
     assert.match(verdict.detail, /config\/shortcodes\.json/);
+    // The Stop hook blocks with `reason`; without one the session read `undefined`.
+    assert.match(String(verdict.reason), /config\/shortcodes\.json/);
   });
 
   it("is unconfigured without a waybill checkout, and says so", () => {

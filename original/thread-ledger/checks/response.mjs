@@ -39,7 +39,9 @@ export function checkResponseHygiene(ctx) {
     map = readShortcodeMap(ctx.root);
   } catch (error) {
     // A second map, or an unreadable one: the guard of pandoscope#61.
-    return { verdict: "fail", detail: String(/** @type {Error} */ (error).message) };
+    const message = String(/** @type {Error} */ (error).message);
+    // The Stop hook blocks the turn with `reason`, so the guard names the file there too.
+    return { verdict: "fail", detail: message, reason: message };
   }
   const shortcodes = map.config;
   if (!shortcodes) {
