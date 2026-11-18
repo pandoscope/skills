@@ -212,10 +212,10 @@ export function readCodes(root) {
 
 /**
  * The org's forge config, shared with the response-hygiene check:
- * the waybill's shortcode map (store/shortcodes.mjs), a flat
+ * the shortcode map `SHORTCODE_MAP` names (store/shortcodes.mjs), a flat
  * shortcode → repo map (GitHub assumed) or `{forge, patterns, repos}`.
- * Without a waybill checkout it is empty, which the views read as the
- * GitHub defaults, exactly like an absent map.
+ * With `SHORTCODE_MAP` unset it is empty, which the views read as the
+ * GitHub defaults.
  */
 export function readForge(root) {
   return readShortcodeMap(root).config ?? {};
