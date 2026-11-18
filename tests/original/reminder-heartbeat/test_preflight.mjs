@@ -58,6 +58,7 @@ function preflight(dir, draftText, extraArgs = []) {
         SESSION_MEMORY_ROOT: path.join(dir, "store"),
         WORKSPACE_ROOT: path.join(dir, "workspace"),
         HEARTBEAT_REPO_ROOT: path.join(dir, "repos"),
+        SHORTCODE_MAP: path.join(dir, "shortcode-map.json"),
       },
     },
   );
