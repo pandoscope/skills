@@ -1,0 +1,26 @@
+{
+  "pr": "pandoscope/skills#288",
+  "head": "a33c1f0d09352180fba2db21f5abdcbfd8fba021",
+  "pass": "spec-fidelity",
+  "model_tier": "sonnet",
+  "findings": [
+    {
+      "file": "original/thread-ledger/review-driver.mjs",
+      "line": 280,
+      "rule": "No word \"waybill\" stays in the skill's code.",
+      "input": "`grep -ri waybill original/thread-ledger` at the head commit still matches review-driver.mjs (line 280 builds the path `path.join(repoRoot, \"waybill\", \"orders\", ...)`; lines 2, 6 and 29 also name it) and review/policy.mjs (lines 54 and 527); the new test's OUTSIDE set exempts both files.",
+      "finding_basis": "decided",
+      "confidence": 75,
+      "finding": "The skill's code still contains the word \"waybill\" (a hard-coded `waybill/orders` path in the review driver), so the ticket's grep acceptance criterion is unmet; the pull request body discloses this and scopes it out, but the ticket text does not."
+    },
+    {
+      "file": "original/thread-ledger/SKILL.md",
+      "line": 302,
+      "rule": "It names the waybill once, as the file this org's setup points the variable at.",
+      "input": "`grep -n -i waybill original/thread-ledger/SKILL.md` at the head commit returns four lines: 302, 485, 488 and 490 (the last three are the unchanged review-driver section: \"The waybill is the repository of orders\", \"A waybill order with `role: reviewer`\", \"waybill/orders/<name>.yml\").",
+      "finding_basis": "judged",
+      "confidence": 35,
+      "finding": "SKILL.md names the waybill in four places, not once as the pull request body states and as the ticket allows (\"may name the waybill once\")."
+    }
+  ]
+}
