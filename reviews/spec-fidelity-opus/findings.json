@@ -1,0 +1,26 @@
+{
+  "pr": "pandoscope/skills#288",
+  "head": "a33c1f0d09352180fba2db21f5abdcbfd8fba021",
+  "pass": "spec-fidelity",
+  "model_tier": "opus",
+  "findings": [
+    {
+      "file": "original/thread-ledger/review-driver.mjs",
+      "line": 280,
+      "rule": "No word \"waybill\" stays in the skill's code.",
+      "input": "`grep -ri waybill original/thread-ledger` at the head commit matches review-driver.mjs lines 2, 6, 29, 63 and 280 (`path.join(repoRoot, \"waybill\", \"orders\", ...)`) and review/policy.mjs lines 54 and 527, outside SKILL.md",
+      "finding_basis": "decided",
+      "confidence": 90,
+      "finding": "The skill's code still names the waybill in review-driver.mjs and review/policy.mjs, so the ticket's acceptance criterion \"`grep -ri waybill original/thread-ledger` finds nothing outside `SKILL.md`\" fails; the PR body says this criterion is \"Not met\", and test_shortcodes.mjs:236 exempts both files from the check instead of enforcing the criterion."
+    },
+    {
+      "file": "original/thread-ledger/SKILL.md",
+      "line": 485,
+      "rule": "Its documentation may name the waybill once, as an example of who provides the file.",
+      "input": "`grep -ni waybill original/thread-ledger/SKILL.md` at the head commit matches lines 302, 485, 488 and 490",
+      "finding_basis": "judged",
+      "confidence": 50,
+      "finding": "SKILL.md names the waybill four times, three of them (lines 485, 488, 490) in the Review sessions section rather than as an example of who provides the shortcode map, which also contradicts the PR body's claim that SKILL.md \"names the waybill once, as the file this org's setup points the variable at\"."
+    }
+  ]
+}
