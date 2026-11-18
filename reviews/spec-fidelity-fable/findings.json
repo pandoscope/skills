@@ -1,0 +1,17 @@
+{
+  "pr": "pandoscope/skills#286",
+  "head": "7f636578654a802fdf535389f0de3f6ec1180baa",
+  "pass": "spec-fidelity",
+  "model_tier": "fable",
+  "findings": [
+    {
+      "file": "original/thread-ledger/store/shortcodes.mjs",
+      "line": 38,
+      "rule": "`SKILL.md` names the waybill's file as the source, gives no waybill checkout as the one condition for unconfigured, and says that an unreadable map fails.",
+      "input": "A session whose waybill checkout exists beside the store (or is named by `WAYBILL_ROOT`) but holds no `shortcodes.json`, while the store still holds `config/shortcodes.json`",
+      "finding_basis": "judged",
+      "confidence": 45,
+      "finding": "The reader tests only whether the file exists, so a present waybill checkout without its map also reports unconfigured, skips the second-map guard, and its note states that the session has no waybill checkout beside the store, which is false on this input."
+    }
+  ]
+}
