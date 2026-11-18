@@ -1,0 +1,26 @@
+{
+  "pr": "pandoscope/skills#288",
+  "head": "a33c1f0d09352180fba2db21f5abdcbfd8fba021",
+  "pass": "spec-fidelity",
+  "model_tier": "fable",
+  "findings": [
+    {
+      "file": "tests/original/thread-ledger/test_shortcodes.mjs",
+      "line": 236,
+      "rule": "No word \"waybill\" stays in the skill's code.",
+      "input": "`grep -ri waybill original/thread-ledger` at the head commit: it prints original/thread-ledger/review-driver.mjs lines 2, 6, 29, 63 and 280 (`path.join(repoRoot, \"waybill\", \"orders\", ...)`) and original/thread-ledger/review/policy.mjs lines 54 and 527.",
+      "finding_basis": "decided",
+      "confidence": 80,
+      "finding": "The skill's code still names the waybill in review-driver.mjs and review/policy.mjs, and the new test exempts those two files through its OUTSIDE set, so the acceptance criterion `grep -ri waybill original/thread-ledger` finds nothing outside `SKILL.md` is unmet, as the pull request body itself states."
+    },
+    {
+      "file": "original/thread-ledger/SKILL.md",
+      "line": 302,
+      "rule": "Its documentation may name the waybill once, as an example of who provides the file.",
+      "input": "`grep -in waybill original/thread-ledger/SKILL.md` at the head commit: it prints line 302 (the provider of the map) and lines 485, 488 and 490 in the section \"Review sessions\".",
+      "finding_basis": "judged",
+      "confidence": 40,
+      "finding": "SKILL.md names the waybill on four lines, not once: the change adds the one permitted mention at line 302 and leaves the three in \"Review sessions\", while the pull request body says of SKILL.md that it names the waybill once."
+    }
+  ]
+}
