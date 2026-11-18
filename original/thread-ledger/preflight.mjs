@@ -19,15 +19,7 @@ import { knownPrs, refViolations, stripCode } from "./core.mjs";
 import { runChecks } from "./checks/index.mjs";
 import { context, gitOrNull } from "./context.mjs";
 import { logCompliance } from "./compliance.mjs";
-
-/** The shortcode map the store carries, or null when it carries none. */
-function readShortcodes(root) {
-  try {
-    return JSON.parse(fs.readFileSync(path.join(root, "config", "shortcodes.json"), "utf8"));
-  } catch {
-    return null;
-  }
-}
+import { readShortcodeMap } from "./store/shortcodes.mjs";
 
 function escapeRe(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -116,7 +108,15 @@ function lintDraft(text, ctx, config, fix) {
 export function preflight(input, opts) {
   const ctx = context(input);
   ctx.preflight = true;
-  const config = readShortcodes(ctx.root);
+  let config;
+  try {
+    config = readShortcodeMap(ctx.root).config;
+  } catch (error) {
+    // A second or unreadable map (pandoscope/pandoscope#61): stop and name it,
+    // rather than lint and check the draft as if the session had no map.
+    process.stderr.write(`preflight: ${/** @type {Error} */ (error).message}\n`);
+    return 1;
+  }
   const findings = [];
   if (opts.draft) {
     let draftText = fs.readFileSync(opts.draft, "utf8");

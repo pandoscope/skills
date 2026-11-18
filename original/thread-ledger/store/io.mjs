@@ -11,6 +11,7 @@ import path from "node:path";
 import process from "node:process";
 
 import { LedgerError } from "../core.mjs";
+import { codesOf, readShortcodeMap } from "./shortcodes.mjs";
 
 const DEFAULT_ROOT = "/workspace/session-memory";
 
@@ -201,35 +202,23 @@ export function readAll(root) {
 
 
 /**
- * Repo short codes from the store, for ticket prefixes.
- *
- * Store-owned rather than tool-owned: the skill ships no org's repo
- * names. Missing file or missing entry both degrade to the repo's own
- * name, which reads as long rather than wrong.
+ * Repository → shortcode, the labels of the rendered ledger,
+ * from the org's one shortcode map (store/shortcodes.mjs).
  */
 export function readCodes(root) {
-  const file = path.join(root, "repo-codes.json");
-  if (!fs.existsSync(file)) return {};
-  const data = JSON.parse(fs.readFileSync(file, "utf8"));
-  return Object.fromEntries(Object.entries(data).filter(([key]) => !key.startsWith("_")));
+  return codesOf(readShortcodeMap(root).config);
 }
 
 
 /**
- * The store's forge config, shared with the response-hygiene check.
- *
- * `config/shortcodes.json`: a flat shortcode → repo map (GitHub
- * assumed) or `{forge, patterns, repos}` naming the org's own base and
- * URL patterns. Views take it as data — a missing or unreadable file
- * degrades to the GitHub defaults, exactly like an absent map.
+ * The org's forge config, shared with the response-hygiene check:
+ * the waybill's shortcode map (store/shortcodes.mjs), a flat
+ * shortcode → repo map (GitHub assumed) or `{forge, patterns, repos}`.
+ * Without a waybill checkout it is empty, which the views read as the
+ * GitHub defaults, exactly like an absent map.
  */
 export function readForge(root) {
-  const file = path.join(root, "config", "shortcodes.json");
-  try {
-    return JSON.parse(fs.readFileSync(file, "utf8"));
-  } catch {
-    return {};
-  }
+  return readShortcodeMap(root).config ?? {};
 }
 
 

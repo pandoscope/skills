@@ -137,9 +137,12 @@ function buildStore() {
     path.join(root, "ledger", "session_smoke.url"),
     "https://x.test/code/session_smoke\n",
   );
+  // The labels come from the org's one map, in a waybill checkout
+  // that WAYBILL_ROOT names (pandoscope/pandoscope#61).
+  fs.mkdirSync(path.join(root, "waybill"));
   fs.writeFileSync(
-    path.join(root, "repo-codes.json"),
-    JSON.stringify({ "o/r": "OR", "x/y": "XY" }),
+    path.join(root, "waybill", "shortcodes.json"),
+    JSON.stringify({ repos: { OR: "o/r", XY: "x/y" } }),
   );
   return root;
 }
@@ -240,7 +243,7 @@ function renderInstrumented(mutate) {
   execFileSync(
     process.execPath,
     [path.join(SKILL, "ledger.mjs"), "render", "--root", store, "--out", out],
-    { encoding: "utf8" },
+    { encoding: "utf8", env: { ...process.env, WAYBILL_ROOT: path.join(store, "waybill") } },
   );
   let html = fs.readFileSync(out, "utf8");
   if (mutate) html = mutate(html);

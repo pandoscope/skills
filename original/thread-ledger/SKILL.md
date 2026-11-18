@@ -296,20 +296,25 @@ without one.
 **Responses follow the reference style, and mistakes are corrected as
 an exercise.** In prose, tickets and PRs are linked shortcode refs —
 `XXX#n` for tickets, `XXX!n` for PRs, each a markdown link to the page
-its sigil implies — with the shortcodes defined once, in the store's
-`config/shortcodes.json`. That file is either a flat shortcode →
+its sigil implies — with the shortcodes defined once, in the waybill's
+`shortcodes.json` (pandoscope/pandoscope#61), read from the session's
+waybill checkout: `WAYBILL_ROOT`, else `waybill` beside the store.
+That file is either a flat shortcode →
 `owner/repo` map (GitHub assumed) or structured —
 `{forge, patterns: {ticket, pr}, repos}`, patterns interpolating
-`{base}`/`{repo}`/`{n}` — so the forge is org configuration in the
-store, and no vendor is named in code. A thread opened this turn is announced as
+`{base}`/`{repo}`/`{n}` — so the forge is org configuration,
+and no vendor is named in code.
+Without a waybill checkout the check reports unconfigured and says where it looked.
+A map in the store beside it (`config/shortcodes.json` or `repo-codes.json`) fails every reader.
+A waybill map that does not parse, or is not an object, fails the response check and render.
+A thread opened this turn is announced as
 `new thread: <slug>`, and every thread the turn summary declares is
 named in the prose that discusses it. Code spans are quoted material
 and exempt; a bare `owner/repo#n` belongs in PR bodies and ledger
 events, where the forge autolinks it, never in prose. When the check
 fires, it names the canonical forms and the rewrite must contain them
 **verbatim** — deleting the offending refs is not correcting them, and
-the re-fire grades exactly that. No map in the store means the check
-reports `unconfigured` and declines, like every other check.
+the re-fire grades exactly that.
 
 ### Preflight — the same checks as an in-turn linter
 
@@ -389,7 +394,7 @@ therefore lives in two report-only tools, and neither can write:
   whose ticket is closed, and a completed thread whose `--pr` never
   merged. Deliberately forge-specific: it is `gh`-bound by declaration
   and refuses without it, unlike the render path, which builds every
-  ticket link through the store's `config/shortcodes.json` forge
+  ticket link through the waybill's `shortcodes.json` forge
   config and names no vendor (skills#102).
 
 Deciding what event to append stays with the reader — a reconciler
