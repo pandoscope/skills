@@ -66,6 +66,22 @@ describe("the shortcode map", () => {
     });
   }
 
+  for (const [label, text] of [["does not parse", "{"], ["is not an object", "[]"]]) {
+    it(`fails when the waybill's map ${label}`, () => {
+      const root = session();
+      fs.writeFileSync(path.join(path.dirname(root), "waybill", "shortcodes.json"), text);
+      assert.throws(() => readShortcodeMap(root, {}), /shortcodes\.json/);
+      const verdict = checkResponseHygiene({
+        root,
+        turnStart: new Date(0),
+        assistantText: "x",
+        events: [],
+        session: "s",
+      });
+      assert.equal(verdict.verdict, "fail");
+    });
+  }
+
   it("gives the views their labels: repository to shortcode", () => {
     assert.deepEqual(codesOf({ repos: MAP.repos }), {
       "pandoscope/agentic-engineering-template": "AET",
