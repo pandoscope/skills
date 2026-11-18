@@ -113,3 +113,18 @@ describe("the response check and the shortcode map", () => {
     assert.match(verdict.detail, /waybill/);
   });
 });
+
+describe("SKILL.md on the shortcode map", () => {
+  const skill = fs
+    .readFileSync(new URL("../../../original/thread-ledger/SKILL.md", import.meta.url), "utf8")
+    .replace(/\s+/g, " ");
+
+  it("states one condition for unconfigured: no waybill checkout", () => {
+    assert.doesNotMatch(skill, /No map in the store means/);
+    assert.match(skill, /Without a waybill checkout the check reports unconfigured/);
+  });
+
+  it("says that an unreadable or non-object map fails the check and render", () => {
+    assert.match(skill, /A waybill map that does not parse, or is not an object, fails the response check and render/);
+  });
+});

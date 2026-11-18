@@ -305,15 +305,16 @@ That file is either a flat shortcode →
 `{base}`/`{repo}`/`{n}` — so the forge is org configuration,
 and no vendor is named in code.
 Without a waybill checkout the check reports unconfigured and says where it looked.
-A map in the store beside it (`config/shortcodes.json` or `repo-codes.json`) fails every reader. A thread opened this turn is announced as
+A map in the store beside it (`config/shortcodes.json` or `repo-codes.json`) fails every reader.
+A waybill map that does not parse, or is not an object, fails the response check and render.
+A thread opened this turn is announced as
 `new thread: <slug>`, and every thread the turn summary declares is
 named in the prose that discusses it. Code spans are quoted material
 and exempt; a bare `owner/repo#n` belongs in PR bodies and ledger
 events, where the forge autolinks it, never in prose. When the check
 fires, it names the canonical forms and the rewrite must contain them
 **verbatim** — deleting the offending refs is not correcting them, and
-the re-fire grades exactly that. No map in the store means the check
-reports `unconfigured` and declines, like every other check.
+the re-fire grades exactly that.
 
 ### Preflight — the same checks as an in-turn linter
 
