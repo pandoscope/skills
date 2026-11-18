@@ -1,0 +1,44 @@
+{
+  "pr": "pandoscope/skills#286",
+  "head": "6c08bd061de010debabc2a89ba71ca41d42dd6e8",
+  "pass": "spec-fidelity",
+  "model_tier": "sonnet",
+  "findings": [
+    {
+      "file": "original/thread-ledger/checks/response.mjs",
+      "line": 42,
+      "rule": "The response check returns a failed verdict naming the file, and render stops with the same error.",
+      "input": "The store holds `config/shortcodes.json` beside a waybill checkout with a `shortcodes.json`, and a turn ends under the Stop hook (`heartbeat.mjs run`). The guard's verdict is `{verdict: \"fail\", detail}` with no `reason`; heartbeat.mjs:180 and :193 write `failed.reason` to stderr when they block, so the session is blocked with the text `undefined` and the file is named only in `detail`, which that path does not print.",
+      "finding_basis": "judged",
+      "confidence": 60,
+      "finding": "The guard's failed verdict carries its message in `detail` only, while every other failing verdict of this check carries a `reason`, so on the Stop-hook path the failure the guard raises does not name the offending file to the session."
+    },
+    {
+      "file": "original/thread-ledger/SKILL.md",
+      "line": 315,
+      "rule": "`SKILL.md` names the waybill's file as the source.",
+      "input": "A session with a waybill checkout holding `shortcodes.json` and a store with no map: SKILL.md line 315 still says \"No map in the store means the check reports `unconfigured` and declines\", but the check now reads the waybill's map and examines the response; the same paragraph, at line 308, says a store map fails every reader.",
+      "finding_basis": "judged",
+      "confidence": 50,
+      "finding": "The paragraph that now names the waybill's file as the source keeps a sentence naming the store's map as the condition under which the check is unconfigured, which contradicts the new behaviour."
+    },
+    {
+      "file": "original/thread-ledger/store/shortcodes.mjs",
+      "line": 61,
+      "rule": "**Guard**: a store that still holds `config/shortcodes.json` or `repo-codes.json` beside the waybill's map fails every reader.",
+      "input": "A waybill checkout whose `shortcodes.json` holds truncated JSON (`{\"skills\":`) or a JSON array, and a store with no map of its own: `readShortcodeMap` throws, the response check returns a failed verdict instead of the previous `unconfigured`, and `ledger render` exits 1 instead of rendering with the GitHub defaults.",
+      "finding_basis": "judged",
+      "confidence": 35,
+      "finding": "Readers fail on an unreadable or non-object waybill map, which neither the ticket nor the pull request body asks for; the only failure they define is a second map, and the only degradation they define is the absent waybill checkout."
+    },
+    {
+      "file": "original/thread-ledger/preflight.mjs",
+      "line": 31,
+      "rule": "The guard: every reader fails when it finds a second map, and a test of the template shows that only the waybill's subtemplate seeds a shortcode file.",
+      "input": "A store holding `repo-codes.json` beside a waybill map, and `heartbeat.mjs --preflight --draft d.md --fix` over a draft containing a bare `skills#97`: `readShortcodes` catches the guard's error and returns null, so the draft lint runs as if there were no map and repairs nothing; only the separate response-check verdict in the same run fails.",
+      "finding_basis": "judged",
+      "confidence": 30,
+      "finding": "The preflight lint reader swallows the second-map error and carries on without a map instead of failing."
+    }
+  ]
+}
