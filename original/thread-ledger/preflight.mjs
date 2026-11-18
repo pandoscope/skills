@@ -21,19 +21,6 @@ import { context, gitOrNull } from "./context.mjs";
 import { logCompliance } from "./compliance.mjs";
 import { readShortcodeMap } from "./store/shortcodes.mjs";
 
-/**
- * The org's shortcode map, or null when the session has none.
- * A second or broken map also gives null here: the response check
- * in the same run reports it as a failure.
- */
-function readShortcodes(root) {
-  try {
-    return readShortcodeMap(root).config;
-  } catch {
-    return null;
-  }
-}
-
 function escapeRe(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -121,7 +108,15 @@ function lintDraft(text, ctx, config, fix) {
 export function preflight(input, opts) {
   const ctx = context(input);
   ctx.preflight = true;
-  const config = readShortcodes(ctx.root);
+  let config;
+  try {
+    config = readShortcodeMap(ctx.root).config;
+  } catch (error) {
+    // A second or unreadable map (pandoscope/pandoscope#61): stop and name it,
+    // rather than lint and check the draft as if the session had no map.
+    process.stderr.write(`preflight: ${/** @type {Error} */ (error).message}\n`);
+    return 1;
+  }
   const findings = [];
   if (opts.draft) {
     let draftText = fs.readFileSync(opts.draft, "utf8");

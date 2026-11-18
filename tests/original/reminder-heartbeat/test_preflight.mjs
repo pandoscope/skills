@@ -125,6 +125,23 @@ describe("preflight", () => {
     assert.doesNotMatch(fixed, /(?<!\[)skills#97(?!\])/);
   });
 
+  it("--fix beside a second shortcode map stops, names the file and leaves the draft", () => {
+    // pandoscope/pandoscope#61: the guard reaches preflight, which used to
+    // carry on without a map, repair nothing and name no file.
+    const dir = stage();
+    fs.mkdirSync(path.join(dir, "store", "config"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "store", "config", "shortcodes.json"), "{}");
+    const text = "Merged skills#97 and pushed the follow-up.\n";
+    const result = preflight(dir, text, ["--fix"]);
+    assert.equal(result.status, 1);
+    const said = result.stdout + result.stderr;
+    assert.match(said, /config\/shortcodes\.json/);
+    assert.match(said, /^preflight: /m);
+    // It stops at the map: no check runs on a session whose map is in doubt.
+    assert.doesNotMatch(said, /response-hygiene/);
+    assert.equal(fs.readFileSync(result.draft, "utf8"), text);
+  });
+
   it("--fix links a commit hash written as inline code", () => {
     const dir = stage();
     const full = spawnSync("git", ["-C", path.join(dir, "repos", "skills"), "rev-parse", "HEAD"], {
