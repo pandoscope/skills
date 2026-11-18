@@ -38,6 +38,7 @@ import { countUserMessages, findTranscript, resolveSession, storeUrl } from "./s
 import { append, pullForRender, push } from "./store/writes.mjs";
 import { mergedReport, reconcile } from "./store/reconcile.mjs";
 import { guardRange } from "./store/guard.mjs";
+import { readShortcodeMap } from "./store/shortcodes.mjs";
 import { renderPage } from "./store/pages.mjs";
 import { USAGE, declareText, eventFrom, parseArgs } from "./store/cli.mjs";
 
@@ -162,6 +163,8 @@ export function main(argv) {
   const folded = fold(events);
   const sessionUrl = storeUrl(root, opts["session-url"]);
   const nowMsg = countUserMessages(transcript);
+  const map = readShortcodeMap(root);
+  if (map.note) process.stderr.write(`${map.note}; tickets render under their repository names\n`);
   const codes = readCodes(root);
   const forge = readForge(root);
   const title = opts.title ?? "Thread ledger";

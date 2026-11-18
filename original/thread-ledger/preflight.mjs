@@ -19,11 +19,16 @@ import { knownPrs, refViolations, stripCode } from "./core.mjs";
 import { runChecks } from "./checks/index.mjs";
 import { context, gitOrNull } from "./context.mjs";
 import { logCompliance } from "./compliance.mjs";
+import { readShortcodeMap } from "./store/shortcodes.mjs";
 
-/** The shortcode map the store carries, or null when it carries none. */
+/**
+ * The org's shortcode map, or null when the session has none.
+ * A second or broken map also gives null here: the response check
+ * in the same run reports it as a failure.
+ */
 function readShortcodes(root) {
   try {
-    return JSON.parse(fs.readFileSync(path.join(root, "config", "shortcodes.json"), "utf8"));
+    return readShortcodeMap(root).config;
   } catch {
     return null;
   }

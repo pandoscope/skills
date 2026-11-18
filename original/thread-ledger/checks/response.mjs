@@ -11,6 +11,7 @@ import path from "node:path";
 import { OPENING, knownPrs, refViolations, stripCode } from "../core.mjs";
 import { observedThreads } from "../context.mjs";
 import { localFile } from "../paths.mjs";
+import { readShortcodeMap } from "../store/shortcodes.mjs";
 
 /**
  * Check 6 — the response follows the reference style, and a corrected
@@ -33,17 +34,17 @@ export function checkResponseHygiene(ctx) {
   if (!ctx.turnStart) {
     return { verdict: "unconfigured", detail: "no turn boundary to measure against" };
   }
-  const mapFile = path.join(ctx.root, "config", "shortcodes.json");
-  let shortcodes = null;
+  let map;
   try {
-    shortcodes = JSON.parse(fs.readFileSync(mapFile, "utf8"));
-  } catch {
-    // Absent and unreadable land together: either way no map was
-    // consulted, and "never looked" must not read as "clean".
-    return {
-      verdict: "unconfigured",
-      detail: `no shortcode map at ${mapFile} — the response was not examined`,
-    };
+    map = readShortcodeMap(ctx.root);
+  } catch (error) {
+    // A second map, or an unreadable one: the guard of pandoscope#61.
+    return { verdict: "fail", detail: String(/** @type {Error} */ (error).message) };
+  }
+  const shortcodes = map.config;
+  if (!shortcodes) {
+    // No map was consulted, and "never looked" must not read as "clean".
+    return { verdict: "unconfigured", detail: `${map.note} — the response was not examined` };
   }
   const response = ctx.assistantText ?? "";
   if (!response.trim()) {
