@@ -154,6 +154,36 @@ export function buildViewModel(session: GrillingSession): SessionViewModel {
 }
 
 /**
+ * Serialize the answer state for pasting into chat / decision memory.
+ *
+ * The free-text box keeps its text while another slot is chosen, so a
+ * switch back restores it; only the free-text slot exports it
+ * (skills#238).
+ *
+ * @param session - The session the answers belong to.
+ * @param answers - Answer state per question seq.
+ * @returns Pretty-printed JSON keyed by question id, e.g.
+ *   {"session": 1, "answers": {"S1Q1": {"answer": "A3", ...}}}.
+ */
+export function exportAnswers(session: GrillingSession, answers: Map<number, AnswerState>): string {
+  const out: Record<string, unknown> = {};
+  for (const q of session.questions) {
+    const state = answers.get(q.seq);
+    if (!state || (state.chosen === undefined && !state.skipped)) continue;
+    const freeTextSlot = q.options.length + 1;
+    out[`S${session.session}Q${q.seq}`] = {
+      ...(state.chosen !== undefined && { answer: `A${state.chosen}` }),
+      ...(state.chosen === freeTextSlot && state.freeText && { freeText: state.freeText }),
+      ...(state.rejectionReasons?.length && { rejectionReasons: state.rejectionReasons }),
+      ...(state.correction && { correction: state.correction }),
+      ...(state.disconfirmedPreferences?.length && { disconfirmedPreferences: state.disconfirmedPreferences }),
+      ...(state.skipped && { skipped: true }),
+    };
+  }
+  return JSON.stringify({ session: session.session, answers: out }, null, 2);
+}
+
+/**
  * Build the display form of one question.
  *
  * @param q - The question.
