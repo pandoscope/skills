@@ -1,0 +1,26 @@
+{
+  "pr": "pandoscope/skills#288",
+  "head": "a33c1f0d09352180fba2db21f5abdcbfd8fba021",
+  "pass": "spec-fidelity",
+  "model_tier": "mythos",
+  "findings": [
+    {
+      "file": "original/thread-ledger/review-driver.mjs",
+      "line": 280,
+      "rule": "No word \"waybill\" stays in the skill's code.",
+      "input": "`grep -ri waybill original/thread-ledger` at the head commit",
+      "finding_basis": "decided",
+      "confidence": 70,
+      "finding": "The grep still matches review-driver.mjs (lines 2, 6, 29, 63, 280) and review/policy.mjs (lines 54, 527), so the word stays in the skill's code and the acceptance criterion is unmet, as the pull request body itself declares, while the body still says CLOSES #287."
+    },
+    {
+      "file": "original/thread-ledger/store/shortcodes.mjs",
+      "line": 38,
+      "rule": "With the variable set and the file missing, unreadable or not an object, the readers fail and name the file, as they do today for a broken waybill map (decision 113).",
+      "input": "`SHORTCODE_MAP=\"\"` (the variable set to the empty string, as a setup script exports when its path expansion comes up empty), with or without `repo-codes.json` in the store",
+      "finding_basis": "judged",
+      "confidence": 30,
+      "finding": "A variable that is set but empty is treated as unset: the readers return the unconfigured note and skip the second-map guard instead of failing on a configured path that names no readable file."
+    }
+  ]
+}
