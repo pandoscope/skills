@@ -21,6 +21,7 @@ These rules hold for every surface except chat: files, comments, commit messages
 - `non-requirement` [H] State no non-requirement unless saying it simplifies the solution.
 - `reader-scope` [M] Cut text the reader decides nothing with: rationale they cannot use and rejected alternatives.
 - `pitch` [H] Cut pitch and value words.
+- `named-criterion` [H] Name the criterion a thing fails, never "off the schema" or "off the pattern".
 - `store-id` [F] Name no private record id in public text, and state the reason in plain words instead.
 - `shared-contract` [M] State a contract several things share once, then give each instance only its deltas.
 

@@ -117,6 +117,8 @@ function candidates(    t, tok, lab, plain, rest, n, i, parts, comma) {
             h("drifting-ref", "link the target instead of restating its count or position")
         else if (low ~ /(^|[^a-z0-9])(two|three|four|five|six|seven|eight|nine|ten|eleven|twelve) [a-z-]+[^.:]*:( |$)/)
             h("drifting-ref", "drop the count: the list after it states the count")
+        if (low ~ /(^|[^a-z])off(-| (the|its|their|a|an) )(schema|pattern|spec|specification|contract|format|grammar|convention|template|standard|allowlist)s?([^a-z]|$)/)
+            h("named-criterion", "name the criterion the thing fails")
     }
     if (on(MD)) {
         if (low ~ /(^|[^a-z])lines? [0-9]|(^|[^a-z])l[0-9]+([^0-9]|$)|[a-z0-9_]\.(md|py|sh|mjs|js|ts|awk|ya?ml|json):[0-9]/)
