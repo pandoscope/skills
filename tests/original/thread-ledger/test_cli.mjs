@@ -64,6 +64,23 @@ describe("ArgumentGrammar", () => {
     throws(() => parseArgs(["render", "--out"]), "needs a value");
   });
 
+  it("joins a repeated list flag into one list", () => {
+    // `--tickets a --tickets b` kept only b, so a turn declared one
+    // ticket where the caller named two (skills#207).
+    const [, opts] = parseArgs([
+      "declare", "--tickets", "o/r#1", "--tickets", "o/r#2,o/r#3",
+    ]);
+    assert.equal(opts.tickets, "o/r#1,o/r#2,o/r#3");
+    assert.match(declareText({ ...opts, reviews: "none" }), /tickets: o\/r#1, o\/r#2, o\/r#3/);
+  });
+
+  it("refuses a repeated single-value flag and names it", () => {
+    throws(
+      () => parseArgs(["append", "--thread", "a", "--thread", "b"]),
+      "--thread given twice",
+    );
+  });
+
   it("collects the append flags a real call uses", () => {
     const [cmd, opts] = parseArgs([
       "append", "--ev", "progress", "--thread", "a", "--pct", "40",

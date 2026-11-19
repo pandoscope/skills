@@ -125,6 +125,11 @@ here with the correction in the error instead of as a Stop-hook block:
 node ledger.mjs declare --reviews none --tickets my-org/skills#56
 ```
 
+`--tickets` takes a comma-separated list, and a repeated `--tickets` adds to it:
+`--tickets a#1 --tickets b#2` equals `--tickets a#1,b#2`.
+`--rulings` works the same way.
+Any other flag given twice is an error.
+
 `--rulings slug-a` adds a rulings declaration; each
 `--no-update "<target> <reason>"` adds a per-ticket waiver (a target
 without a reason is refused). The verb needs no store or identity — it
