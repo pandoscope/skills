@@ -190,6 +190,24 @@ describe("driver publishes", () => {
     const after = tip(s.origins.waybill, s.ref);
     assert.equal(sh(s.waybill, "git", "diff", "--name-status", `${after}~1`, after), `A\tresults/${ORDER_ID}.json`);
   });
+  it("lands one result commit when the result file changes between a refused push and the retry", () => {
+    const s = stage();
+    const before = tip(s.origins.waybill, s.ref);
+    const hook = path.join(s.origins.waybill, "hooks", "pre-receive");
+    fs.writeFileSync(hook, "#!/bin/sh\necho refused by the kata >&2\nexit 1\n", { mode: 0o755 });
+    writeResult(s, resultFor(s));
+    assert.equal(fire(s, { hook_event_name: "Stop" }).code, 2);
+    fs.rmSync(hook);
+    const finding = { file: "src/x.py", line: 3, rule: "The parser accepts owner/repo!n references.", input: "owner/repo!7", finding_basis: "decided", confidence: 80, finding: "Bang references raise." };
+    writeResult(s, { ...resultFor(s), findings: [finding] });
+    const retry = fire(s, { hook_event_name: "Stop", stop_hook_active: true });
+    assert.equal(retry.code, 0, retry.err);
+    const after = tip(s.origins.waybill, s.ref);
+    sh(s.waybill, "git", "fetch", "-q", "origin");
+    assert.equal(sh(s.waybill, "git", "rev-list", "--count", `${before}..${after}`), "1");
+    assert.equal(sh(s.waybill, "git", "diff", "--name-status", before, after), `A\tresults/${ORDER_ID}.json`);
+    assert.deepEqual(JSON.parse(sh(s.waybill, "git", "show", `${after}:results/${ORDER_ID}.json`)).findings, [finding]);
+  });
   it("denies the reviewer every git write", () => {
     for (const cmd of [
       "git switch -c claude/review-spec-fidelity-sonnet-pr143",

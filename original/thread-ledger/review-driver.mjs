@@ -204,7 +204,9 @@ export function stopVerdict(run, ctx) {
 /**
  * Commits the result file alone in the clone of the waybill and pushes it on the order's branch.
  * The driver publishes, not the reviewer (skills#224): the policy denies the session every git write.
- * Commits only when the file differs from HEAD, so a retried Stop adds no second commit.
+ * Commits only when the file differs from HEAD.
+ * A change after a push that did not land amends the result commit that push carried,
+ * so the order's branch receives one commit whatever happens between the Stops.
  * @param {ReviewRun} run
  * @returns {Failure | null} null once origin's order branch is the clone's HEAD;
  *   `result-committed` when git cannot stage or commit the file,
@@ -224,9 +226,19 @@ function publish(run) {
       reason: `The review is not complete: the driver could not read the state of ${rel} in ${where}: ${status.err}. Stop again to retry.`,
     };
   }
+  const ref = `refs/heads/${run.orderBranch}`;
+  const remoteTip = () => git(run.waybill, "ls-remote", "origin", ref);
   if (status.out.length) {
+    const subject = `result: ${run.orderId}`;
+    // A tip git cannot read is no proof the commit is unpushed: amend only on a tip read.
+    const tip = remoteTip();
+    const unpushed =
+      tip.ok &&
+      git(run.waybill, "log", "-1", "--format=%s").out === subject &&
+      git(run.waybill, "rev-parse", "HEAD").out !== tip.out.split(/\s+/)[0];
+    const amend = unpushed ? ["--amend"] : [];
     const add = git(run.waybill, "add", "--", rel);
-    const commit = add.ok ? git(run.waybill, "commit", "-q", "--no-verify", "-m", `result: ${run.orderId}`, "--", rel) : add;
+    const commit = add.ok ? git(run.waybill, "commit", "-q", "--no-verify", ...amend, "-m", subject, "--", rel) : add;
     if (!commit.ok) {
       return {
         check: "result-committed",
@@ -236,8 +248,7 @@ function publish(run) {
     }
   }
   const head = git(run.waybill, "rev-parse", "HEAD").out;
-  const ref = `refs/heads/${run.orderBranch}`;
-  const landed = () => git(run.waybill, "ls-remote", "origin", ref).out.split(/\s+/)[0] === head;
+  const landed = () => remoteTip().out.split(/\s+/)[0] === head;
   if (landed()) return null;
   const push = git(run.waybill, "push", "-q", "origin", `HEAD:${ref}`);
   if (push.ok && landed()) return null;
