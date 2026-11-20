@@ -58,6 +58,13 @@ describe("bash policy", () => {
     deny("mkdir -p reviews/spec-fidelity-sonnet", "mkdir", "not a read command");
     deny("touch notes.txt", "touch");
   });
+  // #292: a review writes the result file, and no findings file is left to name.
+  it("denies sed -i naming the result file, not a findings file", () => {
+    const v = bashVerdict("sed -i 's/a/b/' src/x.py", RUN);
+    if (v.allow) assert.fail("sed -i should be denied");
+    assert.doesNotMatch(v.why, /findings file/);
+    assert.ok(v.why.includes(RESULT), v.why);
+  });
   it("reads a quoted sed or awk script before allowing it", () => {
     allow("sed -n '10,20p' src/x.py");
     allow("sed -n -e 1p -e '$p' src/x.py");

@@ -1,5 +1,5 @@
 // The review-session policy — what a review session may call,
-// and what its findings file must look like.
+// and what its result file must look like.
 //
 // Pure functions over the hook's inputs,
 // so the katas can assert on verdicts without staging a session.
@@ -247,7 +247,7 @@ export function bashVerdict(command, run) {
       );
     }
     if (cmd === "sed" && args.some((a) => /^-i/.test(a) || a === "--in-place")) {
-      return deny("`sed -i` edits in place. Read with sed; write only the findings file.");
+      return deny(`\`sed -i\` edits in place. Read with sed; write only the result file ${run.result}.`);
     }
     if (cmd === "sed") {
       const why = sedWhy(script);
