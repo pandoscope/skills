@@ -190,8 +190,9 @@ describe("tool policy", () => {
   });
 });
 
-describe("findings contract", () => {
+describe("result contract", () => {
   const good = {
+    order_id: ORDER_ID,
     pr: "pandoscope/meta#143",
     head: "22056ce0",
     pass: "spec-fidelity",
@@ -210,6 +211,17 @@ describe("findings contract", () => {
     assert.match(p.join("\n"), /`findings\[0\]\.rule` is missing: the sentence the finding violates/);
     assert.match(p.join("\n"), /`findings\[0\]\.finding_basis` is missing/);
     assert.match(findingsProblems([], RUN)[0], /`the file` must be/);
+  });
+  // #292: the result names the order it answers.
+  it("requires the order's id", () => {
+    const { order_id: _, ...without } = good;
+    assert.match(findingsProblems(without, RUN).join("\n"), /`order_id` is missing/);
+    const foreign = findingsProblems({ ...good, order_id: "review-spec-fidelity-sonnet-meta143-2" }, RUN);
+    assert.ok(foreign.includes(`\`order_id\` must be \`${ORDER_ID}\``), foreign.join("\n"));
+  });
+  // #292: #278 adds the session id, the setup report and the end state to the same object.
+  it("accepts a top-level field the contract does not name yet", () => {
+    assert.deepEqual(findingsProblems({ ...good, session_id: "s", state: "incomplete" }, RUN), []);
   });
 });
 
@@ -352,12 +364,12 @@ describe("staged session", () => {
 
     const dir = path.join(s.clone, "reviews", "spec-fidelity-sonnet");
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, "findings.json"), JSON.stringify({ pr: "pandoscope/meta#143", head: "22056ce0", pass: "spec-fidelity", model_tier: "sonnet", findings: "no" }));
+    fs.writeFileSync(path.join(dir, "findings.json"), JSON.stringify({ order_id: ORDER_ID, pr: "pandoscope/meta#143", head: "22056ce0", pass: "spec-fidelity", model_tier: "sonnet", findings: "no" }));
     stop = fire(s, { hook_event_name: "Stop" });
     assert.equal(stop.code, 2);
     assert.match(stop.err, /`findings` must be an array/);
 
-    fs.writeFileSync(path.join(dir, "findings.json"), JSON.stringify({ pr: "pandoscope/meta#143", head: "22056ce0", pass: "spec-fidelity", model_tier: "sonnet", findings: [] }));
+    fs.writeFileSync(path.join(dir, "findings.json"), JSON.stringify({ order_id: ORDER_ID, pr: "pandoscope/meta#143", head: "22056ce0", pass: "spec-fidelity", model_tier: "sonnet", findings: [] }));
     stop = fire(s, { hook_event_name: "Stop" });
     assert.equal(stop.code, 0, stop.err);
     assert.match(stop.err, /Review complete/);
@@ -427,7 +439,7 @@ describe("model tier", () => {
   });
   it("is the findings file's model_tier", () => {
     const run = /** @type {NonNullable<ReturnType<typeof orderRun>>} */ (orderRun(order, ORDER_FILE));
-    const doc = { pr: "pandoscope/meta#1", head: "22056ce0", pass: "spec-fidelity", model_tier: "opus", findings: [] };
+    const doc = { order_id: ORDER_ID, pr: "pandoscope/meta#1", head: "22056ce0", pass: "spec-fidelity", model_tier: "opus", findings: [] };
     assert.deepEqual(findingsProblems(doc, run), []);
     assert.match(findingsProblems({ ...doc, model_tier: "sonnet" }, run).join("\n"), /`model_tier` must be `opus`/);
   });
@@ -438,6 +450,7 @@ describe("model tier", () => {
 describe("findings schema", () => {
   const file = path.join(HERE, "../../../original/thread-ledger/review/findings.schema.json");
   const good = {
+    order_id: ORDER_ID,
     pr: "pandoscope/meta#143",
     head: "22056ce0",
     pass: "spec-fidelity",
@@ -466,7 +479,7 @@ describe("driver publishes", () => {
     sh(s.clone, "git", "switch", "-q", "-c", "claude/review-spec-fidelity-sonnet-pr143");
     const dir = path.join(s.clone, "reviews", "spec-fidelity-sonnet");
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, "findings.json"), JSON.stringify({ pr: "pandoscope/meta#143", head: "22056ce0", pass: "spec-fidelity", model_tier: "sonnet", findings: [] }));
+    fs.writeFileSync(path.join(dir, "findings.json"), JSON.stringify({ order_id: ORDER_ID, pr: "pandoscope/meta#143", head: "22056ce0", pass: "spec-fidelity", model_tier: "sonnet", findings: [] }));
     const stop = fire(s, { hook_event_name: "Stop" });
     assert.equal(stop.code, 0, stop.err);
     assert.match(stop.err, /Review complete/);
