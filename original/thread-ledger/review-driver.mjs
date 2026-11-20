@@ -279,7 +279,7 @@ function session(input) {
     repoRoot && orderRef.startsWith("order/")
       ? path.join(repoRoot, "waybill", "orders", `${orderRef.slice("order/".length)}.yml`)
       : null;
-  const order = orderFile && fs.existsSync(orderFile) ? orderRun(fs.readFileSync(orderFile, "utf8")) : null;
+  const order = orderFile && fs.existsSync(orderFile) ? orderRun(fs.readFileSync(orderFile, "utf8"), orderFile) : null;
   return { text, repoRoot, orderFile, review: order };
 }
 

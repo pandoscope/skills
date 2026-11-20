@@ -13,6 +13,7 @@
 // so what is allowed is enumerated and everything else is refused with the rule.
 
 import fs from "node:fs";
+import path from "node:path";
 
 import { schemaProblems } from "./schema.mjs";
 
@@ -20,14 +21,12 @@ import { schemaProblems } from "./schema.mjs";
  * @typedef {object} ReviewRun
  * @property {string} pass       the review pass, e.g. spec-fidelity
  * @property {string} modelTier  the model tier the routine runs
- * @property {string} dir        the review directory, relative to the clone
- * @property {string} findings   the findings file, relative to the clone
- * @property {RegExp} branch     the review branch, capturing the PR number
- * @property {string} branchForm the branch as the reason spells it
- * @property {string} orderId    the order's id, the name of its file
+ * @property {string} dir         the review directory, relative to the clone
+ * @property {string} findings    the findings file, relative to the clone
+ * @property {string} orderId     the order's id, the name of its file
  * @property {string} orderBranch the order's branch in the waybill, order/<id>
- * @property {string} waybill    the clone of the waybill
- * @property {string} result     the result file, the one file the session writes
+ * @property {string} waybill     the clone of the waybill
+ * @property {string} result      the result file, the one file the session writes
  */
 /** @typedef {{ allow: true } | { allow: false, why: string }} Verdict */
 
@@ -39,22 +38,24 @@ const NAME = /^[a-z0-9-]+$/;
 /**
  * @param {string} pass
  * @param {string} modelTier
+ * @param {string} orderFile the order file's path, <waybill>/orders/<id>.yml
  * @returns {ReviewRun}
  */
-function runFor(pass, modelTier) {
+function runFor(pass, modelTier, orderFile) {
+  const file = path.resolve(orderFile);
+  const orderId = path.basename(file, ".yml");
+  const waybill = path.dirname(path.dirname(file));
   return {
     pass,
     modelTier,
-    // Relative to the clone of the reviewed repository — the only directory the session may write,
-    // and the one the collector reads.
     dir: `reviews/${pass}-${modelTier}`,
     findings: `reviews/${pass}-${modelTier}/findings.json`,
-    branch: new RegExp(`^claude/review-${pass}-${modelTier}-pr(\\d+)$`),
-    branchForm: `claude/review-${pass}-${modelTier}-pr<n>`,
-    orderId: "",
-    orderBranch: "",
-    waybill: "",
-    result: "",
+    orderId,
+    orderBranch: `order/${orderId}`,
+    waybill,
+    // DECISION:SCOPE — the result lies at results/<id>.json beside orders/<id>.yml.
+    // That path is the orchestrator's reading in #292, not ruled; pandoscope#54 leaves it open.
+    result: path.join(waybill, "results", `${orderId}.json`),
   };
 }
 
@@ -62,7 +63,8 @@ function runFor(pass, modelTier) {
  * The review run a waybill order declares, or null:
  * the order names `role: reviewer` with its `pass` and `model_tier`.
  * @param {string} orderText the order file, YAML
- * @param {string} [orderFile] the order file's path, <waybill>/orders/<id>.yml
+ * @param {string} orderFile the order file's path, <waybill>/orders/<id>.yml;
+ *   its name is the order's id
  * @returns {ReviewRun | null}
  */
 export function orderRun(orderText, orderFile) {
@@ -74,7 +76,7 @@ export function orderRun(orderText, orderFile) {
   const pass = field("pass");
   const modelTier = field("model_tier");
   if (field("role") !== "reviewer" || !NAME.test(pass) || !NAME.test(modelTier)) return null;
-  return runFor(pass, modelTier);
+  return runFor(pass, modelTier, orderFile);
 }
 
 // ------------------------------------------------------------- tools
@@ -137,12 +139,12 @@ export function toolVerdict(name, input, run) {
   if (ALLOWED_TOOLS.has(name) || FORGE_READ.test(name)) return { allow: true };
   if (EDITORS.has(name)) {
     const file = input?.file_path ?? input?.notebook_path ?? "";
-    if (file.endsWith(`/${run.findings}`) || file === run.findings) return { allow: true };
+    if (file && path.resolve(file) === run.result) return { allow: true };
     return {
       allow: false,
       why:
         `${name} on ${file || "(no path)"} is not allowed in a review session. ` +
-        `The only file a review writes is ${run.findings} in the clone of the reviewed repository.`,
+        `The only file a review writes is ${run.result}, the result file in the clone of the waybill.`,
     };
   }
   if (name === "Bash") return bashVerdict(input?.command ?? "", run);
@@ -151,12 +153,13 @@ export function toolVerdict(name, input, run) {
       allow: false,
       why:
         `${name} writes to the forge. A review session posts nothing: no comments, no reviews, ` +
-        `no issues, no pull requests. Findings go to ${run.findings}; the driver pushes them on ${run.branchForm}.`,
+        `no issues, no pull requests. Findings go to the result file ${run.result}; ` +
+        `the driver pushes it on ${run.orderBranch} of the waybill.`,
     };
   }
   return {
     allow: false,
-    why: `${name} is not on the review session's tool list. Read the code with Read, Grep, Glob and read-only Bash; write only ${run.findings}.`,
+    why: `${name} is not on the review session's tool list. Read the code with Read, Grep, Glob and read-only Bash; write only ${run.result}.`,
   };
 }
 
@@ -288,7 +291,7 @@ function gitWhy(args, run) {
   if (GIT_READ.has(sub)) {
     const write = GIT_WRITE_FLAGS[sub];
     if (write && rest.some((x) => write.test(x))) {
-      return `\`git ${sub} ${rest.join(" ")}\` writes. Read subcommands only; the driver commits and pushes the findings.`;
+      return `\`git ${sub} ${rest.join(" ")}\` writes. Read subcommands only; the driver commits and pushes the result file.`;
     }
     if (sub === "fetch" && rest.some((x) => /^--(force|refmap)$|^-f$|^\+/.test(x))) {
       return "`git fetch` with --force or a + refspec overwrites refs. Fetch plainly.";
@@ -307,11 +310,11 @@ function gitWhy(args, run) {
   }
   if (["switch", "checkout", "add", "commit", "push"].includes(sub)) {
     return (
-      `\`git ${sub}\` writes. The driver commits and pushes ${run.dir}/ on ${run.branchForm} at Stop; ` +
-      `write ${run.findings} and stop.`
+      `\`git ${sub}\` writes. The driver commits and pushes ${run.result} on ${run.orderBranch} at Stop; ` +
+      "write the result file and stop."
     );
   }
-  return `\`git ${sub}\` is not a read subcommand. Allowed: ${[...GIT_READ].slice(0, 8).join(", ")}, …; the driver commits and pushes the findings.`;
+  return `\`git ${sub}\` is not a read subcommand. Allowed: ${[...GIT_READ].slice(0, 8).join(", ")}, …; the driver commits and pushes the result file.`;
 }
 
 // ----------------------------------------------------------- parsing
