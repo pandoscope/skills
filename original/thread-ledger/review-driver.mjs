@@ -22,7 +22,13 @@
 // Policy: `review/policy.mjs`.
 //
 // The driver's denials and a trace of the session's calls and usage are the measurement this exists for.
-// The driver writes them beside the findings, on the review branch.
+// They stay in the session, under the config directory:
+// the waybill takes no session transcript, so neither is pushed (skills#292).
+//
+// The session's one output is the result file results/<id>.json in the clone of the waybill,
+// beside the order file orders/<id>.yml.
+// At Stop the driver commits that one file and pushes it on the order's branch order/<id>.
+// It creates no branch and no commit in the reviewed repository (skills#292).
 //
 //     HEARTBEAT_REPO_ROOT   directory holding the session's clones
 //     CCR_TRIGGER_HEAD_REF  the order branch, order/<name>; its order
@@ -38,7 +44,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-import { findingsProblems, orderRun, orderTickets, prNumber, ticketsRead, toolVerdict } from "./review/policy.mjs";
+import { findingsProblems, orderRun, orderTickets, ticketsRead, toolVerdict } from "./review/policy.mjs";
 
 const MAX_BLOCKS = 3;
 
@@ -55,9 +61,9 @@ const MAX_BLOCKS = 3;
  */
 /**
  * @typedef {object} Ctx
- * @property {string | null} repoRoot   directory holding the session's clones
  * @property {string} transcriptText
  * @property {string} logFile           the driver's own observations
+ * @property {string} traceFile         the session's calls and usage
  * @property {string} stateFile         the loop guard's memory
  * @property {string} session
  * @property {string | null} orderFile  the waybill order, when one fired the session
@@ -70,10 +76,16 @@ function localFile(name) {
   return path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude"), name);
 }
 
-/** @param {string} repo @param {...string} args @returns {string | null} */
+/**
+ * Runs git in `repo`.
+ * @param {string} repo @param {...string} args
+ * @returns {{ ok: boolean, out: string, err: string }} the exit, stdout trimmed, and stderr trimmed
+ *   (or the spawn error's message when git could not start)
+ */
 function git(repo, ...args) {
   const r = spawnSync("git", ["-C", repo, ...args], { encoding: "utf8" });
-  return r.status === 0 ? r.stdout.trim() : null;
+  const err = (r.stderr ?? "").trim() || (r.error ? r.error.message : "");
+  return { ok: r.status === 0, out: (r.stdout ?? "").trim(), err };
 }
 
 /** @param {string} file @param {Record<string, unknown>} record */
@@ -125,18 +137,10 @@ export function traceOf(text) {
 
 // --------------------------------------------------------------- stop
 
-/** @param {string | null} root @returns {string[]} */
-function clonesUnder(root) {
-  if (!root || !fs.existsSync(root)) return [];
-  return fs
-    .readdirSync(root, { withFileTypes: true })
-    .filter((e) => e.isDirectory() && fs.existsSync(path.join(root, e.name, ".git")))
-    .map((e) => path.join(root, e.name));
-}
-
 /**
  * The first unmet completion criterion, or null when the review is complete.
  * Each failure carries the check name, the evidence, and the reason with its command.
+ * Once the result validates, the driver writes the trace into the session and publishes the result.
  * @param {ReviewRun} run
  * @param {Ctx} ctx
  * @returns {Failure | null}
@@ -157,28 +161,25 @@ export function stopVerdict(run, ctx) {
       };
     }
   }
-  const clones = clonesUnder(ctx.repoRoot);
-  const clone = clones.find((c) => fs.existsSync(path.join(c, run.findings)));
-  const where = ctx.repoRoot ? ` under ${ctx.repoRoot}` : "";
-  if (!clone) {
+  const file = run.result;
+  if (!fs.existsSync(file)) {
     return {
-      check: "findings-written",
-      detail: `no ${run.findings} in ${clones.length} clone(s)${where}`,
+      check: "result-written",
+      detail: `no ${file}`,
       reason:
-        `The review is not complete until ${run.findings} exists in the clone of the reviewed ` +
-        `repository${where}: a JSON object with pr (owner/repo#n), head (the reviewed commit sha), ` +
+        `The review is not complete until the result file ${file} exists in the clone of the waybill: ` +
+        `a JSON object with order_id ("${run.orderId}"), pr (owner/repo#n), head (the reviewed commit sha), ` +
         `pass ("${run.pass}"), model_tier ("${run.modelTier}") and findings (an array, empty when nothing was found). ` +
         "Write it with the Write tool.",
     };
   }
-  const file = path.join(clone, run.findings);
   let doc;
   try {
     doc = JSON.parse(fs.readFileSync(file, "utf8"));
   } catch (err) {
     const why = err instanceof Error ? err.message : String(err);
     return {
-      check: "findings-valid",
+      check: "result-valid",
       detail: `${file}: ${why}`,
       reason: `The review is not complete until ${file} parses as JSON: ${why}. Rewrite it with the Write tool.`,
     };
@@ -186,7 +187,7 @@ export function stopVerdict(run, ctx) {
   const problems = findingsProblems(doc, run);
   if (problems.length) {
     return {
-      check: "findings-valid",
+      check: "result-valid",
       detail: `${file}: ${problems.join("; ")}`,
       reason: [
         `The review is not complete until ${file} follows the contract:`,
@@ -195,61 +196,70 @@ export function stopVerdict(run, ctx) {
       ].join("\n"),
     };
   }
-  const n = prNumber(doc);
-  const branch = `claude/review-${run.pass}-${run.modelTier}-pr${n}`;
-  // The driver's observations ride the same branch.
-  // Written once, when the findings first validate:
-  // rewriting after the commit would dirty the tree again
-  // and turn the completion check into a loop.
-  const dir = path.join(clone, run.dir);
-  // driver.jsonl holds the denials up to this point — written even when there were none,
-  // so an empty file says "measured, nothing denied" and a missing one says "never written".
-  // The Stop verdicts that follow stay in the local log:
-  // copying them would dirty the tree after every commit.
-  if (!fs.existsSync(path.join(dir, "trace.json"))) {
-    fs.writeFileSync(path.join(dir, "trace.json"), `${JSON.stringify(traceOf(ctx.transcriptText), null, 1)}\n`);
-    const denials = fs.existsSync(ctx.logFile)
-      ? fs.readFileSync(ctx.logFile, "utf8").split("\n").filter((l) => l.includes('"event":"deny"'))
-      : [];
-    fs.writeFileSync(path.join(dir, "driver.jsonl"), denials.map((l) => `${l}\n`).join(""));
-  }
-  // The driver publishes, not the reviewer (skills#224): the composer staged
-  // the review branch, and the policy denies the session every git write.
-  const current = git(clone, "rev-parse", "--abbrev-ref", "HEAD");
-  if (current !== branch && git(clone, "switch", "-q", "-c", branch) === null) {
+  fs.mkdirSync(path.dirname(ctx.traceFile), { recursive: true });
+  fs.writeFileSync(ctx.traceFile, `${JSON.stringify(traceOf(ctx.transcriptText), null, 1)}\n`);
+  return publish(run);
+}
+
+/**
+ * Commits the result file alone in the clone of the waybill and pushes it on the order's branch.
+ * The driver publishes, not the reviewer (skills#224): the policy denies the session every git write.
+ * Commits only when the file differs from HEAD.
+ * A change after a push that did not land amends the result commit that push carried,
+ * so the order's branch receives one commit whatever happens between the Stops.
+ * @param {ReviewRun} run
+ * @returns {Failure | null} null once origin's order branch is the clone's HEAD;
+ *   `result-committed` when git cannot stage or commit the file,
+ *   `result-pushed` when the push did not land — each with git's own message
+ */
+function publish(run) {
+  // DECISION:SCOPE — the driver makes the commit of the result, not the worker.
+  // #278 leaves that open (decision 93); #292 says the driver commits the file,
+  // and the policy denies the session every git write.
+  const rel = path.relative(run.waybill, run.result);
+  const where = `the waybill (${run.waybill})`;
+  const status = git(run.waybill, "status", "--porcelain", "--", rel);
+  if (!status.ok) {
     return {
-      check: "review-branch",
-      detail: `${path.basename(clone)} on ${current}, and ${branch} could not be created`,
-      reason:
-        `The review is not complete: ${path.basename(clone)} is on ${current}, not ${branch}, ` +
-        "and the driver could not create the branch. Stop again; the principal is told if it persists.",
+      check: "result-committed",
+      detail: `git status in ${run.waybill}: ${status.err}`,
+      reason: `The review is not complete: the driver could not read the state of ${rel} in ${where}: ${status.err}. Stop again to retry.`,
     };
   }
-  const dirty = git(clone, "status", "--porcelain", "--", run.dir);
-  if (dirty === null || dirty.length) {
-    const message = `chore(review): ${run.pass} ${run.modelTier} findings for pr${n}`;
-    if (git(clone, "add", "--", run.dir) === null || git(clone, "commit", "-q", "--no-verify", "-m", message, "--", run.dir) === null) {
+  const ref = `refs/heads/${run.orderBranch}`;
+  const remoteTip = () => git(run.waybill, "ls-remote", "origin", ref);
+  if (status.out.length) {
+    const subject = `result: ${run.orderId}`;
+    // A tip git cannot read is no proof the commit is unpushed: amend only on a tip read.
+    const tip = remoteTip();
+    const unpushed =
+      tip.ok &&
+      git(run.waybill, "log", "-1", "--format=%s").out === subject &&
+      git(run.waybill, "rev-parse", "HEAD").out !== tip.out.split(/\s+/)[0];
+    const amend = unpushed ? ["--amend"] : [];
+    const add = git(run.waybill, "add", "--", rel);
+    const commit = add.ok ? git(run.waybill, "commit", "-q", "--no-verify", ...amend, "-m", subject, "--", rel) : add;
+    if (!commit.ok) {
       return {
-        check: "findings-committed",
-        detail: `the driver could not commit ${run.dir}`,
-        reason: `The review is not complete: the driver could not commit ${run.dir}/. Stop again to retry.`,
+        check: "result-committed",
+        detail: `commit of ${rel} in ${run.waybill}: ${commit.err}`,
+        reason: `The review is not complete: the driver could not commit ${rel} in ${where}: ${commit.err}. Stop again to retry.`,
       };
     }
   }
-  const head = git(clone, "rev-parse", "HEAD");
-  let remote = git(clone, "rev-parse", "--verify", "-q", `refs/remotes/origin/${branch}`);
-  if (head && remote !== head) {
-    git(clone, "push", "-q", "-u", "origin", branch);
-    remote = git(clone, "rev-parse", "--verify", "-q", `refs/remotes/origin/${branch}`);
-  }
-  if (!head || remote !== head) {
-    return {
-      check: "findings-pushed",
-      detail: `origin/${branch} is ${remote ? remote.slice(0, 7) : "absent"}, HEAD ${head?.slice(0, 7)}`,
-      reason: `The review is not complete: the driver's push of ${branch} did not land. Stop again to retry.`,
-    };
-  }
-  return null;
+  const head = git(run.waybill, "rev-parse", "HEAD").out;
+  const landed = () => remoteTip().out.split(/\s+/)[0] === head;
+  if (landed()) return null;
+  const push = git(run.waybill, "push", "-q", "origin", `HEAD:${ref}`);
+  if (push.ok && landed()) return null;
+  const why = push.err || `origin's ${run.orderBranch} is not ${head.slice(0, 7)} after the push`;
+  return {
+    check: "result-pushed",
+    detail: `push of ${head.slice(0, 7)} to ${run.orderBranch} of ${run.waybill}: ${why}`,
+    reason:
+      `The review is not complete: the driver's push of ${rel} to ${run.orderBranch} of ${where} did not land: ${why}. ` +
+      "Stop again to retry; the principal is told if it persists.",
+  };
 }
 
 // ---------------------------------------------------------------- run
@@ -279,19 +289,19 @@ function session(input) {
     repoRoot && orderRef.startsWith("order/")
       ? path.join(repoRoot, "waybill", "orders", `${orderRef.slice("order/".length)}.yml`)
       : null;
-  const order = orderFile && fs.existsSync(orderFile) ? orderRun(fs.readFileSync(orderFile, "utf8")) : null;
-  return { text, repoRoot, orderFile, review: order };
+  const order = orderFile && fs.existsSync(orderFile) ? orderRun(fs.readFileSync(orderFile, "utf8"), orderFile) : null;
+  return { text, orderFile, review: order };
 }
 
 /** @param {HookInput} input @returns {number} */
 export function run(input) {
-  const { text, repoRoot, orderFile, review } = session(input);
+  const { text, orderFile, review } = session(input);
   if (!review) return 0;
   const ctx = {
-    repoRoot,
     orderFile,
     transcriptText: text,
     logFile: localFile("review-driver.jsonl"),
+    traceFile: localFile("review-trace.json"),
     stateFile: localFile("review-driver-state.json"),
     session: input.session_id ?? "unknown",
   };
@@ -308,7 +318,7 @@ export function run(input) {
     });
     process.stderr.write(
       `${verdict.why}\n\nThis is a ${review.pass} review session (model tier ${review.modelTier}): read-only, ` +
-        `one findings file, one branch, nothing posted. The denial is logged.\n`,
+        `one result file, nothing posted. The denial is logged.\n`,
     );
     return 2;
   }
@@ -318,7 +328,7 @@ export function run(input) {
   const mine = state[ctx.session] ?? { blocks: 0, delivered: [] };
   if (!failed) {
     appendLog(ctx.logFile, { event: "stop", session: ctx.session, verdict: "complete" });
-    process.stderr.write(`Review complete: findings committed and pushed.\n`);
+    process.stderr.write(`Review complete: the result is pushed on ${review.orderBranch} of the waybill.\n`);
     return 0;
   }
   const guarded = input.stop_hook_active === true;

@@ -1,18 +1,15 @@
-// The review driver's katas (skills#195).
+// The review driver's policy katas (skills#195).
 //
 // Policy verdicts are asserted on wording, not only on allow/deny:
 // the reason is what the model acts on,
 // and a refusal without the rule and the alternative is what a model routes around.
-// The Stop path is staged with a real clone and a bare remote,
-// and walked through every criterion in the order the driver names them.
+// The staged session is in test_session.mjs.
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
-import { fileURLToPath } from "node:url";
 
 import {
   bashVerdict,
@@ -22,21 +19,7 @@ import {
   ticketsRead,
   toolVerdict,
 } from "../../../original/thread-ledger/review/policy.mjs";
-
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const DRIVER = path.join(HERE, "../../../original/thread-ledger/review-driver.mjs");
-
-const PROMPT = "PANDO-REVIEW: spec-fidelity tier=sonnet\n\nReview the pull request named in the trigger.";
-// Every kata session is dispatched by this order.
-// The Routine's prompt, DISPATCH below, carries no data (skills#195, waybill#1).
-const ORDER =
-  "id: review-spec-fidelity-sonnet-pr143\nrole: reviewer\npass: spec-fidelity\nmodel_tier: sonnet\n" +
-  "pull_request: pandoscope/meta#143\ntickets:\n  - pandoscope/skills#195\n";
-const ORDER_REF = "order/review-spec-fidelity-sonnet-pr143";
-const DISPATCH = "A waybill order dispatched this autonomous session. Read CLAUDE.md and follow it.";
-const PARSED = orderRun(ORDER);
-if (!PARSED) throw new Error("the kata order did not parse as a review run");
-const RUN = PARSED;
+import { HERE, ORDER, ORDER_FILE, ORDER_ID, ORDER_REF, RESULT, RUN, WAYBILL, issueRead } from "./fixtures.mjs";
 
 describe("bash policy", () => {
   /** @param {string} cmd */
@@ -74,6 +57,13 @@ describe("bash policy", () => {
     deny("find . -name '*.pyc' -delete", "-exec, -ok or -delete");
     deny("mkdir -p reviews/spec-fidelity-sonnet", "mkdir", "not a read command");
     deny("touch notes.txt", "touch");
+  });
+  // #292: a review writes the result file, and no findings file is left to name.
+  it("denies sed -i naming the result file, not a findings file", () => {
+    const v = bashVerdict("sed -i 's/a/b/' src/x.py", RUN);
+    if (v.allow) assert.fail("sed -i should be denied");
+    assert.doesNotMatch(v.why, /findings file/);
+    assert.ok(v.why.includes(RESULT), v.why);
   });
   it("reads a quoted sed or awk script before allowing it", () => {
     allow("sed -n '10,20p' src/x.py");
@@ -120,11 +110,57 @@ describe("bash policy", () => {
     deny("git reset --hard", "not a read subcommand");
     deny("git branch -D main", "writes");
     deny("git -c core.hooksPath=/dev/null commit -m x", "git -c");
+    deny(`git -C ${WAYBILL} commit -m x`, "driver commits and pushes");
+    deny(`git -C ${WAYBILL} push origin HEAD:${ORDER_REF}`, "driver commits and pushes");
     deny("git stash push", "writes the working tree");
     deny("git stash", "writes the working tree");
     allow("git stash list");
     deny("git tag v9", "creates a tag");
     allow("git tag -l");
+  });
+});
+
+// #292: whatever a denial refuses, it names where a review's output goes.
+describe("every denial", () => {
+  const tools = /** @type {[string, Record<string, any>][]} */ ([
+    ["Write", { file_path: "/tmp/notes.md" }],
+    ["Edit", { file_path: "/home/user/meta/src/x.py" }],
+    ["NotebookEdit", { notebook_path: "/home/user/meta/x.ipynb" }],
+    ["Read", { file_path: "/root/.claude/session.env" }],
+    ["Agent", { prompt: "run the tests" }],
+    ["Artifact", {}],
+    ["mcp__github__add_issue_comment", {}],
+  ]);
+  const commands = [
+    "python3 x.py",
+    "echo hi > notes.txt",
+    "cat /proc/self/environ",
+    "sed -i 's/a/b/' src/x.py",
+    "sed 's/a/b/w out' src/x.py",
+    "sed -f script.sed src/x.py",
+    "awk '{ system(\"id\") }' src/x.py",
+    "awk -f prog.awk src/x.py",
+    "find . -delete",
+    "git push",
+    "git branch -D main",
+    "git config --unset user.name",
+    "git reset --hard",
+    "git -c core.hooksPath=/dev/null log",
+    "git fetch --force origin main",
+    "git stash",
+    "git tag v9",
+  ];
+  it("names the result file and the order's branch, never a review branch", () => {
+    const denials = [
+      ...tools.map(([name, input]) => ({ call: name, v: toolVerdict(name, input, RUN) })),
+      ...commands.map((cmd) => ({ call: cmd, v: toolVerdict("Bash", { command: cmd }, RUN) })),
+    ];
+    for (const { call, v } of denials) {
+      if (v.allow) assert.fail(`${call} should be denied`);
+      assert.ok(v.why.includes(RESULT), `${call}: ${v.why}`);
+      assert.ok(v.why.includes(ORDER_REF), `${call}: ${v.why}`);
+      assert.doesNotMatch(v.why, /claude\/review|findings file/, call);
+    }
   });
 });
 
@@ -140,16 +176,31 @@ describe("tool policy", () => {
     assert.equal(toolVerdict("Grep", { pattern: "TOKEN", path: "/proc/self/environ" }, RUN).allow, false);
     assert.equal(toolVerdict("mcp__github__pull_request_read", {}, RUN).allow, true);
     assert.equal(toolVerdict("mcp__github__get_file_contents", {}, RUN).allow, true);
-    assert.equal(toolVerdict("Write", { file_path: "/home/user/meta/reviews/spec-fidelity-sonnet/findings.json" }, RUN).allow, true);
-    const v = toolVerdict("Write", { file_path: "/home/user/meta/src/x.py" }, RUN);
-    if (v.allow) assert.fail("a write outside the review directory should be denied");
-    assert.match(v.why, /only file a review writes is reviews\/spec-fidelity-sonnet\/findings.json/);
+  });
+  // #292: the result file in the waybill is the one file a review session writes.
+  it("allows writing the result file and no other file", () => {
+    assert.equal(toolVerdict("Write", { file_path: RESULT }, RUN).allow, true);
+    assert.equal(toolVerdict("Edit", { file_path: RESULT }, RUN).allow, true);
+    for (const file of [
+      "/home/user/meta/reviews/spec-fidelity-sonnet/findings.json",
+      "/home/user/meta/src/x.py",
+      `/home/user/meta/results/${ORDER_ID}.json`,
+      `${WAYBILL}/orders/${ORDER_ID}.yml`,
+      `${WAYBILL}/results/review-spec-fidelity-sonnet-meta143-2.json`,
+      `${WAYBILL}/results/${ORDER_ID}.json.bak`,
+    ]) {
+      const v = toolVerdict("Write", { file_path: file }, RUN);
+      if (v.allow) assert.fail(`a write to ${file} should be denied`);
+      assert.ok(v.why.includes(`The only file a review writes is ${RESULT}`), v.why);
+    }
   });
   it("denies forge writes and everything unlisted, naming the alternative", () => {
     for (const name of ["mcp__github__add_issue_comment", "mcp__github__pull_request_review_write", "mcp__github__create_pull_request", "mcp__github__push_files"]) {
       const v = toolVerdict(name, {}, RUN);
       if (v.allow) assert.fail(`${name} should be denied`);
       assert.match(v.why, /posts nothing/);
+      assert.ok(v.why.includes(`the driver pushes it on ${ORDER_REF} of the waybill`), v.why);
+      assert.doesNotMatch(v.why, /claude\/review/);
     }
     const v = toolVerdict("Artifact", {}, RUN);
     if (v.allow) assert.fail("Artifact should be denied");
@@ -168,8 +219,9 @@ describe("tool policy", () => {
   });
 });
 
-describe("findings contract", () => {
+describe("result contract", () => {
   const good = {
+    order_id: ORDER_ID,
     pr: "pandoscope/meta#143",
     head: "22056ce0",
     pass: "spec-fidelity",
@@ -189,86 +241,37 @@ describe("findings contract", () => {
     assert.match(p.join("\n"), /`findings\[0\]\.finding_basis` is missing/);
     assert.match(findingsProblems([], RUN)[0], /`the file` must be/);
   });
-});
-
-// ------------------------------------------------------------ staged
-
-/** @param {string} cwd @param {...string} args */
-function sh(cwd, ...args) {
-  const r = spawnSync(args[0], args.slice(1), { cwd, encoding: "utf8" });
-  assert.equal(r.status, 0, `${args.join(" ")}\n${r.stderr}`);
-  return r.stdout.trim();
-}
-
-function stage() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "review-driver-"));
-  const home = path.join(root, "home");
-  const remote = path.join(root, "remote.git");
-  const clone = path.join(root, "repos", "meta");
-  fs.mkdirSync(home, { recursive: true });
-  fs.mkdirSync(clone, { recursive: true });
-  sh(root, "git", "init", "-q", "--bare", remote);
-  sh(clone, "git", "init", "-q", "-b", "main");
-  sh(clone, "git", "config", "user.email", "kata@example.test");
-  sh(clone, "git", "config", "user.name", "kata");
-  sh(clone, "git", "config", "commit.gpgsign", "false");
-  fs.writeFileSync(path.join(clone, "README.md"), "seed\n");
-  sh(clone, "git", "add", "-A");
-  sh(clone, "git", "commit", "-q", "-m", "chore: seed");
-  sh(clone, "git", "remote", "add", "origin", remote);
-  sh(clone, "git", "push", "-q", "-u", "origin", "main");
-  const transcript = path.join(root, "transcript.jsonl");
-  fs.writeFileSync(
-    transcript,
-    `${JSON.stringify({ type: "user", message: { role: "user", content: DISPATCH } })}\n` +
-      `${JSON.stringify({ type: "assistant", timestamp: "t", message: { role: "assistant", model: "claude-sonnet", usage: { input_tokens: 10, output_tokens: 5 }, content: [{ type: "tool_use", name: "Bash", input: { command: "git diff" } }] } })}\n`,
-  );
-  fs.appendFileSync(transcript, issueRead("r0", "pandoscope", "skills", 195));
-  const orders = path.join(root, "repos", "waybill", "orders");
-  fs.mkdirSync(orders, { recursive: true });
-  const order = path.join(orders, "review-spec-fidelity-sonnet-pr143.yml");
-  fs.writeFileSync(order, ORDER);
-  return { root, home, clone, transcript, order };
-}
-
-/**
- * @param {ReturnType<typeof stage>} s
- * @param {Record<string, unknown>} input
- * @param {Record<string, string>} [env]
- */
-function fire(s, input, env = {}) {
-  const r = spawnSync("node", [DRIVER], {
-    input: JSON.stringify({ transcript_path: s.transcript, session_id: "kata", ...input }),
-    encoding: "utf8",
-    env: { ...process.env, HOME: s.home, CLAUDE_CONFIG_DIR: path.join(s.home, ".claude"), HEARTBEAT_REPO_ROOT: path.join(s.root, "repos"), CCR_TRIGGER_HEAD_REF: ORDER_REF, ...env },
+  // #292: the result names the order it answers.
+  it("requires the order's id", () => {
+    const { order_id: _, ...without } = good;
+    assert.match(findingsProblems(without, RUN).join("\n"), /`order_id` is missing/);
+    const foreign = findingsProblems({ ...good, order_id: "review-spec-fidelity-sonnet-meta143-2" }, RUN);
+    assert.ok(foreign.includes(`\`order_id\` must be \`${ORDER_ID}\``), foreign.join("\n"));
   });
-  return { code: r.status, err: r.stderr ?? "" };
-}
-
-/**
- * One issue read call and its result, as the transcript records them.
- * @param {string} id @param {string} owner @param {string} repo @param {number} n @param {boolean} [error]
- */
-function issueRead(id, owner, repo, n, error = false) {
-  return (
-    `${JSON.stringify({ type: "assistant", message: { role: "assistant", model: "m", content: [{ type: "tool_use", id, name: "mcp__github__issue_read", input: { method: "get", owner, repo, issue_number: n } }] } })}\n` +
-    `${JSON.stringify({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, is_error: error, content: [{ type: "text", text: "{\"number\":1}" }] }] } })}\n`
-  );
-}
+  // #292: #278 adds the session id, the setup report and the end state to the same object.
+  it("accepts a top-level field the contract does not name yet", () => {
+    assert.deepEqual(findingsProblems({ ...good, session_id: "s", state: "incomplete" }, RUN), []);
+  });
+});
 
 describe("order run", () => {
   it("reads pass and model tier from a reviewer order", () => {
-    const r = orderRun(ORDER);
+    const r = orderRun(ORDER, ORDER_FILE);
     assert.equal(r?.pass, "spec-fidelity");
     assert.equal(r?.modelTier, "sonnet");
-    assert.equal(r?.findings, "reviews/spec-fidelity-sonnet/findings.json");
-    assert.equal(r?.branchForm, "claude/review-spec-fidelity-sonnet-pr<n>");
+  });
+  // #292: the result lies beside the order, and travels on the order's branch.
+  it("names the order, its branch, the waybill and the result file beside the order", () => {
+    assert.equal(RUN.orderId, ORDER_ID);
+    assert.equal(RUN.orderBranch, ORDER_REF);
+    assert.equal(RUN.waybill, WAYBILL);
+    assert.equal(RUN.result, RESULT);
   });
   it("is null for another role, or a reviewer order without pass or model tier", () => {
-    assert.equal(orderRun("id: x\nrole: implementer\npull_request: pandoscope/meta#1\n"), null);
-    assert.equal(orderRun("id: x\nrole: reviewer\nmodel_tier: sonnet\n"), null);
-    assert.equal(orderRun("id: x\nrole: reviewer\npass: Spec Fidelity\nmodel_tier: sonnet\n"), null);
-    assert.equal(orderRun(""), null);
+    assert.equal(orderRun("id: x\nrole: implementer\npull_request: pandoscope/meta#1\n", ORDER_FILE), null);
+    assert.equal(orderRun("id: x\nrole: reviewer\nmodel_tier: sonnet\n", ORDER_FILE), null);
+    assert.equal(orderRun("id: x\nrole: reviewer\npass: Spec Fidelity\nmodel_tier: sonnet\n", ORDER_FILE), null);
+    assert.equal(orderRun("", ORDER_FILE), null);
   });
 });
 
@@ -295,112 +298,17 @@ describe("order tickets", () => {
   });
 });
 
-describe("staged session", () => {
-  it("blocks Stop until every ticket in the order was read", () => {
-    const s = stage();
-    fs.writeFileSync(s.order, `${ORDER}  - pandoscope/waybill#1\n`);
-    let stop = fire(s, { hook_event_name: "Stop" });
-    assert.equal(stop.code, 2);
-    assert.match(stop.err, /not complete until every ticket the order names was read/);
-    assert.match(stop.err, /pandoscope\/waybill#1/);
-    assert.doesNotMatch(stop.err, /pandoscope\/skills#195/);
-    fs.appendFileSync(s.transcript, issueRead("r2", "pandoscope", "waybill", 1));
-    stop = fire(s, { hook_event_name: "Stop" });
-    assert.equal(stop.code, 2);
-    assert.match(stop.err, /not complete until reviews\/spec-fidelity-sonnet\/findings.json exists/);
-  });
-
-  it("denies at PreToolUse, logs it, and publishes once the criteria hold", () => {
-    const s = stage();
-    const denied = fire(s, { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "python3 -m pytest" } });
-    assert.equal(denied.code, 2);
-    assert.match(denied.err, /python3.*not a read command/);
-    assert.match(denied.err, /The denial is logged/);
-    const allowed = fire(s, { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "git diff" } });
-    assert.equal(allowed.code, 0);
-
-    let stop = fire(s, { hook_event_name: "Stop" });
-    assert.equal(stop.code, 2);
-    assert.match(stop.err, /not complete until reviews\/spec-fidelity-sonnet\/findings.json exists/);
-
-    const dir = path.join(s.clone, "reviews", "spec-fidelity-sonnet");
-    fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, "findings.json"), JSON.stringify({ pr: "pandoscope/meta#143", head: "22056ce0", pass: "spec-fidelity", model_tier: "sonnet", findings: "no" }));
-    stop = fire(s, { hook_event_name: "Stop" });
-    assert.equal(stop.code, 2);
-    assert.match(stop.err, /`findings` must be an array/);
-
-    fs.writeFileSync(path.join(dir, "findings.json"), JSON.stringify({ pr: "pandoscope/meta#143", head: "22056ce0", pass: "spec-fidelity", model_tier: "sonnet", findings: [] }));
-    stop = fire(s, { hook_event_name: "Stop" });
-    assert.equal(stop.code, 0, stop.err);
-    assert.match(stop.err, /Review complete/);
-    assert.ok(fs.existsSync(path.join(dir, "trace.json")), "trace written once the findings validate");
-    assert.ok(fs.existsSync(path.join(dir, "driver.jsonl")), "denial log written beside the findings");
-    const denials = fs.readFileSync(path.join(dir, "driver.jsonl"), "utf8").trim().split("\n");
-    assert.equal(denials.length, 1, "one denial, and only denials");
-    assert.match(denials[0], /"event":"deny"/);
-    assert.match(denials[0], /python3/);
-    const trace = JSON.parse(fs.readFileSync(path.join(dir, "trace.json"), "utf8"));
-    assert.equal(trace.calls[0].arg, "git diff");
-    assert.equal(trace.usage["claude-sonnet"].input, 10);
-
-    assert.equal(sh(s.clone, "git", "rev-parse", "--abbrev-ref", "HEAD"), "claude/review-spec-fidelity-sonnet-pr143");
-  });
-
-  it("releases a guarded Stop whose reason was already delivered", () => {
-    const s = stage();
-    assert.equal(fire(s, { hook_event_name: "Stop" }).code, 2);
-    const again = fire(s, { hook_event_name: "Stop", stop_hook_active: true });
-    assert.equal(again.code, 0);
-    assert.match(again.err, /released INCOMPLETE — findings-written/);
-  });
-
-  it("reports a session its order makes a review", () => {
-    const s = stage();
-    const r = spawnSync("node", [DRIVER, "--is-review"], {
-      input: JSON.stringify({ transcript_path: s.transcript }),
-      encoding: "utf8",
-      env: { ...process.env, HEARTBEAT_REPO_ROOT: path.join(s.root, "repos"), CCR_TRIGGER_HEAD_REF: ORDER_REF },
-    });
-    assert.equal(r.status, 0);
-  });
-
-  it("ignores a PANDO-REVIEW prompt line: the order is the only receiver", () => {
-    const s = stage();
-    fs.writeFileSync(s.transcript, `${JSON.stringify({ type: "user", message: { content: PROMPT } })}\n`);
-    const none = { CCR_TRIGGER_HEAD_REF: "" };
-    assert.equal(fire(s, { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "python3 x.py" } }, none).code, 0);
-    assert.equal(fire(s, { hook_event_name: "Stop" }, none).code, 0);
-  });
-
-  it("leaves a session without a reviewer order alone", () => {
-    const s = stage();
-    const none = { CCR_TRIGGER_HEAD_REF: "" };
-    assert.equal(fire(s, { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "python3 x.py" } }, none).code, 0);
-    assert.equal(fire(s, { hook_event_name: "Stop" }, none).code, 0);
-    fs.writeFileSync(s.order, "id: review-spec-fidelity-sonnet-pr143\nrole: implementer\n");
-    assert.equal(fire(s, { hook_event_name: "Stop" }).code, 0);
-    const r = spawnSync("node", [DRIVER, "--is-review"], {
-      input: JSON.stringify({ transcript_path: s.transcript }),
-      encoding: "utf8",
-      env: { ...process.env, HEARTBEAT_REPO_ROOT: path.join(s.root, "repos"), CCR_TRIGGER_HEAD_REF: "" },
-    });
-    assert.equal(r.status, 1);
-  });
-
-});
-
 // `tier` alone was ambiguous next to a finding's grade;
 // the order and the findings file name the model tier `model_tier`, snake case like `pull_request`.
 describe("model tier", () => {
   const order = "id: x\nrole: reviewer\npass: spec-fidelity\nmodel_tier: opus\n";
   it("is read from the order's model_tier", () => {
-    assert.equal(orderRun(order)?.modelTier, "opus");
-    assert.equal(orderRun("id: x\nrole: reviewer\npass: spec-fidelity\ntier: opus\n"), null);
+    assert.equal(orderRun(order, ORDER_FILE)?.modelTier, "opus");
+    assert.equal(orderRun("id: x\nrole: reviewer\npass: spec-fidelity\ntier: opus\n", ORDER_FILE), null);
   });
   it("is the findings file's model_tier", () => {
-    const run = /** @type {NonNullable<ReturnType<typeof orderRun>>} */ (orderRun(order));
-    const doc = { pr: "pandoscope/meta#1", head: "22056ce0", pass: "spec-fidelity", model_tier: "opus", findings: [] };
+    const run = /** @type {NonNullable<ReturnType<typeof orderRun>>} */ (orderRun(order, ORDER_FILE));
+    const doc = { order_id: ORDER_ID, pr: "pandoscope/meta#1", head: "22056ce0", pass: "spec-fidelity", model_tier: "opus", findings: [] };
     assert.deepEqual(findingsProblems(doc, run), []);
     assert.match(findingsProblems({ ...doc, model_tier: "sonnet" }, run).join("\n"), /`model_tier` must be `opus`/);
   });
@@ -411,6 +319,7 @@ describe("model tier", () => {
 describe("findings schema", () => {
   const file = path.join(HERE, "../../../original/thread-ledger/review/findings.schema.json");
   const good = {
+    order_id: ORDER_ID,
     pr: "pandoscope/meta#143",
     head: "22056ce0",
     pass: "spec-fidelity",
@@ -431,33 +340,44 @@ describe("findings schema", () => {
   });
 });
 
-// The reviewer runs no git steps (#224): the composer stages the review
-// branch, and the driver commits and pushes the findings at Stop.
-describe("driver publishes", () => {
-  it("commits and pushes valid findings itself at Stop", () => {
-    const s = stage();
-    sh(s.clone, "git", "switch", "-q", "-c", "claude/review-spec-fidelity-sonnet-pr143");
-    const dir = path.join(s.clone, "reviews", "spec-fidelity-sonnet");
-    fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, "findings.json"), JSON.stringify({ pr: "pandoscope/meta#143", head: "22056ce0", pass: "spec-fidelity", model_tier: "sonnet", findings: [] }));
-    const stop = fire(s, { hook_event_name: "Stop" });
-    assert.equal(stop.code, 0, stop.err);
-    assert.match(stop.err, /Review complete/);
-    const pushed = sh(s.clone, "git", "ls-tree", "-r", "--name-only", "origin/claude/review-spec-fidelity-sonnet-pr143");
-    assert.match(pushed, /reviews\/spec-fidelity-sonnet\/findings.json/);
-    const subject = sh(s.clone, "git", "log", "-1", "--format=%s", "origin/claude/review-spec-fidelity-sonnet-pr143");
-    assert.equal(subject, "chore(review): spec-fidelity sonnet findings for pr143");
+// #292: the documents describe the result on the order's branch, and none the old review branch.
+describe("documentation", () => {
+  const repo = path.join(HERE, "../../..");
+  const REVIEW_BRANCH = /claude\/review-(<pass>|\$\{)|\breview branch\b|reviews\/(<pass>|\{\{|\$\{|spec-fidelity|prose)|\bfindings\.json\b/i;
+  it("says nowhere outside the katas that findings travel on a review branch of the reviewed repository", () => {
+    const listed = spawnSync("git", ["-C", repo, "ls-files", "-z"], { encoding: "utf8" });
+    assert.equal(listed.status, 0, listed.stderr);
+    const files = listed.stdout.split("\0").filter((f) => f && !f.startsWith("tests/"));
+    /** @type {string[]} */
+    const hits = [];
+    for (const f of files) {
+      // A tracked symlink, such as .claude/skills, points at files this list already holds.
+      if (!fs.lstatSync(path.join(repo, f)).isFile()) continue;
+      const text = fs.readFileSync(path.join(repo, f), "utf8");
+      text.split("\n").forEach((line, i) => {
+        if (REVIEW_BRANCH.test(line)) hits.push(`${f}:${i + 1}: ${line.trim()}`);
+      });
+    }
+    assert.deepEqual(hits, []);
   });
-  it("denies the reviewer every git write", () => {
-    for (const cmd of [
-      "git switch -c claude/review-spec-fidelity-sonnet-pr143",
-      "git add reviews/spec-fidelity-sonnet",
-      "git commit -m x",
-      "git push -u origin claude/review-spec-fidelity-sonnet-pr143",
-    ]) {
-      const v = bashVerdict(cmd, RUN);
-      assert.equal(v.allow, false, cmd);
-      assert.match(v.allow ? "" : v.why, /driver (commits|publishes)/, cmd);
+  it("SKILL.md describes the result file on the order's branch", () => {
+    const skill = fs.readFileSync(path.join(repo, "original/thread-ledger/SKILL.md"), "utf8");
+    assert.ok(skill.includes("`results/<order id>.json`"), "names the result file");
+    assert.ok(skill.includes("`order/<order id>`"), "names the order's branch");
+    assert.ok(skill.includes("pushes nothing to the reviewed repository"), "says the reviewed repository gets nothing");
+  });
+  // A guarded Stop whose push fails again is released (the staged session's
+  // "releases a guarded Stop whose reason was already delivered"); SKILL.md says so.
+  it("SKILL.md says a push that keeps failing releases the session INCOMPLETE", () => {
+    const skill = fs.readFileSync(path.join(repo, "original/thread-ledger/SKILL.md"), "utf8");
+    assert.doesNotMatch(skill, /until the push has landed/);
+    assert.match(skill, /push fails again[^.]*released INCOMPLETE/);
+  });
+  it("every pass file sends the reviewer's output to the result file in the clone of the waybill", () => {
+    for (const pass of ["spec-fidelity", "prose"]) {
+      const text = fs.readFileSync(path.join(repo, `original/thread-ledger/review/${pass}.md`), "utf8");
+      assert.ok(text.includes("`results/<order id>.json` in the clone of the waybill"), pass);
+      assert.ok(text.includes("`order_id`"), pass);
     }
   });
 });

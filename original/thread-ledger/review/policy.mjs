@@ -1,5 +1,5 @@
 // The review-session policy — what a review session may call,
-// and what its findings file must look like.
+// and what its result file must look like.
 //
 // Pure functions over the hook's inputs,
 // so the katas can assert on verdicts without staging a session.
@@ -13,6 +13,7 @@
 // so what is allowed is enumerated and everything else is refused with the rule.
 
 import fs from "node:fs";
+import path from "node:path";
 
 import { schemaProblems } from "./schema.mjs";
 
@@ -20,10 +21,10 @@ import { schemaProblems } from "./schema.mjs";
  * @typedef {object} ReviewRun
  * @property {string} pass       the review pass, e.g. spec-fidelity
  * @property {string} modelTier  the model tier the routine runs
- * @property {string} dir        the review directory, relative to the clone
- * @property {string} findings   the findings file, relative to the clone
- * @property {RegExp} branch     the review branch, capturing the PR number
- * @property {string} branchForm the branch as the reason spells it
+ * @property {string} orderId     the order's id, the name of its file
+ * @property {string} orderBranch the order's branch in the waybill, order/<id>
+ * @property {string} waybill     the clone of the waybill
+ * @property {string} result      the result file, the one file the session writes
  */
 /** @typedef {{ allow: true } | { allow: false, why: string }} Verdict */
 
@@ -35,18 +36,22 @@ const NAME = /^[a-z0-9-]+$/;
 /**
  * @param {string} pass
  * @param {string} modelTier
+ * @param {string} orderFile the order file's path, <waybill>/orders/<id>.yml
  * @returns {ReviewRun}
  */
-function runFor(pass, modelTier) {
+function runFor(pass, modelTier, orderFile) {
+  const file = path.resolve(orderFile);
+  const orderId = path.basename(file, ".yml");
+  const waybill = path.dirname(path.dirname(file));
   return {
     pass,
     modelTier,
-    // Relative to the clone of the reviewed repository — the only directory the session may write,
-    // and the one the collector reads.
-    dir: `reviews/${pass}-${modelTier}`,
-    findings: `reviews/${pass}-${modelTier}/findings.json`,
-    branch: new RegExp(`^claude/review-${pass}-${modelTier}-pr(\\d+)$`),
-    branchForm: `claude/review-${pass}-${modelTier}-pr<n>`,
+    orderId,
+    orderBranch: `order/${orderId}`,
+    waybill,
+    // DECISION:SCOPE — the result lies at results/<id>.json beside orders/<id>.yml.
+    // That path is the orchestrator's reading in #292, not ruled; pandoscope#54 leaves it open.
+    result: path.join(waybill, "results", `${orderId}.json`),
   };
 }
 
@@ -54,9 +59,11 @@ function runFor(pass, modelTier) {
  * The review run a waybill order declares, or null:
  * the order names `role: reviewer` with its `pass` and `model_tier`.
  * @param {string} orderText the order file, YAML
+ * @param {string} orderFile the order file's path, <waybill>/orders/<id>.yml;
+ *   its name is the order's id
  * @returns {ReviewRun | null}
  */
-export function orderRun(orderText) {
+export function orderRun(orderText, orderFile) {
   /** @param {string} key */
   const field = (key) => {
     const m = new RegExp(`^${key}:[ \\t]*(.*)$`, "m").exec(orderText);
@@ -65,7 +72,7 @@ export function orderRun(orderText) {
   const pass = field("pass");
   const modelTier = field("model_tier");
   if (field("role") !== "reviewer" || !NAME.test(pass) || !NAME.test(modelTier)) return null;
-  return runFor(pass, modelTier);
+  return runFor(pass, modelTier, orderFile);
 }
 
 // ------------------------------------------------------------- tools
@@ -98,17 +105,45 @@ const FORGE_READ = /^mcp__github__(get_|list_|search_|pull_request_read$|issue_r
 const EDITORS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 
 /**
+ * A denial that names the result file and the order's branch,
+ * with a closing sentence that names both when its reason does not.
+ * @param {Verdict} verdict
+ * @param {ReviewRun} run
+ * @returns {Verdict}
+ */
+function namingOutput(verdict, run) {
+  if (verdict.allow) return verdict;
+  if (verdict.why.includes(run.result) && verdict.why.includes(run.orderBranch)) return verdict;
+  return {
+    allow: false,
+    why: `${verdict.why} A review writes only ${run.result}; the driver pushes it on ${run.orderBranch} of the waybill.`,
+  };
+}
+
+/**
  * Verdict on one tool call: `{ allow: true }` or `{ allow: false, why }`.
  *
  * `why` is the reason the model reads.
  * It names the rule and the allowed alternative,
  * never a bare "denied" — a refusal without the criterion is what a model routes around.
+ * Every denial names the result file and the order's branch.
  * @param {string} name
  * @param {Record<string, any> | undefined} input
  * @param {ReviewRun} run
  * @returns {Verdict}
  */
 export function toolVerdict(name, input, run) {
+  return namingOutput(toolJudgement(name, input, run), run);
+}
+
+/**
+ * {@link toolVerdict} before its denial names the result file and the order's branch.
+ * @param {string} name
+ * @param {Record<string, any> | undefined} input
+ * @param {ReviewRun} run
+ * @returns {Verdict}
+ */
+function toolJudgement(name, input, run) {
   const target = input?.file_path ?? input?.path ?? input?.pattern ?? "";
   if (typeof target === "string" && target && namesSecret(target)) {
     return {
@@ -128,12 +163,13 @@ export function toolVerdict(name, input, run) {
   if (ALLOWED_TOOLS.has(name) || FORGE_READ.test(name)) return { allow: true };
   if (EDITORS.has(name)) {
     const file = input?.file_path ?? input?.notebook_path ?? "";
-    if (file.endsWith(`/${run.findings}`) || file === run.findings) return { allow: true };
+    if (file && path.resolve(file) === run.result) return { allow: true };
     return {
       allow: false,
       why:
         `${name} on ${file || "(no path)"} is not allowed in a review session. ` +
-        `The only file a review writes is ${run.findings} in the clone of the reviewed repository.`,
+        `The only file a review writes is ${run.result}, the result file in the clone of the waybill; ` +
+        `the driver pushes it on ${run.orderBranch} at Stop.`,
     };
   }
   if (name === "Bash") return bashVerdict(input?.command ?? "", run);
@@ -142,12 +178,15 @@ export function toolVerdict(name, input, run) {
       allow: false,
       why:
         `${name} writes to the forge. A review session posts nothing: no comments, no reviews, ` +
-        `no issues, no pull requests. Findings go to ${run.findings}; the driver pushes them on ${run.branchForm}.`,
+        `no issues, no pull requests. Findings go to the result file ${run.result}; ` +
+        `the driver pushes it on ${run.orderBranch} of the waybill.`,
     };
   }
   return {
     allow: false,
-    why: `${name} is not on the review session's tool list. Read the code with Read, Grep, Glob and read-only Bash; write only ${run.findings}.`,
+    why:
+      `${name} is not on the review session's tool list. Read the code with Read, Grep, Glob and read-only Bash; ` +
+      `write only ${run.result}, which the driver pushes on ${run.orderBranch} of the waybill.`,
   };
 }
 
@@ -206,13 +245,14 @@ const GIT_WRITE_FLAGS = {
 
 /**
  * Verdict on a Bash command under the read-only policy.
+ * Every denial names the result file and the order's branch.
  * @param {string} command
  * @param {ReviewRun} run
  * @returns {Verdict}
  */
 export function bashVerdict(command, run) {
   /** @param {string} why @returns {Verdict} */
-  const deny = (why) => ({ allow: false, why: `Bash \`${trim(command)}\`: ${why}` });
+  const deny = (why) => namingOutput({ allow: false, why: `Bash \`${trim(command)}\`: ${why}` }, run);
   if (namesSecret(command)) {
     return deny("that path holds the session's own secrets. A review reads the repository, not the environment.");
   }
@@ -239,7 +279,7 @@ export function bashVerdict(command, run) {
       );
     }
     if (cmd === "sed" && args.some((a) => /^-i/.test(a) || a === "--in-place")) {
-      return deny("`sed -i` edits in place. Read with sed; write only the findings file.");
+      return deny("`sed -i` edits in place. Read with sed.");
     }
     if (cmd === "sed") {
       const why = sedWhy(script);
@@ -279,7 +319,7 @@ function gitWhy(args, run) {
   if (GIT_READ.has(sub)) {
     const write = GIT_WRITE_FLAGS[sub];
     if (write && rest.some((x) => write.test(x))) {
-      return `\`git ${sub} ${rest.join(" ")}\` writes. Read subcommands only; the driver commits and pushes the findings.`;
+      return `\`git ${sub} ${rest.join(" ")}\` writes. Read subcommands only.`;
     }
     if (sub === "fetch" && rest.some((x) => /^--(force|refmap)$|^-f$|^\+/.test(x))) {
       return "`git fetch` with --force or a + refspec overwrites refs. Fetch plainly.";
@@ -298,11 +338,11 @@ function gitWhy(args, run) {
   }
   if (["switch", "checkout", "add", "commit", "push"].includes(sub)) {
     return (
-      `\`git ${sub}\` writes. The driver commits and pushes ${run.dir}/ on ${run.branchForm} at Stop; ` +
-      `write ${run.findings} and stop.`
+      `\`git ${sub}\` writes. The driver commits and pushes ${run.result} on ${run.orderBranch} at Stop; ` +
+      "write the result file and stop."
     );
   }
-  return `\`git ${sub}\` is not a read subcommand. Allowed: ${[...GIT_READ].slice(0, 8).join(", ")}, …; the driver commits and pushes the findings.`;
+  return `\`git ${sub}\` is not a read subcommand. Allowed: ${[...GIT_READ].slice(0, 8).join(", ")}, ….`;
 }
 
 // ----------------------------------------------------------- parsing
@@ -484,17 +524,19 @@ function trim(command) {
 
 // ---------------------------------------------------------- findings
 
-const PR = /^[\w.-]+\/[\w.-]+#(\d+)$/;
+// DECISION:SCOPE — the schema leaves the result's top level open and keeps each finding closed.
+// #292 asks for a schema that lets the result grow; #278 adds the session id, the setup report
+// and the end state. A misspelt required field still fails as missing.
 const FINDINGS_SCHEMA = /** @type {import("./schema.mjs").Schema} */ (
   JSON.parse(fs.readFileSync(new URL("./findings.schema.json", import.meta.url), "utf8"))
 );
 
 /**
- * Problems with a parsed findings file, in field order; empty when valid.
+ * Problems with a parsed result file, in field order; empty when valid.
  *
  * The contract is `findings.schema.json` (skills#225): X8's finding shape (skills#41)
- * under a header that names what was reviewed. The order adds what no schema knows:
- * `pass` and `model_tier` must be the run's.
+ * under a header that names the order and what was reviewed. The order adds what no schema knows:
+ * `order_id`, `pass` and `model_tier` must be the run's.
  * @param {unknown} doc
  * @param {ReviewRun} run
  * @returns {string[]}
@@ -503,22 +545,14 @@ export function findingsProblems(doc, run) {
   const out = schemaProblems(FINDINGS_SCHEMA, doc);
   if (!doc || typeof doc !== "object" || Array.isArray(doc)) return out;
   const d = /** @type {Record<string, unknown>} */ (doc);
+  if (typeof d.order_id === "string" && d.order_id !== run.orderId) {
+    out.push(`\`order_id\` must be \`${run.orderId}\``);
+  }
   if (typeof d.pass === "string" && d.pass !== run.pass) out.push(`\`pass\` must be \`${run.pass}\``);
   if (typeof d.model_tier === "string" && d.model_tier !== run.modelTier) {
     out.push(`\`model_tier\` must be \`${run.modelTier}\``);
   }
   return out;
-}
-
-/**
- * The PR number a valid findings document names.
- * @param {unknown} doc
- * @returns {number | null}
- */
-export function prNumber(doc) {
-  const pr = doc && typeof doc === "object" ? /** @type {Record<string, unknown>} */ (doc).pr : null;
-  const m = PR.exec(typeof pr === "string" ? pr : "");
-  return m ? Number(m[1]) : null;
 }
 
 // ------------------------------------------------------------ tickets

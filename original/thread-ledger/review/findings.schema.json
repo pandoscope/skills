@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/pandoscope/skills/original/thread-ledger/review/findings.schema.json",
-  "title": "Review findings",
-  "description": "The one output of a review session (skills#195, skills#225). The driver validates it at Stop; the composer renders it into the pass file.",
+  "title": "Review result",
+  "description": "The one output of a review session, the result file results/<order id>.json on the order's branch in the waybill (skills#195, skills#225, skills#292). The driver validates it at Stop; the composer renders it into the pass file. Top-level fields the contract does not name are allowed, so the result can grow (skills#278).",
   "type": "object",
-  "additionalProperties": false,
-  "required": ["pr", "head", "pass", "model_tier", "findings"],
+  "required": ["order_id", "pr", "head", "pass", "model_tier", "findings"],
   "properties": {
+    "order_id": {"type": "string", "pattern": "^[a-z0-9-]+$", "description": "the id of the order this result answers, the name of its order file"},
     "pr": {"type": "string", "pattern": "^[\\w.-]+/[\\w.-]+#\\d+$", "description": "the pull request, as `owner/repo#n`"},
     "head": {"type": "string", "pattern": "^[0-9a-f]{7,40}$", "description": "the head commit sha that was reviewed"},
     "pass": {"type": "string", "pattern": "^[a-z0-9-]+$", "description": "the review pass the order names"},
