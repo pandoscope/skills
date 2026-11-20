@@ -21,8 +21,6 @@ import { schemaProblems } from "./schema.mjs";
  * @typedef {object} ReviewRun
  * @property {string} pass       the review pass, e.g. spec-fidelity
  * @property {string} modelTier  the model tier the routine runs
- * @property {string} dir         the review directory, relative to the clone
- * @property {string} findings    the findings file, relative to the clone
  * @property {string} orderId     the order's id, the name of its file
  * @property {string} orderBranch the order's branch in the waybill, order/<id>
  * @property {string} waybill     the clone of the waybill
@@ -48,8 +46,6 @@ function runFor(pass, modelTier, orderFile) {
   return {
     pass,
     modelTier,
-    dir: `reviews/${pass}-${modelTier}`,
-    findings: `reviews/${pass}-${modelTier}/findings.json`,
     orderId,
     orderBranch: `order/${orderId}`,
     waybill,
@@ -496,7 +492,6 @@ function trim(command) {
 
 // ---------------------------------------------------------- findings
 
-const PR = /^[\w.-]+\/[\w.-]+#(\d+)$/;
 // DECISION:SCOPE — the schema leaves the result's top level open and keeps each finding closed.
 // #292 asks for a schema that lets the result grow; #278 adds the session id, the setup report
 // and the end state. A misspelt required field still fails as missing.
@@ -526,17 +521,6 @@ export function findingsProblems(doc, run) {
     out.push(`\`model_tier\` must be \`${run.modelTier}\``);
   }
   return out;
-}
-
-/**
- * The PR number a valid findings document names.
- * @param {unknown} doc
- * @returns {number | null}
- */
-export function prNumber(doc) {
-  const pr = doc && typeof doc === "object" ? /** @type {Record<string, unknown>} */ (doc).pr : null;
-  const m = PR.exec(typeof pr === "string" ? pr : "");
-  return m ? Number(m[1]) : null;
 }
 
 // ------------------------------------------------------------ tickets
