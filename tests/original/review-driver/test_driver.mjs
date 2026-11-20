@@ -29,12 +29,17 @@ const DRIVER = path.join(HERE, "../../../original/thread-ledger/review-driver.mj
 const PROMPT = "PANDO-REVIEW: spec-fidelity tier=sonnet\n\nReview the pull request named in the trigger.";
 // Every kata session is dispatched by this order.
 // The Routine's prompt, DISPATCH below, carries no data (skills#195, waybill#1).
+const ORDER_ID = "review-spec-fidelity-sonnet-meta143-1";
 const ORDER =
-  "id: review-spec-fidelity-sonnet-pr143\nrole: reviewer\npass: spec-fidelity\nmodel_tier: sonnet\n" +
-  "pull_request: pandoscope/meta#143\ntickets:\n  - pandoscope/skills#195\n";
-const ORDER_REF = "order/review-spec-fidelity-sonnet-pr143";
+  `id: ${ORDER_ID}\nrole: reviewer\npass: spec-fidelity\nmodel_tier: sonnet\n` +
+  "subject: pandoscope/meta#143\ntickets:\n  - pandoscope/skills#195\n";
+const ORDER_REF = `order/${ORDER_ID}`;
 const DISPATCH = "A waybill order dispatched this autonomous session. Read CLAUDE.md and follow it.";
-const PARSED = orderRun(ORDER);
+// The policy katas place the waybill where a session has it.
+const WAYBILL = "/home/user/waybill";
+const RESULT = `${WAYBILL}/results/${ORDER_ID}.json`;
+const ORDER_FILE = `${WAYBILL}/orders/${ORDER_ID}.yml`;
+const PARSED = orderRun(ORDER, ORDER_FILE);
 if (!PARSED) throw new Error("the kata order did not parse as a review run");
 const RUN = PARSED;
 
@@ -120,6 +125,8 @@ describe("bash policy", () => {
     deny("git reset --hard", "not a read subcommand");
     deny("git branch -D main", "writes");
     deny("git -c core.hooksPath=/dev/null commit -m x", "git -c");
+    deny(`git -C ${WAYBILL} commit -m x`, "driver commits and pushes");
+    deny(`git -C ${WAYBILL} push origin HEAD:${ORDER_REF}`, "driver commits and pushes");
     deny("git stash push", "writes the working tree");
     deny("git stash", "writes the working tree");
     allow("git stash list");
@@ -140,16 +147,31 @@ describe("tool policy", () => {
     assert.equal(toolVerdict("Grep", { pattern: "TOKEN", path: "/proc/self/environ" }, RUN).allow, false);
     assert.equal(toolVerdict("mcp__github__pull_request_read", {}, RUN).allow, true);
     assert.equal(toolVerdict("mcp__github__get_file_contents", {}, RUN).allow, true);
-    assert.equal(toolVerdict("Write", { file_path: "/home/user/meta/reviews/spec-fidelity-sonnet/findings.json" }, RUN).allow, true);
-    const v = toolVerdict("Write", { file_path: "/home/user/meta/src/x.py" }, RUN);
-    if (v.allow) assert.fail("a write outside the review directory should be denied");
-    assert.match(v.why, /only file a review writes is reviews\/spec-fidelity-sonnet\/findings.json/);
+  });
+  // #292: the result file in the waybill is the one file a review session writes.
+  it("allows writing the result file and no other file", () => {
+    assert.equal(toolVerdict("Write", { file_path: RESULT }, RUN).allow, true);
+    assert.equal(toolVerdict("Edit", { file_path: RESULT }, RUN).allow, true);
+    for (const file of [
+      "/home/user/meta/reviews/spec-fidelity-sonnet/findings.json",
+      "/home/user/meta/src/x.py",
+      `/home/user/meta/results/${ORDER_ID}.json`,
+      `${WAYBILL}/orders/${ORDER_ID}.yml`,
+      `${WAYBILL}/results/review-spec-fidelity-sonnet-meta143-2.json`,
+      `${WAYBILL}/results/${ORDER_ID}.json.bak`,
+    ]) {
+      const v = toolVerdict("Write", { file_path: file }, RUN);
+      if (v.allow) assert.fail(`a write to ${file} should be denied`);
+      assert.ok(v.why.includes(`The only file a review writes is ${RESULT}`), v.why);
+    }
   });
   it("denies forge writes and everything unlisted, naming the alternative", () => {
     for (const name of ["mcp__github__add_issue_comment", "mcp__github__pull_request_review_write", "mcp__github__create_pull_request", "mcp__github__push_files"]) {
       const v = toolVerdict(name, {}, RUN);
       if (v.allow) assert.fail(`${name} should be denied`);
       assert.match(v.why, /posts nothing/);
+      assert.ok(v.why.includes(`the driver pushes it on ${ORDER_REF} of the waybill`), v.why);
+      assert.doesNotMatch(v.why, /claude\/review/);
     }
     const v = toolVerdict("Artifact", {}, RUN);
     if (v.allow) assert.fail("Artifact should be denied");
@@ -226,7 +248,7 @@ function stage() {
   fs.appendFileSync(transcript, issueRead("r0", "pandoscope", "skills", 195));
   const orders = path.join(root, "repos", "waybill", "orders");
   fs.mkdirSync(orders, { recursive: true });
-  const order = path.join(orders, "review-spec-fidelity-sonnet-pr143.yml");
+  const order = path.join(orders, `${ORDER_ID}.yml`);
   fs.writeFileSync(order, ORDER);
   return { root, home, clone, transcript, order };
 }
@@ -258,17 +280,22 @@ function issueRead(id, owner, repo, n, error = false) {
 
 describe("order run", () => {
   it("reads pass and model tier from a reviewer order", () => {
-    const r = orderRun(ORDER);
+    const r = orderRun(ORDER, ORDER_FILE);
     assert.equal(r?.pass, "spec-fidelity");
     assert.equal(r?.modelTier, "sonnet");
-    assert.equal(r?.findings, "reviews/spec-fidelity-sonnet/findings.json");
-    assert.equal(r?.branchForm, "claude/review-spec-fidelity-sonnet-pr<n>");
+  });
+  // #292: the result lies beside the order, and travels on the order's branch.
+  it("names the order, its branch, the waybill and the result file beside the order", () => {
+    assert.equal(RUN.orderId, ORDER_ID);
+    assert.equal(RUN.orderBranch, ORDER_REF);
+    assert.equal(RUN.waybill, WAYBILL);
+    assert.equal(RUN.result, RESULT);
   });
   it("is null for another role, or a reviewer order without pass or model tier", () => {
-    assert.equal(orderRun("id: x\nrole: implementer\npull_request: pandoscope/meta#1\n"), null);
-    assert.equal(orderRun("id: x\nrole: reviewer\nmodel_tier: sonnet\n"), null);
-    assert.equal(orderRun("id: x\nrole: reviewer\npass: Spec Fidelity\nmodel_tier: sonnet\n"), null);
-    assert.equal(orderRun(""), null);
+    assert.equal(orderRun("id: x\nrole: implementer\npull_request: pandoscope/meta#1\n", ORDER_FILE), null);
+    assert.equal(orderRun("id: x\nrole: reviewer\nmodel_tier: sonnet\n", ORDER_FILE), null);
+    assert.equal(orderRun("id: x\nrole: reviewer\npass: Spec Fidelity\nmodel_tier: sonnet\n", ORDER_FILE), null);
+    assert.equal(orderRun("", ORDER_FILE), null);
   });
 });
 
@@ -395,11 +422,11 @@ describe("staged session", () => {
 describe("model tier", () => {
   const order = "id: x\nrole: reviewer\npass: spec-fidelity\nmodel_tier: opus\n";
   it("is read from the order's model_tier", () => {
-    assert.equal(orderRun(order)?.modelTier, "opus");
-    assert.equal(orderRun("id: x\nrole: reviewer\npass: spec-fidelity\ntier: opus\n"), null);
+    assert.equal(orderRun(order, ORDER_FILE)?.modelTier, "opus");
+    assert.equal(orderRun("id: x\nrole: reviewer\npass: spec-fidelity\ntier: opus\n", ORDER_FILE), null);
   });
   it("is the findings file's model_tier", () => {
-    const run = /** @type {NonNullable<ReturnType<typeof orderRun>>} */ (orderRun(order));
+    const run = /** @type {NonNullable<ReturnType<typeof orderRun>>} */ (orderRun(order, ORDER_FILE));
     const doc = { pr: "pandoscope/meta#1", head: "22056ce0", pass: "spec-fidelity", model_tier: "opus", findings: [] };
     assert.deepEqual(findingsProblems(doc, run), []);
     assert.match(findingsProblems({ ...doc, model_tier: "sonnet" }, run).join("\n"), /`model_tier` must be `opus`/);
@@ -459,5 +486,12 @@ describe("driver publishes", () => {
       assert.equal(v.allow, false, cmd);
       assert.match(v.allow ? "" : v.why, /driver (commits|publishes)/, cmd);
     }
+  });
+  // #292: the reason names where the result goes, never a review branch.
+  it("names the result file and the order's branch when it denies a git write", () => {
+    const v = bashVerdict("git push", RUN);
+    if (v.allow) assert.fail("git push should be denied");
+    assert.ok(v.why.includes(`The driver commits and pushes ${RESULT} on ${ORDER_REF} at Stop`), v.why);
+    assert.doesNotMatch(v.why, /claude\/review/);
   });
 });
