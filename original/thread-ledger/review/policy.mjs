@@ -24,6 +24,10 @@ import { schemaProblems } from "./schema.mjs";
  * @property {string} findings   the findings file, relative to the clone
  * @property {RegExp} branch     the review branch, capturing the PR number
  * @property {string} branchForm the branch as the reason spells it
+ * @property {string} orderId    the order's id, the name of its file
+ * @property {string} orderBranch the order's branch in the waybill, order/<id>
+ * @property {string} waybill    the clone of the waybill
+ * @property {string} result     the result file, the one file the session writes
  */
 /** @typedef {{ allow: true } | { allow: false, why: string }} Verdict */
 
@@ -47,6 +51,10 @@ function runFor(pass, modelTier) {
     findings: `reviews/${pass}-${modelTier}/findings.json`,
     branch: new RegExp(`^claude/review-${pass}-${modelTier}-pr(\\d+)$`),
     branchForm: `claude/review-${pass}-${modelTier}-pr<n>`,
+    orderId: "",
+    orderBranch: "",
+    waybill: "",
+    result: "",
   };
 }
 
@@ -54,9 +62,10 @@ function runFor(pass, modelTier) {
  * The review run a waybill order declares, or null:
  * the order names `role: reviewer` with its `pass` and `model_tier`.
  * @param {string} orderText the order file, YAML
+ * @param {string} [orderFile] the order file's path, <waybill>/orders/<id>.yml
  * @returns {ReviewRun | null}
  */
-export function orderRun(orderText) {
+export function orderRun(orderText, orderFile) {
   /** @param {string} key */
   const field = (key) => {
     const m = new RegExp(`^${key}:[ \\t]*(.*)$`, "m").exec(orderText);
