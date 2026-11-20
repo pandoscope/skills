@@ -6,6 +6,7 @@
 // The staged session is in test_session.mjs.
 
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { describe, it } from "node:test";
@@ -285,5 +286,40 @@ describe("findings schema", () => {
   it("rejects a field the schema does not name", () => {
     const extra = { ...good, findings: [{ ...good.findings[0], severity: "high" }] };
     assert.match(findingsProblems(extra, RUN).join("\n"), /severity/);
+  });
+});
+
+// #292: the documents describe the result on the order's branch, and none the old review branch.
+describe("documentation", () => {
+  const repo = path.join(HERE, "../../..");
+  const REVIEW_BRANCH = /claude\/review-(<pass>|\$\{)|\breview branch\b|reviews\/(<pass>|\{\{|\$\{|spec-fidelity|prose)|\bfindings\.json\b/i;
+  it("says nowhere outside the katas that findings travel on a review branch of the reviewed repository", () => {
+    const listed = spawnSync("git", ["-C", repo, "ls-files", "-z"], { encoding: "utf8" });
+    assert.equal(listed.status, 0, listed.stderr);
+    const files = listed.stdout.split("\0").filter((f) => f && !f.startsWith("tests/"));
+    /** @type {string[]} */
+    const hits = [];
+    for (const f of files) {
+      // A tracked symlink, such as .claude/skills, points at files this list already holds.
+      if (!fs.lstatSync(path.join(repo, f)).isFile()) continue;
+      const text = fs.readFileSync(path.join(repo, f), "utf8");
+      text.split("\n").forEach((line, i) => {
+        if (REVIEW_BRANCH.test(line)) hits.push(`${f}:${i + 1}: ${line.trim()}`);
+      });
+    }
+    assert.deepEqual(hits, []);
+  });
+  it("SKILL.md describes the result file on the order's branch", () => {
+    const skill = fs.readFileSync(path.join(repo, "original/thread-ledger/SKILL.md"), "utf8");
+    assert.ok(skill.includes("`results/<order id>.json`"), "names the result file");
+    assert.ok(skill.includes("`order/<order id>`"), "names the order's branch");
+    assert.ok(skill.includes("pushes nothing to the reviewed repository"), "says the reviewed repository gets nothing");
+  });
+  it("every pass file sends the reviewer's output to the result file in the clone of the waybill", () => {
+    for (const pass of ["spec-fidelity", "prose"]) {
+      const text = fs.readFileSync(path.join(repo, `original/thread-ledger/review/${pass}.md`), "utf8");
+      assert.ok(text.includes("`results/<order id>.json` in the clone of the waybill"), pass);
+      assert.ok(text.includes("`order_id`"), pass);
+    }
   });
 });
