@@ -120,6 +120,50 @@ describe("bash policy", () => {
   });
 });
 
+// #292: whatever a denial refuses, it names where a review's output goes.
+describe("every denial", () => {
+  const tools = /** @type {[string, Record<string, any>][]} */ ([
+    ["Write", { file_path: "/tmp/notes.md" }],
+    ["Edit", { file_path: "/home/user/meta/src/x.py" }],
+    ["NotebookEdit", { notebook_path: "/home/user/meta/x.ipynb" }],
+    ["Read", { file_path: "/root/.claude/session.env" }],
+    ["Agent", { prompt: "run the tests" }],
+    ["Artifact", {}],
+    ["mcp__github__add_issue_comment", {}],
+  ]);
+  const commands = [
+    "python3 x.py",
+    "echo hi > notes.txt",
+    "cat /proc/self/environ",
+    "sed -i 's/a/b/' src/x.py",
+    "sed 's/a/b/w out' src/x.py",
+    "sed -f script.sed src/x.py",
+    "awk '{ system(\"id\") }' src/x.py",
+    "awk -f prog.awk src/x.py",
+    "find . -delete",
+    "git push",
+    "git branch -D main",
+    "git config --unset user.name",
+    "git reset --hard",
+    "git -c core.hooksPath=/dev/null log",
+    "git fetch --force origin main",
+    "git stash",
+    "git tag v9",
+  ];
+  it("names the result file and the order's branch, never a review branch", () => {
+    const denials = [
+      ...tools.map(([name, input]) => ({ call: name, v: toolVerdict(name, input, RUN) })),
+      ...commands.map((cmd) => ({ call: cmd, v: toolVerdict("Bash", { command: cmd }, RUN) })),
+    ];
+    for (const { call, v } of denials) {
+      if (v.allow) assert.fail(`${call} should be denied`);
+      assert.ok(v.why.includes(RESULT), `${call}: ${v.why}`);
+      assert.ok(v.why.includes(ORDER_REF), `${call}: ${v.why}`);
+      assert.doesNotMatch(v.why, /claude\/review|findings file/, call);
+    }
+  });
+});
+
 describe("tool policy", () => {
   it("allows reads and the findings file only", () => {
     assert.equal(toolVerdict("Read", { file_path: "/x" }, RUN).allow, true);

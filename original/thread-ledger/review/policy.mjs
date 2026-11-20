@@ -105,17 +105,45 @@ const FORGE_READ = /^mcp__github__(get_|list_|search_|pull_request_read$|issue_r
 const EDITORS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 
 /**
+ * A denial that names the result file and the order's branch,
+ * with a closing sentence that names both when its reason does not.
+ * @param {Verdict} verdict
+ * @param {ReviewRun} run
+ * @returns {Verdict}
+ */
+function namingOutput(verdict, run) {
+  if (verdict.allow) return verdict;
+  if (verdict.why.includes(run.result) && verdict.why.includes(run.orderBranch)) return verdict;
+  return {
+    allow: false,
+    why: `${verdict.why} A review writes only ${run.result}; the driver pushes it on ${run.orderBranch} of the waybill.`,
+  };
+}
+
+/**
  * Verdict on one tool call: `{ allow: true }` or `{ allow: false, why }`.
  *
  * `why` is the reason the model reads.
  * It names the rule and the allowed alternative,
  * never a bare "denied" — a refusal without the criterion is what a model routes around.
+ * Every denial names the result file and the order's branch.
  * @param {string} name
  * @param {Record<string, any> | undefined} input
  * @param {ReviewRun} run
  * @returns {Verdict}
  */
 export function toolVerdict(name, input, run) {
+  return namingOutput(toolJudgement(name, input, run), run);
+}
+
+/**
+ * {@link toolVerdict} before its denial names the result file and the order's branch.
+ * @param {string} name
+ * @param {Record<string, any> | undefined} input
+ * @param {ReviewRun} run
+ * @returns {Verdict}
+ */
+function toolJudgement(name, input, run) {
   const target = input?.file_path ?? input?.path ?? input?.pattern ?? "";
   if (typeof target === "string" && target && namesSecret(target)) {
     return {
@@ -140,7 +168,8 @@ export function toolVerdict(name, input, run) {
       allow: false,
       why:
         `${name} on ${file || "(no path)"} is not allowed in a review session. ` +
-        `The only file a review writes is ${run.result}, the result file in the clone of the waybill.`,
+        `The only file a review writes is ${run.result}, the result file in the clone of the waybill; ` +
+        `the driver pushes it on ${run.orderBranch} at Stop.`,
     };
   }
   if (name === "Bash") return bashVerdict(input?.command ?? "", run);
@@ -155,7 +184,9 @@ export function toolVerdict(name, input, run) {
   }
   return {
     allow: false,
-    why: `${name} is not on the review session's tool list. Read the code with Read, Grep, Glob and read-only Bash; write only ${run.result}.`,
+    why:
+      `${name} is not on the review session's tool list. Read the code with Read, Grep, Glob and read-only Bash; ` +
+      `write only ${run.result}, which the driver pushes on ${run.orderBranch} of the waybill.`,
   };
 }
 
@@ -214,13 +245,14 @@ const GIT_WRITE_FLAGS = {
 
 /**
  * Verdict on a Bash command under the read-only policy.
+ * Every denial names the result file and the order's branch.
  * @param {string} command
  * @param {ReviewRun} run
  * @returns {Verdict}
  */
 export function bashVerdict(command, run) {
   /** @param {string} why @returns {Verdict} */
-  const deny = (why) => ({ allow: false, why: `Bash \`${trim(command)}\`: ${why}` });
+  const deny = (why) => namingOutput({ allow: false, why: `Bash \`${trim(command)}\`: ${why}` }, run);
   if (namesSecret(command)) {
     return deny("that path holds the session's own secrets. A review reads the repository, not the environment.");
   }
@@ -247,7 +279,7 @@ export function bashVerdict(command, run) {
       );
     }
     if (cmd === "sed" && args.some((a) => /^-i/.test(a) || a === "--in-place")) {
-      return deny(`\`sed -i\` edits in place. Read with sed; write only the result file ${run.result}.`);
+      return deny("`sed -i` edits in place. Read with sed.");
     }
     if (cmd === "sed") {
       const why = sedWhy(script);
@@ -287,7 +319,7 @@ function gitWhy(args, run) {
   if (GIT_READ.has(sub)) {
     const write = GIT_WRITE_FLAGS[sub];
     if (write && rest.some((x) => write.test(x))) {
-      return `\`git ${sub} ${rest.join(" ")}\` writes. Read subcommands only; the driver commits and pushes the result file.`;
+      return `\`git ${sub} ${rest.join(" ")}\` writes. Read subcommands only.`;
     }
     if (sub === "fetch" && rest.some((x) => /^--(force|refmap)$|^-f$|^\+/.test(x))) {
       return "`git fetch` with --force or a + refspec overwrites refs. Fetch plainly.";
@@ -310,7 +342,7 @@ function gitWhy(args, run) {
       "write the result file and stop."
     );
   }
-  return `\`git ${sub}\` is not a read subcommand. Allowed: ${[...GIT_READ].slice(0, 8).join(", ")}, …; the driver commits and pushes the result file.`;
+  return `\`git ${sub}\` is not a read subcommand. Allowed: ${[...GIT_READ].slice(0, 8).join(", ")}, ….`;
 }
 
 // ----------------------------------------------------------- parsing
