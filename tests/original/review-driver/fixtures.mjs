@@ -1,4 +1,4 @@
-// The review driver katas' order, run and staged session (skills#195, skills#292).
+// The review driver katas' order, run and staged session (skills#195, skills#292, skills#295).
 //
 // A staged session has two origins, the reviewed repository and the waybill,
 // and a clone of each under the session's root,
@@ -19,7 +19,11 @@ export const DRIVER = path.join(HERE, "../../../original/thread-ledger/review-dr
 export const PROMPT = "PANDO-REVIEW: spec-fidelity tier=sonnet\n\nReview the pull request named in the trigger.";
 // Every kata session is dispatched by this order.
 // The Routine's prompt, DISPATCH below, carries no data (skills#195, waybill#1).
-export const ORDER_ID = "review-spec-fidelity-sonnet-meta143-1";
+// Its id has the name form of pandoscope 0.5.0: an underscore separates the parts,
+// a hyphen stands only inside a part (skills#295).
+export const ORDER_ID = "review_spec-fidelity_sonnet_meta143_1";
+// The name form of the orders placed before pandoscope 0.5.0, which keep working (skills#295).
+export const OLD_ORDER_ID = "review-spec-fidelity-sonnet-meta143-1";
 export const ORDER =
   `id: ${ORDER_ID}\nrole: reviewer\npass: spec-fidelity\nmodel_tier: sonnet\n` +
   "subject: pandoscope/meta#143\ntickets:\n  - pandoscope/skills#195\n";
