@@ -497,16 +497,19 @@ function trim(command) {
 // ---------------------------------------------------------- findings
 
 const PR = /^[\w.-]+\/[\w.-]+#(\d+)$/;
+// DECISION:SCOPE — the schema leaves the result's top level open and keeps each finding closed.
+// #292 asks for a schema that lets the result grow; #278 adds the session id, the setup report
+// and the end state. A misspelt required field still fails as missing.
 const FINDINGS_SCHEMA = /** @type {import("./schema.mjs").Schema} */ (
   JSON.parse(fs.readFileSync(new URL("./findings.schema.json", import.meta.url), "utf8"))
 );
 
 /**
- * Problems with a parsed findings file, in field order; empty when valid.
+ * Problems with a parsed result file, in field order; empty when valid.
  *
  * The contract is `findings.schema.json` (skills#225): X8's finding shape (skills#41)
- * under a header that names what was reviewed. The order adds what no schema knows:
- * `pass` and `model_tier` must be the run's.
+ * under a header that names the order and what was reviewed. The order adds what no schema knows:
+ * `order_id`, `pass` and `model_tier` must be the run's.
  * @param {unknown} doc
  * @param {ReviewRun} run
  * @returns {string[]}
@@ -515,6 +518,9 @@ export function findingsProblems(doc, run) {
   const out = schemaProblems(FINDINGS_SCHEMA, doc);
   if (!doc || typeof doc !== "object" || Array.isArray(doc)) return out;
   const d = /** @type {Record<string, unknown>} */ (doc);
+  if (typeof d.order_id === "string" && d.order_id !== run.orderId) {
+    out.push(`\`order_id\` must be \`${run.orderId}\``);
+  }
   if (typeof d.pass === "string" && d.pass !== run.pass) out.push(`\`pass\` must be \`${run.pass}\``);
   if (typeof d.model_tier === "string" && d.model_tier !== run.modelTier) {
     out.push(`\`model_tier\` must be \`${run.modelTier}\``);
