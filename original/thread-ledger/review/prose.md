@@ -44,16 +44,23 @@ Judge both across the changed files and the files that they reference.
 
 Each finding names a block to redraw, such as a paragraph, a list or a comment.
 It never proposes a replacement sentence.
-Your findings go only in the findings file below.
+Your findings go only in the result file below.
 
 # Output contract
 
-Write one JSON object to `reviews/prose-{{ model_tier }}/findings.json` in the clone.
+{#- DECISION:SCOPE: the composer renders no order id (pandoscope's src/pandoscope/reinset/review.py),
+    so the reviewer reads it from the waybill's history,
+    and the driver's denials and Stop reasons name the full path. #}
+Write one JSON object, the result, to `results/<order id>.json` in the clone of the waybill.
+That clone is `waybill/` under your working directory.
+The order id is the name, without `.yml`, of the order file that the newest commit to its `orders/` added:
+`git -C <waybill clone> log -1 --name-only --format= -- orders/` prints that file.
 The Write tool creates the directory.
 Give the object these fields:
 
 {{ findings_contract }}
 
+`order_id` is the order id.
 `pr` is `{{ repo }}#{{ n }}`, `head` is `{{ head }}`, `pass` is `prose` and `model_tier` is `{{ model_tier }}`.
 In each finding, `rule` quotes, verbatim, the rules-file sentence that the block violates.
 A ticket sentence never counts as a rule.
@@ -62,4 +69,4 @@ A ticket sentence never counts as a rule.
 and `finding` states what is wrong with the block.
 
 Then reply with at most three lines and stop.
-The review driver commits and pushes the findings file after you stop.
+The review driver commits and pushes the result file on the order's branch after you stop.

@@ -489,17 +489,23 @@ The driver finds the order at `waybill/orders/<name>.yml` from the `order/<name>
 In a review session, two hooks replace the heartbeat.
 
 On `PreToolUse`, `review-driver.mjs` denies every call outside the read-only policy in `review/policy.mjs`.
-The policy allows read commands, git read subcommands and writes to the findings file.
+The policy allows read commands, git read subcommands and writes to the result file.
 It denies every git write and every forge write.
 
+The session's one output is the result file `results/<order id>.json` in the clone of the waybill,
+beside the order file `orders/<order id>.yml`.
+The result holds the order's id and the findings.
+`review/findings.schema.json` defines the result contract.
+Its top level admits fields that the contract does not name yet, so the result can grow.
+
 On `Stop`, the driver refuses to end the session until the session has read every ticket the order names.
-It then refuses until `reviews/<pass>-<model_tier>/findings.json` validates
-against `review/findings.schema.json`, the one definition of the findings contract.
-Once it validates, the driver writes its denials and a trace of the session's calls and usage beside the findings,
-then commits the review directory and pushes it on `claude/review-<pass>-<model_tier>-pr<n>`.
-The composer switched the clone to that branch at the pull request head before the session started,
+It then refuses until the result file validates against the contract.
+Once the file validates, the driver commits that one file and pushes it on the order's branch `order/<order id>` of the waybill.
+It refuses to end the session until the push has landed, and its reason names the waybill and the branch.
+The driver pushes nothing to the reviewed repository.
+The composer switched the clone of the reviewed repository to the pull request head before the session started,
 so the reviewer runs no git step.
-They travel on the review branch, so a run is collected from its branch alone.
+The driver's denials and a trace of the session's calls and usage stay in the session, under the config directory.
 The heartbeat's sentinel skips a session for which `review-driver.mjs --is-review` exits 0.
 
 The review tasks live in `review/`, one file per pass, e.g. `review/spec-fidelity.md`.
