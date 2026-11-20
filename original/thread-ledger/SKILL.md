@@ -501,7 +501,9 @@ Its top level admits fields that the contract does not name yet, so the result c
 On `Stop`, the driver refuses to end the session until the session has read every ticket the order names.
 It then refuses until the result file validates against the contract.
 Once the file validates, the driver commits that one file and pushes it on the order's branch `order/<order id>` of the waybill.
-It refuses to end the session until the push has landed, and its reason names the waybill and the branch.
+A Stop whose push did not land is refused, with a reason that names the waybill and the branch.
+When the push fails again on the Stop that follows, the loop guard releases the session:
+the driver writes that the review is released INCOMPLETE, and the order's branch holds no result.
 The driver pushes nothing to the reviewed repository.
 The composer switched the clone of the reviewed repository to the pull request head before the session started,
 so the reviewer runs no git step.

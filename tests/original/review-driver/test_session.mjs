@@ -190,6 +190,17 @@ describe("driver publishes", () => {
     const after = tip(s.origins.waybill, s.ref);
     assert.equal(sh(s.waybill, "git", "diff", "--name-status", `${after}~1`, after), `A\tresults/${ORDER_ID}.json`);
   });
+  it("releases INCOMPLETE a guarded Stop whose push fails again, with no result on the order's branch", () => {
+    const s = stage();
+    const before = tip(s.origins.waybill, s.ref);
+    fs.writeFileSync(path.join(s.origins.waybill, "hooks", "pre-receive"), "#!/bin/sh\nexit 1\n", { mode: 0o755 });
+    writeResult(s, resultFor(s));
+    assert.equal(fire(s, { hook_event_name: "Stop" }).code, 2);
+    const again = fire(s, { hook_event_name: "Stop", stop_hook_active: true });
+    assert.equal(again.code, 0);
+    assert.match(again.err, /released INCOMPLETE — result-pushed/);
+    assert.equal(tip(s.origins.waybill, s.ref), before);
+  });
   it("lands one result commit when the result file changes between a refused push and the retry", () => {
     const s = stage();
     const before = tip(s.origins.waybill, s.ref);

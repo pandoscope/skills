@@ -366,6 +366,13 @@ describe("documentation", () => {
     assert.ok(skill.includes("`order/<order id>`"), "names the order's branch");
     assert.ok(skill.includes("pushes nothing to the reviewed repository"), "says the reviewed repository gets nothing");
   });
+  // A guarded Stop whose push fails again is released (the staged session's
+  // "releases a guarded Stop whose reason was already delivered"); SKILL.md says so.
+  it("SKILL.md says a push that keeps failing releases the session INCOMPLETE", () => {
+    const skill = fs.readFileSync(path.join(repo, "original/thread-ledger/SKILL.md"), "utf8");
+    assert.doesNotMatch(skill, /until the push has landed/);
+    assert.match(skill, /push fails again[^.]*released INCOMPLETE/);
+  });
   it("every pass file sends the reviewer's output to the result file in the clone of the waybill", () => {
     for (const pass of ["spec-fidelity", "prose"]) {
       const text = fs.readFileSync(path.join(repo, `original/thread-ledger/review/${pass}.md`), "utf8");
