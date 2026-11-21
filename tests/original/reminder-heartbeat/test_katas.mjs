@@ -201,6 +201,9 @@ function fire(dir, spec, script = HEARTBEAT) {
       // absent, which is a session's first Stop before the composer
       // has written anything (skills#181).
       ...(spec.answers_path ? { REINSET_ANSWERS: path.join(dir, spec.answers_path) } : {}),
+      // Only set when the kata names it, so every other kata keeps
+      // exercising the path a session without a shortcode map takes.
+      ...(spec.shortcode_map ? { SHORTCODE_MAP: path.join(dir, spec.shortcode_map) } : {}),
     },
   });
   assert.equal(result.error, undefined, `the hook did not run: ${result.error}`);

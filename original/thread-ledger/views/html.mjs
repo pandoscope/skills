@@ -28,7 +28,7 @@ export function esc(text) {
 /**
  * The ticket-URL builder for one render, from the store's forge config.
  *
- * The same waybill `shortcodes.json` the hygiene check reads (flat map =
+ * The same shortcode map the hygiene check reads (flat map =
  * GitHub defaults; structured = the org's own base and patterns), passed
  * in by the caller: views build strings and never touch a filesystem.
  */

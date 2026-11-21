@@ -296,17 +296,19 @@ without one.
 **Responses follow the reference style, and mistakes are corrected as
 an exercise.** In prose, tickets and PRs are linked shortcode refs —
 `XXX#n` for tickets, `XXX!n` for PRs, each a markdown link to the page
-its sigil implies — with the shortcodes defined once, in the waybill's
-`shortcodes.json` (pandoscope/pandoscope#61), read from the session's
-waybill checkout: `WAYBILL_ROOT`, else `waybill` beside the store.
+its sigil implies — with the shortcodes defined once, in the org's
+shortcode map (pandoscope/pandoscope#61): the file `SHORTCODE_MAP` names,
+anywhere on disk, under any name.
+The session setup sets the variable; in this org it names the waybill's `shortcodes.json`.
 That file is either a flat shortcode →
 `owner/repo` map (GitHub assumed) or structured —
 `{forge, patterns: {ticket, pr}, repos}`, patterns interpolating
 `{base}`/`{repo}`/`{n}` — so the forge is org configuration,
 and no vendor is named in code.
-Without a waybill checkout the check reports unconfigured and says where it looked.
-A map in the store beside it (`config/shortcodes.json` or `repo-codes.json`) fails every reader.
-A waybill map that does not parse, or is not an object, fails the response check and render.
+With `SHORTCODE_MAP` unset the check reports unconfigured, says that no shortcode map is configured and names the variable,
+and the views show plain repository names.
+With a map configured, a map in the store (`config/shortcodes.json` or `repo-codes.json`) fails every reader.
+A configured map that is missing, does not parse, or is not an object, fails the response check and render, each naming the file.
 A thread opened this turn is announced as
 `new thread: <slug>`, and every thread the turn summary declares is
 named in the prose that discusses it. Code spans are quoted material
@@ -394,7 +396,7 @@ therefore lives in two report-only tools, and neither can write:
   whose ticket is closed, and a completed thread whose `--pr` never
   merged. Deliberately forge-specific: it is `gh`-bound by declaration
   and refuses without it, unlike the render path, which builds every
-  ticket link through the waybill's `shortcodes.json` forge
+  ticket link through the shortcode map's forge
   config and names no vendor (skills#102).
 
 Deciding what event to append stays with the reader — a reconciler
