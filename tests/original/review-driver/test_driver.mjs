@@ -186,7 +186,7 @@ describe("tool policy", () => {
       "/home/user/meta/src/x.py",
       `/home/user/meta/results/${ORDER_ID}.json`,
       `${WAYBILL}/orders/${ORDER_ID}.yml`,
-      `${WAYBILL}/results/review-spec-fidelity-sonnet-meta143-2.json`,
+      `${WAYBILL}/results/review_spec-fidelity_sonnet_meta143_2.json`,
       `${WAYBILL}/results/${ORDER_ID}.json.bak`,
     ]) {
       const v = toolVerdict("Write", { file_path: file }, RUN);
@@ -245,8 +245,28 @@ describe("result contract", () => {
   it("requires the order's id", () => {
     const { order_id: _, ...without } = good;
     assert.match(findingsProblems(without, RUN).join("\n"), /`order_id` is missing/);
-    const foreign = findingsProblems({ ...good, order_id: "review-spec-fidelity-sonnet-meta143-2" }, RUN);
+    const foreign = findingsProblems({ ...good, order_id: "review_spec-fidelity_sonnet_meta143_2" }, RUN);
     assert.ok(foreign.includes(`\`order_id\` must be \`${ORDER_ID}\``), foreign.join("\n"));
+  });
+  // #295: pandoscope 0.5.0 names an order with underscores between its parts;
+  // the orders placed before keep their hyphens.
+  const opusRun = (/** @type {string} */ id) => {
+    const order = `id: ${id}\nrole: reviewer\npass: spec-fidelity\nmodel_tier: opus\n`;
+    return /** @type {NonNullable<ReturnType<typeof orderRun>>} */ (orderRun(order, `${WAYBILL}/orders/${id}.yml`));
+  };
+  const NEW_FORM = "review_spec-fidelity_opus_pando58_1";
+  const OLD_FORM = "review-spec-fidelity-opus-pando58-1";
+  it("takes an order id of the new form, for an order of that name", () => {
+    assert.deepEqual(findingsProblems({ ...good, order_id: NEW_FORM, model_tier: "opus" }, opusRun(NEW_FORM)), []);
+  });
+  it("takes an order id of the old form, for an order of that name", () => {
+    assert.deepEqual(findingsProblems({ ...good, order_id: OLD_FORM, model_tier: "opus" }, opusRun(OLD_FORM)), []);
+  });
+  it("refuses an order id that differs from the order's only in its separators", () => {
+    for (const [id, order] of [[OLD_FORM, NEW_FORM], [NEW_FORM, OLD_FORM]]) {
+      const p = findingsProblems({ ...good, order_id: id, model_tier: "opus" }, opusRun(order));
+      assert.deepEqual(p, [`\`order_id\` must be \`${order}\``], `${id} for ${order}`);
+    }
   });
   // #292: #278 adds the session id, the setup report and the end state to the same object.
   it("accepts a top-level field the contract does not name yet", () => {

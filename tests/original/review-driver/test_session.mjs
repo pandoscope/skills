@@ -10,7 +10,7 @@ import path from "node:path";
 import { describe, it } from "node:test";
 
 import { bashVerdict, findingsProblems } from "../../../original/thread-ledger/review/policy.mjs";
-import { DRIVER, ORDER, ORDER_ID, ORDER_REF, PROMPT, RESULT, RUN, fire, issueRead, origins, placeOrder, refs, resultFor, sessionFor, sh, stage, tip, writeResult } from "./fixtures.mjs";
+import { DRIVER, OLD_ORDER_ID, ORDER, ORDER_ID, ORDER_REF, PROMPT, RESULT, RUN, fire, issueRead, origins, placeOrder, refs, resultFor, sessionFor, sh, stage, tip, writeResult } from "./fixtures.mjs";
 
 describe("staged session", () => {
   it("blocks Stop until every ticket in the order was read", () => {
@@ -159,7 +159,7 @@ describe("driver publishes", () => {
   });
   it("lands the results of two orders with the same pass and model tier on one pull request, each on its own order's branch", () => {
     const o = origins();
-    const second = "review-spec-fidelity-sonnet-meta143-2";
+    const second = "review_spec-fidelity_sonnet_meta143_2";
     placeOrder(o, ORDER_ID);
     placeOrder(o, second);
     for (const id of [ORDER_ID, second]) {
@@ -174,6 +174,23 @@ describe("driver publishes", () => {
       assert.doesNotMatch(tree, new RegExp(`results/${other}\\.json`));
     }
   });
+  // #295: the order's id is the order file's base name and is never split,
+  // so an id of either name form lands its result on its own order's branch.
+  for (const id of ["review_spec-fidelity_opus_pando58_1", OLD_ORDER_ID]) {
+    it(`lands the result of order ${id} on order/${id}`, () => {
+      const o = origins();
+      placeOrder(o, id);
+      const s = sessionFor(o, id);
+      const before = tip(o.waybill, `order/${id}`);
+      writeResult(s, resultFor(s));
+      const stop = fire(s, { hook_event_name: "Stop" });
+      assert.equal(stop.code, 0, stop.err);
+      const after = tip(o.waybill, `order/${id}`);
+      assert.equal(sh(s.waybill, "git", "fetch", "-q", "origin"), "");
+      assert.equal(sh(s.waybill, "git", "diff", "--name-status", before, after), `A\tresults/${id}.json`);
+      assert.equal(JSON.parse(sh(s.waybill, "git", "show", `${after}:results/${id}.json`)).order_id, id);
+    });
+  }
   it("keeps the session from ending while the push fails, naming the waybill and the order's branch", () => {
     const s = stage();
     const hook = path.join(s.origins.waybill, "hooks", "pre-receive");
