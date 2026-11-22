@@ -171,3 +171,22 @@ export function issueRead(id, owner, repo, n, error = false) {
     `${JSON.stringify({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, is_error: error, content: [{ type: "text", text: "{\"number\":1}" }] }] } })}\n`
   );
 }
+
+/**
+ * One Bash call and its result, as the transcript records them (skills#297).
+ * @param {string} id @param {string} command @param {boolean} [error]
+ */
+export function bashCall(id, command, error = false) {
+  return (
+    `${JSON.stringify({ type: "assistant", message: { role: "assistant", model: "m", content: [{ type: "tool_use", id, name: "Bash", input: { command } }] } })}\n` +
+    `${JSON.stringify({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, is_error: error, content: error ? "Exit code 1\ngh: Not Found (HTTP 404)" : "{\"number\":1}" }] } })}\n`
+  );
+}
+
+/**
+ * One ticket read through `gh api` and its result (skills#297).
+ * @param {string} id @param {string} owner @param {string} repo @param {number} n @param {boolean} [error]
+ */
+export function ghRead(id, owner, repo, n, error = false) {
+  return bashCall(id, `gh api repos/${owner}/${repo}/issues/${n}`, error);
+}

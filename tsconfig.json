@@ -15,6 +15,7 @@
     "original/thread-ledger/review/policy.mjs",
     "tests/original/review-driver/fixtures.mjs",
     "tests/original/review-driver/test_driver.mjs",
+    "tests/original/review-driver/test_gh_api.mjs",
     "tests/original/review-driver/test_session.mjs"
   ]
 }
