@@ -28,12 +28,12 @@ valid_surface() { case " $surfaces " in *" $1 "*) return 0 ;; *) return 1 ;; esa
 rules_for() {
     case $1 in
         chat) set -- shared chat ;;
-        ticket | tracker) set -- shared docs tracker argued ;;
-        markdown) set -- shared docs markdown layout argued ;;
-        skill) set -- shared docs markdown layout skill ;;
-        primed) set -- shared docs markdown layout primed ;;
-        comment) set -- shared docs code comment layout ;;
-        commit) set -- shared docs code commit ;;
+        ticket | tracker) set -- shared reader docs tracker argued ;;
+        markdown) set -- shared reader docs markdown layout argued ;;
+        skill) set -- shared reader docs markdown layout skill ;;
+        primed) set -- shared reader docs markdown layout primed ;;
+        comment) set -- shared reader docs code comment layout ;;
+        commit) set -- shared reader docs code commit ;;
     esac
     for r in "$@"; do echo "$here/rules/$r.md"; done
 }

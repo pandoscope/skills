@@ -419,6 +419,16 @@ rules_ids() {
   [[ "$output" != *"rules/tracker.md"* ]]
 }
 
+@test "--rules gives the reader rules to every surface except chat" {
+  for surface in ticket tracker markdown skill primed comment commit; do
+    run "$CHECK" --rules "$surface"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"rules/reader.md"* ]]
+  done
+  run "$CHECK" --rules chat
+  [[ "$output" != *"rules/reader.md"* ]]
+}
+
 @test "--rules gives the argued register to docs and tickets, not to instruction files" {
   for surface in markdown ticket tracker; do
     run "$CHECK" --rules "$surface"

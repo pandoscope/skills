@@ -25,6 +25,7 @@ Name the surface first: `chat`, `ticket`, `tracker` (pull request bodies and com
 `examples/` holds before-and-after passages from real prose, one file per register.
 Read the file for your surface before you draft:
 `argued.md` for `markdown`, `ticket` and `tracker`,
+`instruction.md` for `skill` and `primed`,
 `comment.md` for `comment`,
 and `commit.md` for `commit`.
 
@@ -38,7 +39,8 @@ and `commit.md` for `commit`.
    A rewrite adds `--before <old-file>`; `-` as file reads stdin.
    Fix every F finding.
    Confirm or dismiss every H candidate, and fix the confirmed ones.
-4. Judge every M rule the run lists at its end.
+4. Judge every M rule the run lists at its end, the reader rules first.
+   For text that describes code or a process, run [the bracket loop](brackets.md): a reader who sees only the text finds what you cannot, because you know what you meant.
 5. Repeat steps 3 and 4.
    From the second round on, fix findings in place.
 6. Layout comes last on the surfaces that read the layout rules.
@@ -48,6 +50,11 @@ and `commit.md` for `commit`.
 
 A text passes when `check.sh` exits 0, every H candidate is settled and no M rule is broken.
 M findings still open after round two go to the principal as a report, not into a third round.
+
+## The principal's edits
+
+When the principal brackets, rewrites or questions a text, follow "When the principal brackets" in [brackets.md](brackets.md).
+The examples and rules grow from those edits, one approved text at a time.
 
 ## Rewriting prose about code
 
