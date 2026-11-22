@@ -77,3 +77,48 @@ Both Sonnet reviews of [pandoscope/skills#230](https://github.com/pandoscope/ski
 
 The policy names what is allowed and the check names the code, so only the check passes or denies.
 Each item gives one flaw as its effect, then its cause.
+
+## A README that restates what the code states
+
+Before:
+
+```text
+An order that fits the schema must also fit its role's name pattern
+(`src/pandoscope/reinset/order_name.py`):
+`review_<pass>_<model_tier>_<code><n>_<step>` for a reviewer
+and `implement_<pass>_<model_tier>_<code><n>_<step>` for an implementer,
+as in `review_spec-fidelity_opus_pando58_1`.
+```
+
+After:
+
+```text
+An order that fits the schema must also fit its role's name pattern,
+which the table `PATTERNS` in `src/pandoscope/reinset/order_name.py` states,
+as `review_spec-fidelity_opus_pando58_1` for a reviewer
+and `implement_build_opus_pando57_1` for an implementer.
+```
+
+The README held a second copy of the two patterns, and a copy drifts.
+Under `one-home`, it names the table that states them and keeps one example name per role; a test fails when a pattern comes back.
+
+## A glossary entry that used a term defined after it
+
+Before:
+
+```text
+A **harness** such as Claude Code, Hermes or Codex gives the model tools, files and a session.
+Some harnesses can also start a session through a webhook when an event occurs,
+such as a pull request opened on the forge.
+```
+
+After:
+
+```text
+A **harness** such as Claude Code, Hermes or Codex gives the model tools, files and a working environment.
+Some harnesses can also start the model through a webhook when an event occurs,
+such as a pull request opened on the forge.
+```
+
+The entry for an agent session builds on the agent, and the agent on the harness, so "session" in the harness entry pointed forward.
+Under `entry-order`, an entry mentions only terms defined without it, whether or not the mention is a link.

@@ -137,3 +137,36 @@ After:
 
 The first sentence names the constant it describes, so it has a subject.
 The unverified claims are listed, and the model is named as the one who makes them.
+
+## A docstring that runs its cases into one sentence
+
+Before:
+
+```python
+    Raises ImplementError when the pass has no pass file,
+    when the subject's clone is missing
+    or belongs to another repository,
+    when a ref cannot be read,
+    when the pass is build and the subject a pull request
+    or the pass fix and the subject an issue, naming both,
+    when the composer does not know which subject the pass works on,
+    when no branch or more than one points at a pull request's head,
+    and when a fix round finds no disposition folder.
+```
+
+After:
+
+```python
+    Raises ImplementError in any of the following cases:
+    - when the pass has no pass file,
+    - when the subject's clone is missing or belongs to another repository,
+    - when a ref cannot be read,
+    - when the pass is build and the subject a pull request,
+      or the pass fix and the subject an issue, naming both,
+    - when the composer does not know which subject the pass works on,
+    - when no branch or more than one points at a pull request's head,
+    - when a fix round finds no disposition folder.
+```
+
+Seven cases ran into one sentence, three with an "or" inside, and the closing "and when" read as if all of them had to hold.
+Under `relation`, "in any of the following cases" names how the cases combine, and each case is one item.
