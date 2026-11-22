@@ -149,6 +149,11 @@ describe("every denial", () => {
     "git fetch --force origin main",
     "git stash",
     "git tag v9",
+    "gh issue view 297",
+    "gh api -X POST repos/pandoscope/skills/issues/297/comments",
+    "gh api repos/pandoscope/skills/issues/297 -f state=closed",
+    "gh api repos/pandoscope/skills/issues/297 --input body.json",
+    "gh api graphql",
   ];
   it("names the result file and the order's branch, never a review branch", () => {
     const denials = [
@@ -392,6 +397,19 @@ describe("documentation", () => {
     const skill = fs.readFileSync(path.join(repo, "original/thread-ledger/SKILL.md"), "utf8");
     assert.doesNotMatch(skill, /until the push has landed/);
     assert.match(skill, /push fails again[^.]*released INCOMPLETE/);
+  });
+  // #297: the task names the commands a session has, and the policy allows each.
+  it("_task.md names gh api reads the policy allows, and no retired read tool", () => {
+    const task = fs.readFileSync(path.join(repo, "original/thread-ledger/review/_task.md"), "utf8");
+    assert.doesNotMatch(task, /read tool/);
+    const rendered = task.replaceAll("{{ repo }}", "pandoscope/meta").replaceAll("{{ n }}", "143");
+    const commands = [...rendered.matchAll(/`(gh api [^`]+)`/g)].map((m) => m[1]);
+    assert.ok(commands.some((c) => c.includes("/pulls/143")), rendered);
+    assert.ok(commands.some((c) => c.includes("/issues/<n>")), rendered);
+    for (const c of commands) {
+      const concrete = c.replace("<owner>", "pandoscope").replace("<repo>", "skills").replace("<n>", "297");
+      assert.deepEqual(bashVerdict(concrete, RUN), { allow: true }, concrete);
+    }
   });
   it("every pass file sends the reviewer's output to the result file in the clone of the waybill", () => {
     for (const pass of ["spec-fidelity", "prose"]) {

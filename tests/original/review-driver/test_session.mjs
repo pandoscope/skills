@@ -10,7 +10,7 @@ import path from "node:path";
 import { describe, it } from "node:test";
 
 import { bashVerdict, findingsProblems } from "../../../original/thread-ledger/review/policy.mjs";
-import { DRIVER, OLD_ORDER_ID, ORDER, ORDER_ID, ORDER_REF, PROMPT, RESULT, RUN, fire, issueRead, origins, placeOrder, refs, resultFor, sessionFor, sh, stage, tip, writeResult } from "./fixtures.mjs";
+import { DISPATCH, DRIVER, OLD_ORDER_ID, ORDER, ORDER_ID, ORDER_REF, PROMPT, RESULT, RUN, fire, ghRead, issueRead, origins, placeOrder, refs, resultFor, sessionFor, sh, stage, tip, writeResult } from "./fixtures.mjs";
 
 describe("staged session", () => {
   it("blocks Stop until every ticket in the order was read", () => {
@@ -25,6 +25,38 @@ describe("staged session", () => {
     stop = fire(s, { hook_event_name: "Stop" });
     assert.equal(stop.code, 2);
     assert.ok(stop.err.includes(`not complete until the result file ${s.result} exists`), stop.err);
+  });
+
+  // #297: the GitHub read tools are retired; a session reads its tickets with `gh api`.
+  it("names the gh api read of each unread ticket in the tickets-read reason", () => {
+    const s = stage();
+    fs.writeFileSync(s.order, `${ORDER}  - pandoscope/waybill#1\n`);
+    const stop = fire(s, { hook_event_name: "Stop" });
+    assert.equal(stop.code, 2);
+    assert.ok(stop.err.includes("gh api repos/pandoscope/waybill/issues/1"), stop.err);
+    assert.doesNotMatch(stop.err, /issue read tool/);
+    assert.deepEqual(bashVerdict("gh api repos/pandoscope/waybill/issues/1", RUN), { allow: true });
+  });
+
+  it("gets past tickets-read on a transcript that reads every ticket through gh api", () => {
+    const s = stage();
+    fs.writeFileSync(s.order, `${ORDER}  - pandoscope/waybill#1\n`);
+    fs.writeFileSync(
+      s.transcript,
+      `${JSON.stringify({ type: "user", message: { role: "user", content: DISPATCH } })}\n` +
+        ghRead("g1", "pandoscope", "skills", 195) +
+        ghRead("g2", "pandoscope", "waybill", 1),
+    );
+    const allowed = fire(s, { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "gh api repos/pandoscope/skills/issues/195" } });
+    assert.equal(allowed.code, 0, allowed.err);
+    const stop = fire(s, { hook_event_name: "Stop" });
+    assert.equal(stop.code, 2);
+    assert.doesNotMatch(stop.err, /every ticket the order names/);
+    assert.ok(stop.err.includes(`not complete until the result file ${s.result} exists`), stop.err);
+    writeResult(s, resultFor(s));
+    const done = fire(s, { hook_event_name: "Stop" });
+    assert.equal(done.code, 0, done.err);
+    assert.match(done.err, /Review complete/);
   });
 
   it("denies at PreToolUse, logs it, and publishes once the criteria hold", () => {
@@ -254,5 +286,100 @@ describe("driver publishes", () => {
     if (v.allow) assert.fail("git push should be denied");
     assert.ok(v.why.includes(`The driver commits and pushes ${RESULT} on ${ORDER_REF} at Stop`), v.why);
     assert.doesNotMatch(v.why, /claude\/review/);
+  });
+});
+
+// #297: the driver always publishes a result.
+// A run released with a completion check unmet pushes a result that says so,
+// names the check and lists the calls the policy denied.
+describe("a review released incomplete", () => {
+  /** @param {ReturnType<typeof stage>} s */
+  const pushed = (s) => {
+    sh(s.waybill, "git", "fetch", "-q", "origin");
+    return JSON.parse(sh(s.waybill, "git", "show", `origin/${s.ref}:results/${s.id}.json`));
+  };
+  const finding = { file: "src/x.py", line: 3, rule: "The parser accepts owner/repo!n references.", input: "owner/repo!7", finding_basis: "decided", confidence: 80, finding: "Bang references raise." };
+  /** @type {[string, (s: ReturnType<typeof stage>) => string | null][]} */
+  const cases = [
+    [
+      "tickets-read",
+      (s) => {
+        fs.writeFileSync(s.order, `${ORDER}  - pandoscope/waybill#1\n`);
+        const text = JSON.stringify({ ...resultFor(s), findings: [finding] });
+        fs.mkdirSync(path.dirname(s.result), { recursive: true });
+        fs.writeFileSync(s.result, text);
+        return text;
+      },
+    ],
+    ["result-written", () => null],
+    [
+      "result-valid",
+      (s) => {
+        fs.mkdirSync(path.dirname(s.result), { recursive: true });
+        fs.writeFileSync(s.result, "{ not json");
+        return "{ not json";
+      },
+    ],
+  ];
+  for (const [check, unmet] of cases) {
+    it(`pushes a result that says the review did not complete, when ${check} stays unmet up to the loop guard`, () => {
+      const s = stage();
+      const before = tip(s.origins.waybill, s.ref);
+      const written = unmet(s);
+      assert.equal(fire(s, { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "python3 -m pytest" } }).code, 2);
+      const first = fire(s, { hook_event_name: "Stop" });
+      assert.equal(first.code, 2);
+      const released = fire(s, { hook_event_name: "Stop", stop_hook_active: true });
+      assert.equal(released.code, 0, released.err);
+      assert.match(released.err, new RegExp(`released INCOMPLETE — ${check}`));
+      assert.ok(released.err.includes(`pushed on ${s.ref} of the waybill`), released.err);
+      const after = tip(s.origins.waybill, s.ref);
+      assert.equal(sh(s.waybill, "git", "rev-list", "--count", `${before}..${after}`), "1");
+      assert.equal(sh(s.waybill, "git", "diff", "--name-status", before, after), `A\tresults/${ORDER_ID}.json`);
+      const doc = pushed(s);
+      assert.equal(doc.order_id, ORDER_ID);
+      assert.equal(doc.state, "incomplete");
+      assert.equal(doc.unmet.check, check);
+      assert.equal(typeof doc.unmet.detail, "string");
+      assert.equal(doc.denied.length, 1);
+      assert.equal(doc.denied[0].tool, "Bash");
+      assert.match(doc.denied[0].arg, /python3 -m pytest/);
+      assert.match(doc.denied[0].why, /not a read command/);
+      assert.equal(doc.reviewer_file, written);
+      // Not to be taken for a completed review with no findings:
+      // no findings array, and the contract refuses it.
+      assert.equal("findings" in doc, false);
+      assert.notDeepEqual(findingsProblems(doc, RUN), []);
+    });
+  }
+  it("names the tickets-read detail in the pushed result", () => {
+    const s = stage();
+    fs.writeFileSync(s.order, `${ORDER}  - pandoscope/waybill#1\n`);
+    assert.equal(fire(s, { hook_event_name: "Stop" }).code, 2);
+    assert.equal(fire(s, { hook_event_name: "Stop", stop_hook_active: true }).code, 0);
+    assert.match(pushed(s).unmet.detail, /pandoscope\/waybill#1/);
+    assert.deepEqual(pushed(s).denied, []);
+  });
+  it("lists only this session's denials", () => {
+    const s = stage();
+    fire(s, { hook_event_name: "PreToolUse", session_id: "other", tool_name: "Bash", tool_input: { command: "python3 other.py" } });
+    fire(s, { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "python3 mine.py" } });
+    assert.equal(fire(s, { hook_event_name: "Stop" }).code, 2);
+    assert.equal(fire(s, { hook_event_name: "Stop", stop_hook_active: true }).code, 0);
+    const denied = pushed(s).denied;
+    assert.equal(denied.length, 1);
+    assert.match(denied[0].arg, /mine\.py/);
+  });
+  it("says so when the push of the incomplete result does not land either", () => {
+    const s = stage();
+    const before = tip(s.origins.waybill, s.ref);
+    fs.writeFileSync(path.join(s.origins.waybill, "hooks", "pre-receive"), "#!/bin/sh\necho refused by the kata >&2\nexit 1\n", { mode: 0o755 });
+    assert.equal(fire(s, { hook_event_name: "Stop" }).code, 2);
+    const released = fire(s, { hook_event_name: "Stop", stop_hook_active: true });
+    assert.equal(released.code, 0);
+    assert.match(released.err, /released INCOMPLETE — result-written/);
+    assert.match(released.err, /incomplete result did not land/);
+    assert.match(released.err, /refused by the kata/);
+    assert.equal(tip(s.origins.waybill, s.ref), before);
   });
 });
