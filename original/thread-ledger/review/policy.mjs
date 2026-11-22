@@ -15,6 +15,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { ghTicket, ghWhy } from "./gh-api.mjs";
 import { schemaProblems } from "./schema.mjs";
 
 /**
@@ -272,6 +273,11 @@ export function bashVerdict(command, run) {
       if (why) return deny(why);
       continue;
     }
+    if (cmd === "gh") {
+      const why = ghWhy(script);
+      if (why) return deny(why);
+      continue;
+    }
     if (!READ_COMMANDS.has(cmd)) {
       return deny(
         `\`${cmd}\` is not a read command. A ${run.pass} review reads the code and does not run it: ` +
@@ -468,13 +474,22 @@ function dropQuoted(text) {
 function segments(body, quoted) {
   // Subshells and substitutions are commands too:
   // a `$(python ...)` inside an allowed command is still python running.
-  const mark = (/** @type {string} */ q) => `\u0001${quoted.push(q) - 1}\u0002`;
-  return body
-    .replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, mark)
+  return markQuoted(body, quoted)
     .replace(/\$\(/g, "; ")
     .replace(/`/g, "; ")
     .replace(/[()]/g, " ")
     .split(/&&|\|\||;|\||\n/);
+}
+
+/**
+ * The text with each quoted string replaced by a marker that indexes `quoted`.
+ * @param {string} body
+ * @param {string[]} quoted collects the quoted strings, quotes included
+ * @returns {string}
+ */
+function markQuoted(body, quoted) {
+  const mark = (/** @type {string} */ q) => `\u0001${quoted.push(q) - 1}\u0002`;
+  return body.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, mark);
 }
 
 const MARKER = /\u0001(\d+)\u0002/g;
@@ -588,13 +603,51 @@ export function orderTickets(orderText) {
 }
 
 /**
- * The tickets the session read, from its transcript:
- * every issue read call whose result came back without an error, as `owner/repo#n`, lowercase.
+ * The tickets the `gh api` calls of one Bash command read, when the command's exit is each call's:
+ * a failed read then makes the call's result an error.
+ * A read inside a substitution, piped into another command, run in the background,
+ * or followed by anything but `&&` hides its failure, and is not counted;
+ * so is one after `||`, which may not run.
+ * @param {string} command
+ * @returns {string[]} the tickets, as `owner/repo#n`, lowercase
+ */
+export function ghTicketReads(command) {
+  /** @type {string[]} */
+  const quoted = [];
+  const body = markQuoted(stripHeredocs(command), quoted);
+  if (/\$\(|`/.test(body)) return [];
+  // Redirects leave the exit alone; `2>&1` would otherwise read as a background `&`.
+  const plain = body
+    .replace(/\d?(?:>>?|&>)&?\s*\S*/g, " ")
+    .replace(/[()]/g, " ")
+    .replace(/[\s;]+$/, "");
+  const parts = plain.split(/(&&|\|\||;|\||&|\n)/);
+  /** @type {string[]} */
+  const out = [];
+  for (let i = 0; i < parts.length; i += 2) {
+    const words = tokens(parts[i], quoted).map((w) => unquote(w, quoted));
+    if (words[0] !== "gh") continue;
+    const ticket = ghTicket(words.slice(1));
+    if (!ticket) continue;
+    const after = parts.filter((_, j) => j > i && j % 2 === 1);
+    if (after.some((sep) => sep !== "&&")) continue;
+    let start = i - 1;
+    while (start > 0 && parts[start] === "|") start -= 2;
+    if (parts[start] === "||") continue;
+    out.push(ticket);
+  }
+  return out;
+}
+
+/**
+ * The tickets the session read, from its transcript, as `owner/repo#n`, lowercase:
+ * every issue read call, and every `gh api repos/<owner>/<repo>/issues/<n>` call
+ * {@link ghTicketReads} counts, whose result came back without an error.
  * @param {string} transcriptText
  * @returns {Set<string>}
  */
 export function ticketsRead(transcriptText) {
-  /** @type {Map<string, string>} */
+  /** @type {Map<string, string[]>} */
   const calls = new Map();
   /** @type {Set<string>} */
   const read = new Set();
@@ -611,10 +664,14 @@ export function ticketsRead(transcriptText) {
       if (b?.type === "tool_use" && /(^|__)issue_read$/.test(b.name ?? "")) {
         const i = b.input ?? {};
         if ((i.method ?? "get") !== "get" || !i.owner || !i.repo || !i.issue_number) continue;
-        calls.set(b.id, `${i.owner}/${i.repo}#${i.issue_number}`.toLowerCase());
+        calls.set(b.id, [`${i.owner}/${i.repo}#${i.issue_number}`.toLowerCase()]);
+      }
+      if (b?.type === "tool_use" && b.name === "Bash" && typeof b.input?.command === "string") {
+        const tickets = ghTicketReads(b.input.command);
+        if (tickets.length) calls.set(b.id, tickets);
       }
       if (b?.type === "tool_result" && calls.has(b.tool_use_id) && b.is_error !== true) {
-        read.add(/** @type {string} */ (calls.get(b.tool_use_id)));
+        for (const t of /** @type {string[]} */ (calls.get(b.tool_use_id))) read.add(t);
       }
     }
   }

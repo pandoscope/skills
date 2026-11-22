@@ -490,6 +490,7 @@ In a review session, two hooks replace the heartbeat.
 
 On `PreToolUse`, `review-driver.mjs` denies every call outside the read-only policy in `review/policy.mjs`.
 The policy allows read commands, git read subcommands and writes to the result file.
+It allows the forge reads in `review/gh-api.mjs`: a GET with `gh api` of a fixed set of paths below `repos/<owner>/<repo>/`, such as `issues/<n>` (skills#297).
 It denies every git write and every forge write.
 
 The session's one output is the result file `results/<order id>.json` in the clone of the waybill,
@@ -499,11 +500,18 @@ The result holds the order's id and the findings.
 Its top level admits fields that the contract does not name yet, so the result can grow.
 
 On `Stop`, the driver refuses to end the session until the session has read every ticket the order names.
+A ticket counts as read once an issue read tool or `gh api repos/<owner>/<repo>/issues/<n>` returned it without an error.
 It then refuses until the result file validates against the contract.
 Once the file validates, the driver commits that one file and pushes it on the order's branch `order/<order id>` of the waybill.
 A Stop whose push did not land is refused, with a reason that names the waybill and the branch.
 When the push fails again on the Stop that follows, the loop guard releases the session:
 the driver writes that the review is released INCOMPLETE, and the order's branch holds no result.
+When the loop guard releases a session that has not read its tickets or has no valid result file,
+the driver replaces the result file with an incomplete result and pushes that on the order's branch.
+The incomplete result has `state: "incomplete"`, names the unmet check in `unmet`,
+lists the calls the policy denied in `denied`,
+and keeps what the reviewer wrote to the result file as text in `reviewer_file`.
+It has no `findings`, so the contract refuses it and nobody takes it for a review that found nothing.
 The driver pushes nothing to the reviewed repository.
 The composer switched the clone of the reviewed repository to the pull request head before the session started,
 so the reviewer runs no git step.

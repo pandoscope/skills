@@ -29,6 +29,8 @@
 // beside the order file orders/<id>.yml.
 // At Stop the driver commits that one file and pushes it on the order's branch order/<id>.
 // It creates no branch and no commit in the reviewed repository (skills#292).
+// When the loop guard releases a Stop with a check before the publish unmet,
+// the driver replaces the file with an incomplete result and pushes that (skills#297).
 //
 //     HEARTBEAT_REPO_ROOT   directory holding the session's clones
 //     CCR_TRIGGER_HEAD_REF  the order branch, order/<name>; its order
@@ -44,9 +46,14 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
+import { deniedCalls, incompleteResult } from "./review/incomplete.mjs";
 import { findingsProblems, orderRun, orderTickets, ticketsRead, toolVerdict } from "./review/policy.mjs";
 
 const MAX_BLOCKS = 3;
+// The checks that come before the publish.
+// A run released with one of them unmet publishes an incomplete result (skills#297);
+// one released on a failed commit or push has nothing new to publish.
+const BEFORE_PUBLISH = new Set(["tickets-read", "result-written", "result-valid"]);
 
 /** @typedef {import("./review/policy.mjs").ReviewRun} ReviewRun */
 /**
@@ -155,8 +162,9 @@ export function stopVerdict(run, ctx) {
         detail: `unread: ${missing.join(", ")}`,
         reason: [
           "The review is not complete until every ticket the order names was read: the tickets are the specification.",
-          "Read each with the GitHub issue read tool, method get:",
-          ...missing.map((t) => `  ${t}`),
+          "Read each with gh api, as one call or joined by &&;",
+          "a read piped into another command, or followed by ; or ||, does not count, since its failure would not reach the call's result:",
+          ...missing.map((t) => `  ${t}: gh api repos/${t.replace("#", "/issues/")}`),
         ].join("\n"),
       };
     }
@@ -262,6 +270,22 @@ function publish(run) {
   };
 }
 
+/**
+ * Replaces the result file with the incomplete result of a released run, and publishes it.
+ * @param {ReviewRun} run
+ * @param {Ctx} ctx
+ * @param {Failure} failed the check that stayed unmet
+ * @returns {{ landed: boolean, detail: string }} whether the push landed; `detail` is git's account when it did not
+ */
+function publishIncomplete(run, ctx, failed) {
+  const written = fs.existsSync(run.result) ? fs.readFileSync(run.result, "utf8") : null;
+  const doc = incompleteResult(run, failed, deniedCalls(ctx.logFile, ctx.session), written);
+  fs.mkdirSync(path.dirname(run.result), { recursive: true });
+  fs.writeFileSync(run.result, `${JSON.stringify(doc, null, 2)}\n`);
+  const failure = publish(run);
+  return { landed: failure === null, detail: failure ? failure.detail : "" };
+}
+
 // ---------------------------------------------------------------- run
 
 /**
@@ -334,10 +358,22 @@ export function run(input) {
   const guarded = input.stop_hook_active === true;
   const heard = mine.delivered.includes(failed.check);
   if (guarded && (heard || mine.blocks >= MAX_BLOCKS)) {
-    appendLog(ctx.logFile, { event: "stop", session: ctx.session, verdict: "released", check: failed.check, detail: failed.detail });
-    process.stderr.write(
-      `The review is released INCOMPLETE — ${failed.check} is still unmet: ${failed.detail}. Not blocking again.\n`,
-    );
+    const pushed = BEFORE_PUBLISH.has(failed.check) ? publishIncomplete(review, ctx, failed) : null;
+    appendLog(ctx.logFile, {
+      event: "stop",
+      session: ctx.session,
+      verdict: "released",
+      check: failed.check,
+      detail: failed.detail,
+      ...(pushed ? { incomplete: pushed.landed ? "pushed" : pushed.detail } : {}),
+    });
+    let said = `The review is released INCOMPLETE — ${failed.check} is still unmet: ${failed.detail}. Not blocking again.`;
+    if (pushed?.landed) {
+      said += ` The incomplete result is pushed on ${review.orderBranch} of the waybill: it names ${failed.check} and the calls the policy denied.`;
+    } else if (pushed) {
+      said += ` The incomplete result did not land: ${pushed.detail}.`;
+    }
+    process.stderr.write(`${said}\n`);
     return 0;
   }
   mine.blocks += 1;
