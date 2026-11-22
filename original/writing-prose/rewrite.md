@@ -9,15 +9,16 @@ when you cannot spawn one, run the steps yourself in order and say so.
    A claim about something the files do not show stays `unchecked`.
    Restate figurative wording literally, keep established terms, and state a limit as a limit.
    End the list with a `layout:` line that names the text's paragraphs, lists and tables.
+   Keep the checked list with the rewrite, as step 2 of the writing part says: the reviewer answers its questions from it.
 2. **Overreach.** Check each confirmed or corrected claim against every case its reader meets, and add only the one condition that makes it true.
 3. **Edit in place.** When no claim is corrected, edit the original text instead of drafting, change only the lines `check.sh` flags, and stop.
-4. **Draft.** Draft the text from the claims under the loop in SKILL.md, in the shape of its place (see Shapes below).
+4. **Draft.** Draft the text from the claims under the writing part of SKILL.md, in the shape of its place (see Shapes below).
    Keep every list or table the `layout:` line names, and give parallel cases one list item each, effect first, even where the source used a paragraph.
 5. **Relevance.** Cut each sentence the reader does not need there, then each qualifier.
    Keep the reason a rule or design exists, its evidence, and each limit: what the code does not do or cannot enforce, with what it does instead.
    Cut how the code formats or labels its output.
    Check that each "so", "because" and "therefore" still follows from what the text states, and state each fact once.
-   Then run the loop's `check.sh` steps again with `--before` the draft.
+   Then run step 5 of the writing part again with `--before` the draft.
 
 The text is only the part you were given: add no sections, links or status lines that only a whole ticket, pull request or commit needs.
 

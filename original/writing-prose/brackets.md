@@ -1,6 +1,7 @@
 # The bracket loop
 
 The bracket loop finds what a reader lacks in a text, and answers it from the source.
+It is step 3 of the reviewing part in SKILL.md.
 Run it on a comment, a docstring, a doc section, a glossary entry or a rule list that describes code or a process, once `check.sh` passes.
 
 1. **Bracket.** A fresh subagent gets the text alone, without the code, the conversation or your notes; it may get the project's glossary.
@@ -9,7 +10,7 @@ Run it on a comment, a docstring, a doc section, a glossary entry or a rule list
    It rewrites nothing.
    It ranks its brackets, and marks the ones without which it would act wrongly.
    When you cannot spawn a subagent, bracket the text yourself, sentence by sentence, and say so.
-2. **Answer.** Answer each bracket from the code or the source the text describes, and cite the place.
+2. **Answer.** Answer each bracket from the writer's claims list where the text came with one, and from the code or the source it describes otherwise; cite the place.
    A bracket the source cannot answer goes to the principal as a question.
    A term the glossary defines needs a link, not an answer.
 3. **Rewrite.** Rewrite each bracketed sentence so the answer stands in it, with the name the code uses.
