@@ -16,10 +16,11 @@
 // believed the work happened. Every failure in this org's catalogue
 // would have been ticked.
 //
-// Discipline: checks run in priority order and the FIRST failure wins.
-// A wall of failures recreates checklist fatigue, and a reason phrased
-// as instructions makes a model start new work in a loop — so a reason
-// is a completion criterion plus the exact command, nothing else.
+// Discipline: checks run in priority order and the first failure wins: a block names one reason.
+// On a guarded re-fire the first failing check whose reason this turn has not delivered wins instead.
+// A wall of failures recreates checklist fatigue,
+// and a reason phrased as instructions makes a model start new work in a loop —
+// so a reason is a completion criterion plus the exact command, nothing else.
 //
 // Contract authority: this comment, SKILL.md next to it, and the katas
 // in tests/original/reminder-heartbeat/.
@@ -173,11 +174,19 @@ export function run(input) {
   // was given can be observed at all.
   if (ctx.guarded) {
     const file = localFile("reminder-compliance.jsonl");
+    // Every failing check is a candidate, not only the first:
+    // a check that keeps failing in first place otherwise hides every later one,
+    // which then fails silently on each re-fire (skills#242).
+    // An empty delivered set still counts: another Stop hook may have blocked first,
+    // and then none of this hook's reasons were heard.
+    // cycleOf bounds the loop either way.
     const delivered = deliveredThisTurn(file, ctx);
-    const unheard = delivered.size > 0 && !delivered.has(failed.check);
+    const unheard = verdicts.find(
+      (verdict) => verdict.verdict === "fail" && !delivered.has(verdict.check),
+    );
     if (unheard && cycleOf(file, ctx) <= MAX_BLOCKS) {
-      logCompliance(ctx, reported, "blocked", failed.check);
-      process.stderr.write(`${failed.reason}\n`);
+      logCompliance(ctx, reported, "blocked", unheard.check);
+      process.stderr.write(`${unheard.reason}\n`);
       return 2;
     }
     logCompliance(ctx, reported, "unsealed", failed.check);

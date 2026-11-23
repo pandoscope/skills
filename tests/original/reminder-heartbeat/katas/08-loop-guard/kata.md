@@ -24,6 +24,8 @@ promoted to blocking.
 
 The founding drift state, re-entered with `stop_hook_active` true and
 the ledger still untouched — the model did not comply.
+The compliance log records this hook's first block on `tickets-updated`,
+so the reason still failing is one the model has already heard (skills#242).
 
 ## Expected
 

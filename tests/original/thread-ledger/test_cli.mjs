@@ -383,6 +383,35 @@ describe("declare", () => {
     }
   });
 
+  it("writes to the path session.env names when the variable is unset", () => {
+    // A plain command line lacks what the hook wrapper exports;
+    // the declaration must still land where the heartbeat reads (skills#242).
+    for (const line of ["export TURN_SUMMARY_PATH=%s", 'TURN_SUMMARY_PATH="%s"']) {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "declare-env-"));
+      try {
+        const target = path.join(dir, "turn", "summary.txt");
+        fs.mkdirSync(path.join(dir, ".claude"));
+        fs.writeFileSync(
+          path.join(dir, ".claude", "session.env"),
+          `SESSION_ROOT=${dir}\n${line.replace("%s", target)}\n`,
+        );
+        const result = spawnSync(
+          process.execPath,
+          [path.join(SKILL, "ledger.mjs"), "declare", "--reviews", "none"],
+          {
+            encoding: "utf8",
+            env: { ...process.env, HOME: dir, TURN_SUMMARY_PATH: undefined },
+          },
+        );
+        assert.equal(result.status, 0, result.stderr);
+        assert.match(fs.readFileSync(target, "utf8"), /^reviews: none$/m, line);
+        assert.ok(!fs.existsSync(path.join(dir, ".claude", "turn-summary.txt")), line);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    }
+  });
+
   it("writes the two core lines even when empty", () => {
     const text = declareText({ reviews: "none" });
     assert.equal(text, "tickets: \nreviews: none\n");
@@ -498,5 +527,52 @@ describe("summary path resolution (skills#153)", () => {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+// ------------------------------------------------- store URLs (skills#242)
+
+describe("StoreUrls", () => {
+  const STORE = "https://github.com/o/session-memory";
+  const env = () => ({
+    PATH: process.env.PATH,
+    HOME: fs.mkdtempSync(path.join(os.tmpdir(), "nohome-")),
+    SESSION_MEMORY_URL: `${STORE}.git`,
+  });
+  const run = (root, ...args) =>
+    spawnSync(process.execPath, [path.join(SKILL, "ledger.mjs"), "--root", root, ...args], {
+      encoding: "utf8",
+      env: env(),
+    });
+
+  it("masks a store URL an old event carries on the rendered page", () => {
+    // An old event that links a store file by URL renders clean (maskStoreUrls in scan.mjs).
+    const root = tempStore();
+    writeLog(root, "s1", [opened("t", { note: `see ${STORE}/blob/main/handoffs/h.md` })]);
+    const out = path.join(root, "page.html");
+    const result = run(root, "render", "--no-pull", "--out", out);
+    assert.equal(result.status, 0, result.stderr);
+    const page = fs.readFileSync(out, "utf8");
+    assert.ok(!page.includes(STORE));
+    assert.ok(page.includes("«store»/blob/main/handoffs/h.md"));
+  });
+
+  it("refuses an append whose note carries a store URL", () => {
+    const root = tempStore();
+    const result = run(root, "append", "--ev", "note", "--thread", "t", "--note", `${STORE}/blob/main/x.md`);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /--note carries the value of SESSION_MEMORY_URL/);
+    assert.ok(!result.stderr.includes(STORE));
+  });
+
+  it("refuses a PUSH_BLOCKLIST term without asking for a store path", () => {
+    const root = tempStore();
+    const result = spawnSync(
+      process.execPath,
+      [path.join(SKILL, "ledger.mjs"), "--root", root, "append", "--ev", "note", "--thread", "t", "--note", "see secret-host"],
+      { encoding: "utf8", env: { ...env(), PUSH_BLOCKLIST: "secret-host" } },
+    );
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /PUSH_BLOCKLIST term 1; remove the blocked term/);
   });
 });

@@ -1,10 +1,10 @@
 // The check table — the one place the priority order lives.
 //
-// First failure wins and the rest wait for the next turn, so this order
-// is the hook's whole triage policy. push-blocklist sits ahead of
-// pushed deliberately: a hit must block BEFORE the turn is told to
-// push, or the reminder itself publishes it. Header contract:
-// `../heartbeat.mjs`.
+// First failure wins, and a guarded re-fire takes the first failing check whose reason this turn has not delivered,
+// so this order is the hook's whole triage policy.
+// push-blocklist sits ahead of pushed deliberately:
+// a hit must block before the turn is told to push, or the reminder itself publishes it.
+// Header contract: `../heartbeat.mjs`.
 
 import {
   checkLedgerEvent,
