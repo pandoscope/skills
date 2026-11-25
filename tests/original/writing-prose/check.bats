@@ -182,6 +182,12 @@ candidate() {
 @test "H removed-mention flags a removal note" { candidate markdown removed-mention 1 'The flag was removed in 2.0.\n'; }
 @test "H non-requirement flags a stated non-requirement" { candidate markdown non-requirement 1 'Key order does not matter.\n'; }
 @test "H pitch flags value words" { candidate markdown pitch 1 'A powerful, seamless check.\n'; }
+@test "H named-criterion flags a check it does not name" { candidate markdown named-criterion 1 'When the order is off the schema, the composer reports it.\n'; }
+@test "H named-criterion leaves off before other nouns" {
+  f=$(printf 'Signing is off for the session.\nTurn off the hook first.\n' | text x.md)
+  run "$CHECK" markdown "$f"
+  [[ "$output" != *"named-criterion"* ]]
+}
 @test "H drifting-ref flags a count tied to position" { candidate markdown drifting-ref 1 'The seven examples above show it.\n'; }
 @test "H drifting-ref flags a count that the list after it states" { candidate markdown drifting-ref 1 'The composer writes six keys to the answers file: `detected` and `order`.\n'; }
 @test "H drifting-ref leaves a count that no list restates" {
